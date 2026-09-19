@@ -1,0 +1,92 @@
+# Full stack for staging or a self-hosted VPS.
+#
+#   cp ../backend/.env.example ../backend/.env
+#   docker compose up --build
+#
+# For production prefer a managed database, so backups and point-in-time
+# recovery are someone else's job rather than a script you wrote once.
+
+services:
+  db:
+    image: postgres:16-alpine
+    environment:
+      POSTGRES_DB: verifygh
+      POSTGRES_USER: verifygh
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-verifygh-local}
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+    ports:
+      - "5432:5432"
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U verifygh -d verifygh"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+
+  redis:
+    image: redis:7-alpine
+    # noeviction: the Celery queue must never be dropped to reclaim memory.
+    command: redis-server --save 60 1 --maxmemory-policy noeviction --loglevel warning
+    volumes:
+      - redis_data:/data
+    ports:
+      - "6379:6379"
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 5s
+      timeout: 3s
+      retries: 10
+
+  web:
+    build:
+      context: ..
+      dockerfile: infrastructure/Dockerfile.backend
+    env_file: ../backend/.env
+    environment:
+      DATABASE_URL: postgres://verifygh:${POSTGRES_PASSWORD:-verifygh-local}@db:5432/verifygh
+      REDIS_URL: redis://redis:6379/0
+      CELERY_TASK_ALWAYS_EAGER: "false"
+    ports:
+      - "8000:8000"
+    depends_on:
+      db:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+    command: >
+      sh -c "python manage.py migrate --noinput &&
+             gunicorn config.wsgi:application --bind 0.0.0.0:8000
+             --workers 3 --threads 2 --timeout 60
+             --access-logfile - --error-logfile -"
+
+  worker:
+    build:
+      context: ..
+      dockerfile: infrastructure/Dockerfile.backend
+    env_file: ../backend/.env
+    environment:
+      DATABASE_URL: postgres://verifygh:${POSTGRES_PASSWORD:-verifygh-local}@db:5432/verifygh
+      REDIS_URL: redis://redis:6379/0
+      CELERY_TASK_ALWAYS_EAGER: "false"
+    depends_on:
+      - web
+    command: celery -A config worker -l info --concurrency=4 --max-tasks-per-child=200
+
+  beat:
+    build:
+      context: ..
+      dockerfile: infrastructure/Dockerfile.backend
+    env_file: ../backend/.env
+    environment:
+      DATABASE_URL: postgres://verifygh:${POSTGRES_PASSWORD:-verifygh-local}@db:5432/verifygh
+      REDIS_URL: redis://redis:6379/0
+      CELERY_TASK_ALWAYS_EAGER: "false"
+    depends_on:
+      - web
+    # Exactly one beat. Two means every periodic task - including order expiry
+    # and automatic refunds - runs twice.
+    command: celery -A config beat -l info
+
+volumes:
+  postgres_data:
+  redis_data:

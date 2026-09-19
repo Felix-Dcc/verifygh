@@ -1,0 +1,50 @@
+import Link from "next/link";
+
+import { ServiceAvatar } from "@/components/brand";
+import { ChevronRightIcon } from "@/components/icons";
+import { StatusBadge } from "@/components/ui/primitives";
+import { cedis, relativeTime } from "@/lib/format";
+import type { OrderSummary } from "@/lib/types";
+
+/**
+ * One order in a list.
+ *
+ * On a phone this is a card-like row; the same component is reused inside the
+ * responsive table on desktop, so an order never looks like two different
+ * things depending on screen width.
+ */
+export function OrderStatusRow({ order }: { order: OrderSummary }) {
+  return (
+    <li>
+      <Link
+        href={`/orders/${order.reference}`}
+        className="flex items-center gap-3 px-4 py-3.5 transition-colors hover:bg-canvas sm:px-5"
+      >
+        <ServiceAvatar name={order.service_name} />
+
+        <div className="min-w-0 flex-1">
+          <div className="flex min-w-0 items-center gap-2">
+            <p className="truncate text-sm font-medium text-ink">{order.service_name}</p>
+            <span className="shrink-0 text-sm" aria-label={order.country_name}>
+              {order.country_flag}
+            </span>
+          </div>
+          <p className="truncate text-xs text-ink-muted">
+            <span className="tabular">{order.reference}</span>
+            <span className="mx-1.5" aria-hidden>
+              &middot;
+            </span>
+            {relativeTime(order.created_at)}
+          </p>
+        </div>
+
+        <div className="flex shrink-0 flex-col items-end gap-1.5">
+          <span className="tabular text-sm font-semibold text-ink">{cedis(order.price)}</span>
+          <StatusBadge status={order.status} />
+        </div>
+
+        <ChevronRightIcon className="h-4 w-4 shrink-0 text-ink-faint" />
+      </Link>
+    </li>
+  );
+}

@@ -1,0 +1,36 @@
+# The build context is the repository root (see infrastructure/docker-compose.yml
+# and render.yaml). Without this file `COPY backend/ /app/` baked the local .env
+# - a SECRET_KEY and the mock webhook secret - plus .venv and the SQLite
+# databases into every image.
+
+# Secrets
+**/.env
+**/.env.*
+!**/.env.example
+!**/.env.local.example
+
+# Local state
+**/db.sqlite3
+**/test_db.sqlite3
+**/*.log
+**/.venv
+**/venv
+**/__pycache__
+**/*.py[cod]
+**/.pytest_cache
+**/.ruff_cache
+**/.coverage
+**/htmlcov
+**/staticfiles
+**/media
+
+# Frontend build output and deps (the backend image never needs them)
+**/node_modules
+**/.next
+
+# Tooling
+.git
+.github
+.claude
+**/.idea
+**/.vscode

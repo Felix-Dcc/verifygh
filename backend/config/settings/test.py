@@ -1,0 +1,51 @@
+"""Test settings: fast hashing, eager tasks, in-memory cache."""
+
+from .base import *  # noqa: F401,F403
+from .base import BASE_DIR, VERIFYGH
+
+DEBUG = False
+SECRET_KEY = "test-only-secret-key-long-enough-for-hmac-sha256-0000"
+
+# WhiteNoise warns on every request when STATIC_ROOT is missing; tests never
+# run collectstatic.
+STATIC_ROOT.mkdir(exist_ok=True)  # noqa: F405
+
+PASSWORD_HASHERS = ["django.contrib.auth.hashers.MD5PasswordHasher"]
+
+CELERY_TASK_ALWAYS_EAGER = True
+CELERY_TASK_EAGER_PROPAGATES = True
+
+CACHES = {
+    "default": {
+        "BACKEND": "django.core.cache.backends.locmem.LocMemCache",
+        "LOCATION": "verifygh-tests",
+    }
+}
+
+EMAIL_BACKEND = "django.core.mail.backends.locmem.EmailBackend"
+
+# The concurrency tests run real threads against real connections. SQLite's
+# default in-memory test database cannot serialise those, so use a file with a
+# busy timeout. On PostgreSQL none of this applies - row locks do the work.
+if DATABASES["default"]["ENGINE"].endswith("sqlite3"):  # noqa: F405
+    DATABASES["default"]["TEST"] = {"NAME": str(BASE_DIR / "test_db.sqlite3")}  # noqa: F405
+    DATABASES["default"].setdefault("OPTIONS", {})  # noqa: F405
+    DATABASES["default"]["OPTIONS"]["timeout"] = 30  # noqa: F405
+    DATABASES["default"]["ENGINE"] = "config.sqlite_immediate"  # noqa: F405
+
+VERIFYGH = {
+    **VERIFYGH,
+    "VERIFICATION_PROVIDER": "mock",
+    "PAYMENT_PROVIDER": "mock",
+    "ORDER_TTL_MINUTES": 10,
+}
+
+LOGGING["root"]["level"] = "CRITICAL"  # noqa: F405
+
+# base.py builds REST_FRAMEWORK from the *environment's* DEBUG, before this
+# module sets DEBUG = False. Pin JSON-only here so the browsable API can never
+# be switched back on by a stray DEBUG=true in the deploy environment.
+REST_FRAMEWORK = {  # noqa: F405
+    **REST_FRAMEWORK,  # noqa: F405
+    "DEFAULT_RENDERER_CLASSES": ["rest_framework.renderers.JSONRenderer"],
+}

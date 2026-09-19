@@ -1,0 +1,15 @@
+Hi {{ full_name }},
+
+Welcome to {{ brand }}.
+
+Confirm your email address to activate your wallet and start buying
+verification numbers with Mobile Money:
+
+{{ verify_url }}
+
+This link expires in {{ hours }} hours.
+
+If you did not create a {{ brand }} account, you can ignore this email.
+
+--
+{{ brand }} - Verification made simple.

@@ -1,0 +1,204 @@
+"use client";
+
+import Link from "next/link";
+import * as React from "react";
+
+import { useAuth } from "@/components/auth-provider";
+import { Logo } from "@/components/brand";
+import { CloseIcon, MenuIcon } from "@/components/icons";
+import { Button, cn } from "@/components/ui/primitives";
+
+const LINKS = [
+  { href: "/services", label: "Services" },
+  { href: "/#how-it-works", label: "How it works" },
+  { href: "/#pricing", label: "Pricing" },
+  { href: "/#security", label: "Security" },
+  { href: "/#faq", label: "FAQ" },
+];
+
+export function SiteHeader() {
+  const { user, ready } = useAuth();
+  const [open, setOpen] = React.useState(false);
+
+  // Close the mobile menu on navigation so a tap never leaves it hanging open.
+  React.useEffect(() => {
+    if (!open) return;
+    const close = () => setOpen(false);
+    window.addEventListener("hashchange", close);
+    return () => window.removeEventListener("hashchange", close);
+  }, [open]);
+
+  return (
+    <header className="sticky top-0 z-50 border-b border-line/80 bg-canvas/85 backdrop-blur-md">
+      <div className="container-page flex h-16 items-center justify-between gap-4">
+        <Link href="/" aria-label="VerifyGH home" className="rounded-lg">
+          <Logo />
+        </Link>
+
+        <nav className="hidden items-center gap-1 lg:flex" aria-label="Main">
+          {LINKS.map((link) => (
+            <Link
+              key={link.href}
+              href={link.href}
+              className="rounded-lg px-3 py-2 text-sm font-medium text-ink-soft transition-colors hover:bg-line/50 hover:text-ink"
+            >
+              {link.label}
+            </Link>
+          ))}
+        </nav>
+
+        <div className="hidden items-center gap-2 lg:flex">
+          {!ready ? (
+            <div className="h-10 w-40" aria-hidden />
+          ) : user ? (
+            <Link href="/dashboard">
+              <Button size="sm">Go to dashboard</Button>
+            </Link>
+          ) : (
+            <>
+              <Link href="/login">
+                <Button variant="ghost" size="sm">
+                  Sign in
+                </Button>
+              </Link>
+              <Link href="/register">
+                <Button size="sm">Get started</Button>
+              </Link>
+            </>
+          )}
+        </div>
+
+        <button
+          type="button"
+          onClick={() => setOpen((value) => !value)}
+          aria-expanded={open}
+          aria-controls="mobile-menu"
+          aria-label={open ? "Close menu" : "Open menu"}
+          className="-mr-2 rounded-xl p-2.5 text-ink-soft transition-colors hover:bg-line/50 lg:hidden"
+        >
+          {open ? <CloseIcon /> : <MenuIcon />}
+        </button>
+      </div>
+
+      <div
+        id="mobile-menu"
+        hidden={!open}
+        className={cn("border-t border-line bg-surface lg:hidden", open && "animate-fade-in")}
+      >
+        <nav className="container-page flex flex-col py-2" aria-label="Mobile">
+          {LINKS.map((link) => (
+            <Link
+              key={link.href}
+              href={link.href}
+              onClick={() => setOpen(false)}
+              className="rounded-lg px-2 py-3 text-base font-medium text-ink-soft hover:bg-line/40"
+            >
+              {link.label}
+            </Link>
+          ))}
+          <div className="mt-2 flex flex-col gap-2 border-t border-line pt-3 pb-4">
+            {user ? (
+              <Link href="/dashboard" onClick={() => setOpen(false)}>
+                <Button fullWidth>Go to dashboard</Button>
+              </Link>
+            ) : (
+              <>
+                <Link href="/register" onClick={() => setOpen(false)}>
+                  <Button fullWidth>Create free account</Button>
+                </Link>
+                <Link href="/login" onClick={() => setOpen(false)}>
+                  <Button variant="secondary" fullWidth>
+                    Sign in
+                  </Button>
+                </Link>
+              </>
+            )}
+          </div>
+        </nav>
+      </div>
+    </header>
+  );
+}
+
+const FOOTER_SECTIONS = [
+  {
+    title: "Product",
+    links: [
+      { href: "/services", label: "Supported services" },
+      { href: "/#how-it-works", label: "How it works" },
+      { href: "/#pricing", label: "Pricing" },
+      { href: "/register", label: "Create an account" },
+    ],
+  },
+  {
+    title: "Support",
+    links: [
+      { href: "/#faq", label: "FAQ" },
+      { href: "/#security", label: "Security" },
+      { href: "mailto:support@verifygh.example", label: "Contact support" },
+    ],
+  },
+  {
+    title: "Legal",
+    links: [
+      { href: "/terms", label: "Terms of Service" },
+      { href: "/acceptable-use", label: "Acceptable Use Policy" },
+      { href: "/privacy", label: "Privacy Policy" },
+    ],
+  },
+];
+
+export function SiteFooter() {
+  return (
+    <footer className="border-t border-line bg-surface">
+      <div className="container-page py-12">
+        <div className="grid gap-10 sm:grid-cols-2 lg:grid-cols-4">
+          <div className="lg:col-span-1">
+            <Logo />
+            <p className="mt-3 max-w-xs text-sm text-ink-muted">
+              A Ghanaian payment and access layer for supported verification services. Pay with
+              MoMo. Verify with ease.
+            </p>
+            <div className="accent-rule mt-5 max-w-[7rem]" />
+          </div>
+
+          {FOOTER_SECTIONS.map((section) => (
+            <div key={section.title}>
+              <h3 className="text-sm font-semibold text-ink">{section.title}</h3>
+              <ul className="mt-3 space-y-2.5">
+                {section.links.map((link) => (
+                  <li key={link.href}>
+                    <Link
+                      href={link.href}
+                      className="text-sm text-ink-muted transition-colors hover:text-ink"
+                    >
+                      {link.label}
+                    </Link>
+                  </li>
+                ))}
+              </ul>
+            </div>
+          ))}
+        </div>
+
+        <div className="mt-10 border-t border-line pt-6">
+          <p className="text-sm text-ink-muted">
+            &copy; {new Date().getFullYear()} VerifyGH. All rights reserved.
+          </p>
+          <p className="mt-3 max-w-3xl text-xs leading-relaxed text-ink-faint">
+            VerifyGH provides access to verification services supplied by authorised third-party
+            providers. We are not affiliated with, endorsed by, or acting on behalf of any of the
+            services a number may be used to verify. You remain responsible for complying with the
+            terms of any service you use a number with. VerifyGH may not be used for fraud,
+            impersonation, spam, evading bans or security controls, or circumventing identity
+            checks - see our{" "}
+            <Link href="/acceptable-use" className="underline hover:text-ink-muted">
+              Acceptable Use Policy
+            </Link>
+            .
+          </p>
+        </div>
+      </div>
+    </footer>
+  );
+}

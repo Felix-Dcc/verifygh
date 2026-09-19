@@ -1,0 +1,11 @@
+line-length = 100
+target-version = "py311"
+
+[lint]
+select = ["E", "F", "I", "B", "UP", "C4", "DJ"]
+ignore = ["B008", "DJ001"]
+
+[lint.per-file-ignores]
+# Generated files: never hand-edited, so style rules add noise, not value.
+"*/migrations/*" = ["E501", "I001"]
+"config/settings/*" = ["F403", "F405"]

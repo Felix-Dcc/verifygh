@@ -1,0 +1,965 @@
+"""Admin API.
+
+Two rules run through every view here:
+
+1. **Least privilege.** Each endpoint declares `required_permission`, checked
+   against the role matrix in `apps/accounts/constants.py`. A SUPPORT user can
+   read a wallet but cannot adjust one; only a SUPER_ADMIN can change pricing.
+2. **Nothing sensitive happens without a reason.** Suspensions, wallet
+   adjustments and refunds all require a written reason and write an immutable
+   `AdminAction` row before the effect is applied.
+"""
+
+from __future__ import annotations
+
+import logging
+from datetime import timedelta
+from decimal import Decimal
+
+from django.db import transaction
+from django.db.models import Count, DecimalField, ExpressionWrapper, F, Q, Sum
+from django.db.models.functions import TruncDate
+from django.utils import timezone
+from rest_framework import mixins, viewsets
+from rest_framework.decorators import action
+from rest_framework.permissions import IsAuthenticated
+from rest_framework.response import Response
+from rest_framework.views import APIView
+
+from apps.accounts.constants import AdminPermission, Role
+from apps.accounts.models import LoginAttempt, User
+from apps.adminapi.serializers import (
+    AdminActionSerializer,
+    AdminCountrySerializer,
+    AdminOfferingSerializer,
+    AdminOrderSerializer,
+    AdminPaymentSerializer,
+    AdminRefundSerializer,
+    AdminServiceSerializer,
+    AdminUserSerializer,
+    AuditLogSerializer,
+    ExchangeRateSerializer,
+    IssueRefundSerializer,
+    PricingRuleSerializer,
+    ResolveFlagSerializer,
+    SuspendUserSerializer,
+    SuspiciousActivitySerializer,
+    WalletAdjustmentSerializer,
+)
+from apps.audit.models import AdminAction, AuditLog, SuspiciousActivity
+from apps.audit.services import record_admin_action, resolve_flag
+from apps.catalog.models import Country, ProviderService, Service
+from apps.common.errors import Conflict, NotFound, ValidationFailed
+from apps.common.idempotency import generate
+from apps.common.permissions import HasPermissionCode, IsSupport
+from apps.orders.models import Order, OrderStatus, Refund, RefundReason
+from apps.orders.services import cancel_order as cancel_order_service
+from apps.orders.services import issue_refund
+from apps.payments.models import Payment, PaymentStatus
+from apps.pricing.models import ExchangeRate, PricingRule
+from apps.pricing.rates import record_rate
+from apps.wallet.models import LedgerDirection, WalletLedgerEntry
+from apps.wallet.serializers import LedgerEntrySerializer
+from apps.wallet.services import adjust, get_or_create_wallet, verify_wallet_integrity
+
+logger = logging.getLogger("verifygh.admin")
+
+MONEY = DecimalField(max_digits=18, decimal_places=4)
+
+
+class AdminBase:
+    permission_classes = [IsAuthenticated, IsSupport, HasPermissionCode]
+    required_permission: str | None = None
+
+
+# ---------------------------------------------------------------------------
+# Overview
+# ---------------------------------------------------------------------------
+
+
+class AdminOverviewView(AdminBase, APIView):
+    required_permission = AdminPermission.METRICS_VIEW
+
+    def get(self, request):
+        now = timezone.now()
+        today = timezone.localtime().date()
+        month_ago = now - timedelta(days=30)
+
+        orders = Order.objects.all()
+        payments = Payment.objects.filter(status=PaymentStatus.SUCCESS)
+
+        revenue = orders.filter(
+            status__in=[OrderStatus.COMPLETED, OrderStatus.CODE_RECEIVED]
+        ).aggregate(total=Sum("price"))["total"] or Decimal("0.00")
+
+        revenue_today = orders.filter(
+            status__in=[OrderStatus.COMPLETED, OrderStatus.CODE_RECEIVED],
+            created_at__date=today,
+        ).aggregate(total=Sum("price"))["total"] or Decimal("0.00")
+
+        # Provider cost in GHS, using the rate frozen on each order.
+        cost_expression = ExpressionWrapper(
+            F("provider_cost") * F("exchange_rate"), output_field=MONEY
+        )
+        provider_cost = orders.filter(
+            status__in=[OrderStatus.COMPLETED, OrderStatus.CODE_RECEIVED]
+        ).aggregate(total=Sum(cost_expression))["total"] or Decimal("0.0000")
+
+        refunds = Refund.objects.filter(status="COMPLETED").aggregate(
+            total=Sum("amount"), count=Count("id")
+        )
+        refund_total = refunds["total"] or Decimal("0.00")
+
+        gross_margin = Decimal(revenue) - Decimal(provider_cost)
+        margin_percent = (
+            (gross_margin / Decimal(revenue) * 100).quantize(Decimal("0.01"))
+            if revenue
+            else Decimal("0.00")
+        )
+
+        return Response(
+            {
+                "users": {
+                    "total": User.objects.count(),
+                    "active_30d": User.objects.filter(last_login__gte=month_ago).count(),
+                    "new_today": User.objects.filter(created_at__date=today).count(),
+                    "suspended": User.objects.filter(is_suspended=True).count(),
+                },
+                "revenue": {
+                    "total": str(revenue),
+                    "today": str(revenue_today),
+                    "provider_cost": str(Decimal(provider_cost).quantize(Decimal("0.01"))),
+                    "gross_margin": str(gross_margin.quantize(Decimal("0.01"))),
+                    "margin_percent": str(margin_percent),
+                    "currency": "GHS",
+                },
+                "orders": {
+                    "total": orders.count(),
+                    "today": orders.filter(created_at__date=today).count(),
+                    "successful": orders.filter(status=OrderStatus.COMPLETED).count(),
+                    "code_received": orders.filter(status=OrderStatus.CODE_RECEIVED).count(),
+                    "failed": orders.filter(
+                        status__in=[OrderStatus.FAILED, OrderStatus.EXPIRED]
+                    ).count(),
+                    "active": orders.filter(
+                        status__in=[
+                            OrderStatus.PROCESSING,
+                            OrderStatus.NUMBER_ASSIGNED,
+                            OrderStatus.WAITING_FOR_CODE,
+                        ]
+                    ).count(),
+                },
+                "payments": {
+                    "momo_total": str(
+                        payments.aggregate(total=Sum("amount"))["total"] or Decimal("0.00")
+                    ),
+                    "momo_today": str(
+                        payments.filter(created_at__date=today).aggregate(
+                            total=Sum("amount")
+                        )["total"]
+                        or Decimal("0.00")
+                    ),
+                    "count": payments.count(),
+                    "failed": Payment.objects.filter(status=PaymentStatus.FAILED).count(),
+                },
+                "refunds": {"total": str(refund_total), "count": refunds["count"] or 0},
+                "flags": {
+                    "open": SuspiciousActivity.objects.filter(resolved=False).count(),
+                    "high": SuspiciousActivity.objects.filter(
+                        resolved=False, level="HIGH"
+                    ).count(),
+                },
+            }
+        )
+
+
+class AdminChartsView(AdminBase, APIView):
+    required_permission = AdminPermission.METRICS_VIEW
+
+    def get(self, request):
+        try:
+            days = min(max(int(request.query_params.get("days", 14)), 1), 90)
+        except (TypeError, ValueError):
+            days = 14
+        since = timezone.now() - timedelta(days=days)
+
+        revenue_series = list(
+            Order.objects.filter(
+                created_at__gte=since,
+                status__in=[OrderStatus.COMPLETED, OrderStatus.CODE_RECEIVED],
+            )
+            .annotate(day=TruncDate("created_at"))
+            .values("day")
+            .annotate(revenue=Sum("price"), orders=Count("id"))
+            .order_by("day")
+        )
+
+        orders_series = list(
+            Order.objects.filter(created_at__gte=since)
+            .annotate(day=TruncDate("created_at"))
+            .values("day")
+            .annotate(
+                total=Count("id"),
+                successful=Count("id", filter=Q(status=OrderStatus.COMPLETED)),
+                failed=Count(
+                    "id", filter=Q(status__in=[OrderStatus.FAILED, OrderStatus.EXPIRED])
+                ),
+            )
+            .order_by("day")
+        )
+
+        popular = list(
+            Order.objects.filter(created_at__gte=since)
+            .values("service__slug", "service__name")
+            .annotate(orders=Count("id"), revenue=Sum("price"))
+            .order_by("-orders")[:10]
+        )
+
+        networks = list(
+            Payment.objects.filter(created_at__gte=since, status=PaymentStatus.SUCCESS)
+            .values("network")
+            .annotate(count=Count("id"), amount=Sum("amount"))
+            .order_by("-amount")
+        )
+
+        total_orders = Order.objects.filter(created_at__gte=since).count()
+        failed_orders = Order.objects.filter(
+            created_at__gte=since, status__in=[OrderStatus.FAILED, OrderStatus.EXPIRED]
+        ).count()
+
+        return Response(
+            {
+                "days": days,
+                "revenue": [
+                    {
+                        "date": str(row["day"]),
+                        "revenue": str(row["revenue"] or 0),
+                        "orders": row["orders"],
+                    }
+                    for row in revenue_series
+                ],
+                "orders": [
+                    {
+                        "date": str(row["day"]),
+                        "total": row["total"],
+                        "successful": row["successful"],
+                        "failed": row["failed"],
+                    }
+                    for row in orders_series
+                ],
+                "popular_services": [
+                    {
+                        "slug": row["service__slug"],
+                        "name": row["service__name"],
+                        "orders": row["orders"],
+                        "revenue": str(row["revenue"] or 0),
+                    }
+                    for row in popular
+                ],
+                "payment_methods": [
+                    {
+                        "network": row["network"],
+                        "count": row["count"],
+                        "amount": str(row["amount"] or 0),
+                    }
+                    for row in networks
+                ],
+                "failure_rate": round((failed_orders / total_orders * 100), 2)
+                if total_orders
+                else 0.0,
+            }
+        )
+
+
+# ---------------------------------------------------------------------------
+# Users
+# ---------------------------------------------------------------------------
+
+
+class AdminUserViewSet(AdminBase, mixins.ListModelMixin, mixins.RetrieveModelMixin,
+                       viewsets.GenericViewSet):
+    serializer_class = AdminUserSerializer
+    required_permission = AdminPermission.USER_VIEW
+
+    def get_queryset(self):
+        queryset = User.objects.select_related("wallet").annotate(
+            order_count=Count("orders", distinct=True),
+            open_flags=Count(
+                "suspicious_activities",
+                filter=Q(suspicious_activities__resolved=False),
+                distinct=True,
+            ),
+        )
+        search = self.request.query_params.get("search")
+        if search:
+            queryset = queryset.filter(
+                Q(email__icontains=search)
+                | Q(full_name__icontains=search)
+                | Q(phone__icontains=search)
+            )
+        if self.request.query_params.get("suspended") == "true":
+            queryset = queryset.filter(is_suspended=True)
+        if self.request.query_params.get("flagged") == "true":
+            queryset = queryset.filter(open_flags__gt=0)
+        role = self.request.query_params.get("role")
+        if role:
+            queryset = queryset.filter(role=role.upper())
+        return queryset.order_by("-created_at")
+
+    def _get_user(self) -> User:
+        user = User.objects.select_related("wallet").filter(pk=self.kwargs["pk"]).first()
+        if user is None:
+            raise NotFound("We could not find that user.")
+        return user
+
+    @action(detail=True, methods=["post"])
+    def suspend(self, request, pk=None):
+        self.required_permission = AdminPermission.USER_SUSPEND
+        self.check_permissions(request)
+
+        serializer = SuspendUserSerializer(data=request.data)
+        serializer.is_valid(raise_exception=True)
+        target = self._get_user()
+
+        if target.role in (Role.ADMIN, Role.SUPER_ADMIN) and request.user.role != Role.SUPER_ADMIN:
+            raise Conflict("Only a super admin can suspend another admin.")
+        if target.pk == request.user.pk:
+            raise ValidationFailed("You cannot suspend your own account.")
+
+        # The record and the effect commit together or not at all: an audit
+        # trail that claims a suspension that never happened (or the reverse)
+        # is worse than none.
+        with transaction.atomic():
+            record_admin_action(
+                admin=request.user, action="USER_SUSPEND", target=target,
+                reason=serializer.validated_data["reason"],
+                before={"is_suspended": target.is_suspended},
+                after={"is_suspended": True}, request=request,
+            )
+
+            target.is_suspended = True
+            target.suspended_at = timezone.now()
+            target.suspension_reason = serializer.validated_data["reason"]
+            target.save(update_fields=["is_suspended", "suspended_at", "suspension_reason",
+                                       "updated_at"])
+
+            # Suspension has to take effect now. Without this the user keeps a
+            # valid access token until it expires, and could keep spending.
+            revoked = target.revoke_all_sessions()
+        logger.info(
+            "sessions_revoked",
+            extra={"user_id": str(target.pk), "reason": "suspended", "tokens": revoked},
+        )
+
+        from apps.notifications.services import notify
+
+        notify(
+            target,
+            event="ACCOUNT_SUSPENDED",
+            title="Your account has been suspended",
+            body="Your VerifyGH account has been suspended. Contact support if you believe "
+                 "this is a mistake.",
+            channels=("EMAIL", "IN_APP"),
+        )
+        return Response(AdminUserSerializer(self._get_user()).data)
+
+    @action(detail=True, methods=["post"])
+    def unsuspend(self, request, pk=None):
+        self.required_permission = AdminPermission.USER_SUSPEND
+        self.check_permissions(request)
+
+        serializer = SuspendUserSerializer(data=request.data)
+        serializer.is_valid(raise_exception=True)
+        target = self._get_user()
+
+        with transaction.atomic():
+            record_admin_action(
+                admin=request.user, action="USER_UNSUSPEND", target=target,
+                reason=serializer.validated_data["reason"],
+                before={"is_suspended": target.is_suspended},
+                after={"is_suspended": False}, request=request,
+            )
+
+            target.is_suspended = False
+            target.suspended_at = None
+            target.suspension_reason = ""
+            target.save(update_fields=["is_suspended", "suspended_at", "suspension_reason",
+                                       "updated_at"])
+        return Response(AdminUserSerializer(self._get_user()).data)
+
+    @action(detail=True, methods=["post"], url_path="wallet-adjustment")
+    def wallet_adjustment(self, request, pk=None):
+        """Move a user's balance, with a mandatory reason and a ledger entry.
+
+        There is no code path anywhere in this project that changes a balance
+        without writing a ledger row; this endpoint is no exception.
+        """
+        self.required_permission = AdminPermission.WALLET_ADJUST
+        self.check_permissions(request)
+
+        serializer = WalletAdjustmentSerializer(data=request.data)
+        serializer.is_valid(raise_exception=True)
+        target = self._get_user()
+        wallet = get_or_create_wallet(target)
+
+        direction = (
+            LedgerDirection.CREDIT
+            if serializer.validated_data["direction"] == "CREDIT"
+            else LedgerDirection.DEBIT
+        )
+
+        # A double-submitted form must not move money twice. The console sends
+        # an X-Idempotency-Key per form submission; without one, each call is new.
+        client_key = str(request.headers.get("X-Idempotency-Key", "")).strip()[:64]
+        idempotency_key = f"adjust:{request.user.pk}:{client_key or generate()}"
+
+        # The ledger entry and its admin record commit together. Previously the
+        # record was written first, so a refused debit (insufficient funds)
+        # left an audit row describing an adjustment that never happened.
+        with transaction.atomic():
+            entry = adjust(
+                wallet=wallet,
+                amount=serializer.validated_data["amount"],
+                direction=direction,
+                idempotency_key=idempotency_key,
+                reason=serializer.validated_data["reason"],
+                admin=request.user,
+            )
+            already_recorded = AdminAction.objects.filter(
+                action="WALLET_ADJUST", target_id=str(wallet.pk),
+                after__ledger_reference=entry.reference,
+            ).exists()
+            if not already_recorded:
+                record_admin_action(
+                    admin=request.user, action="WALLET_ADJUST", target=wallet,
+                    reason=serializer.validated_data["reason"],
+                    before={"balance": str(entry.balance_before)},
+                    after={
+                        "balance": str(entry.balance_after),
+                        "amount": str(serializer.validated_data["amount"]),
+                        "direction": direction,
+                        "ledger_reference": entry.reference,
+                    },
+                    request=request,
+                )
+
+        return Response(
+            {
+                "entry": LedgerEntrySerializer(entry).data,
+                "user": AdminUserSerializer(self._get_user()).data,
+            }
+        )
+
+    @action(detail=True, methods=["get"])
+    def orders(self, request, pk=None):
+        queryset = Order.objects.select_related("service", "country", "provider").filter(
+            user_id=pk
+        ).order_by("-created_at")[:100]
+        return Response(AdminOrderSerializer(queryset, many=True).data)
+
+    @action(detail=True, methods=["get"])
+    def transactions(self, request, pk=None):
+        self.required_permission = AdminPermission.WALLET_VIEW
+        self.check_permissions(request)
+        queryset = WalletLedgerEntry.objects.filter(wallet__user_id=pk).order_by(
+            "-created_at"
+        )[:100]
+        return Response(LedgerEntrySerializer(queryset, many=True).data)
+
+    @action(detail=True, methods=["get"])
+    def activity(self, request, pk=None):
+        logins = LoginAttempt.objects.filter(user_id=pk).order_by("-created_at")[:50]
+        flags = SuspiciousActivity.objects.filter(user_id=pk).order_by("-created_at")[:50]
+        audit = AuditLog.objects.filter(actor_id=pk).order_by("-created_at")[:50]
+        wallet = get_or_create_wallet(self._get_user())
+        return Response(
+            {
+                "logins": [
+                    {
+                        "successful": entry.successful,
+                        "ip_address": entry.ip_address,
+                        "failure_reason": entry.failure_reason,
+                        "created_at": entry.created_at,
+                    }
+                    for entry in logins
+                ],
+                "flags": SuspiciousActivitySerializer(flags, many=True).data,
+                "audit": AuditLogSerializer(audit, many=True).data,
+                "wallet_integrity": verify_wallet_integrity(wallet),
+            }
+        )
+
+
+# ---------------------------------------------------------------------------
+# Orders, refunds, payments
+# ---------------------------------------------------------------------------
+
+
+class AdminOrderViewSet(AdminBase, mixins.ListModelMixin, mixins.RetrieveModelMixin,
+                        viewsets.GenericViewSet):
+    serializer_class = AdminOrderSerializer
+    required_permission = AdminPermission.ORDER_VIEW
+    lookup_field = "reference"
+
+    def get_queryset(self):
+        queryset = Order.objects.select_related("user", "service", "country", "provider")
+        status_filter = self.request.query_params.get("status")
+        if status_filter:
+            queryset = queryset.filter(status=status_filter.upper())
+        search = self.request.query_params.get("search")
+        if search:
+            queryset = queryset.filter(
+                Q(reference__icontains=search)
+                | Q(user__email__icontains=search)
+                | Q(provider_order_id__icontains=search)
+                | Q(phone_number__icontains=search)
+            )
+        return queryset.order_by("-created_at")
+
+    def _get_order(self) -> Order:
+        order = self.get_queryset().filter(reference=self.kwargs["reference"]).first()
+        if order is None:
+            raise NotFound("We could not find that order.")
+        return order
+
+    @action(detail=True, methods=["get"])
+    def timeline(self, request, reference=None):
+        order = self._get_order()
+        return Response(
+            [
+                {
+                    "status": event.status,
+                    "label": event.label,
+                    "detail": event.detail,
+                    "is_system": event.is_system,
+                    "actor": event.actor.email if event.actor else None,
+                    "created_at": event.created_at,
+                }
+                for event in order.events.all()
+            ]
+        )
+
+    @action(detail=True, methods=["post"])
+    def cancel(self, request, reference=None):
+        """Cancel upstream, where the provider allows it.
+
+        We ask the provider; we never force a local state that contradicts what
+        the provider believes.
+        """
+        self.required_permission = AdminPermission.ORDER_CANCEL
+        self.check_permissions(request)
+
+        serializer = SuspendUserSerializer(data=request.data)  # reuse: {"reason": ...}
+        serializer.is_valid(raise_exception=True)
+        order = self._get_order()
+
+        before = {"status": order.status}
+        # Recorded only once the cancellation has happened: the service raises
+        # when the provider or the state machine refuses.
+        order = cancel_order_service(
+            order, actor=request.user, reason=serializer.validated_data["reason"]
+        )
+        record_admin_action(
+            admin=request.user, action="ORDER_CANCEL", target=order,
+            reason=serializer.validated_data["reason"],
+            before=before, after={"status": order.status}, request=request,
+        )
+        return Response(AdminOrderSerializer(order).data)
+
+    @action(detail=True, methods=["post"])
+    def refund(self, request, reference=None):
+        self.required_permission = AdminPermission.ORDER_REFUND
+        self.check_permissions(request)
+
+        serializer = IssueRefundSerializer(data=request.data)
+        serializer.is_valid(raise_exception=True)
+        order = self._get_order()
+
+        if order.refund_status == "COMPLETED":
+            raise Conflict("This order has already been refunded.")
+
+        amount = serializer.validated_data.get("amount") or order.price
+        if amount > order.price:
+            raise ValidationFailed("A refund cannot exceed the order amount.")
+
+        before = {"status": order.status, "refund_status": order.refund_status}
+        order = issue_refund(
+            order,
+            reason=RefundReason.ADMIN_GOODWILL,
+            amount=amount,
+            actor=request.user,
+            note=serializer.validated_data["reason"],
+            automatic=False,
+        )
+        # issue_refund declines some orders (a completed one, for instance) by
+        # returning them unchanged. Answering 200 there told the admin a refund
+        # had been made when none had.
+        if order.refund_status != "COMPLETED":
+            raise Conflict("This order cannot be refunded. A completed order delivered the "
+                           "service the user paid for.")
+        record_admin_action(
+            admin=request.user, action="ORDER_REFUND", target=order,
+            reason=serializer.validated_data["reason"],
+            before=before,
+            after={"amount": str(amount), "refund_status": order.refund_status},
+            request=request,
+        )
+        return Response(AdminOrderSerializer(order).data)
+
+
+class AdminRefundViewSet(AdminBase, mixins.ListModelMixin, viewsets.GenericViewSet):
+    serializer_class = AdminRefundSerializer
+    required_permission = AdminPermission.ORDER_VIEW
+
+    def get_queryset(self):
+        return Refund.objects.select_related("order", "issued_by").order_by("-created_at")
+
+
+class AdminPaymentViewSet(AdminBase, mixins.ListModelMixin, mixins.RetrieveModelMixin,
+                          viewsets.GenericViewSet):
+    serializer_class = AdminPaymentSerializer
+    required_permission = AdminPermission.PAYMENT_VIEW
+    lookup_field = "reference"
+
+    def get_queryset(self):
+        queryset = Payment.objects.select_related("user")
+        status_filter = self.request.query_params.get("status")
+        if status_filter:
+            queryset = queryset.filter(status=status_filter.upper())
+        search = self.request.query_params.get("search")
+        if search:
+            queryset = queryset.filter(
+                Q(reference__icontains=search)
+                | Q(user__email__icontains=search)
+                | Q(provider_reference__icontains=search)
+            )
+        return queryset.order_by("-created_at")
+
+
+# ---------------------------------------------------------------------------
+# Catalog and pricing
+# ---------------------------------------------------------------------------
+
+
+def _audited_update(request, serializer, action: str):
+    """Save a catalog edit and record every field it changed, in one transaction.
+
+    The old per-view records listed only is_enabled, so an edit to a name,
+    description or TTL left no trace of what it had been.
+    """
+    instance = serializer.instance
+    fields = list(serializer.validated_data)
+    before = {field: _plain(getattr(instance, field, None)) for field in fields}
+    with transaction.atomic():
+        saved = serializer.save()
+        after = {field: _plain(getattr(saved, field, None)) for field in fields}
+        changed = [field for field in fields if before[field] != after[field]]
+        record_admin_action(
+            admin=request.user, action=action, target=saved,
+            reason=str(request.data.get("reason", "") or "Catalog update")[:500],
+            before={field: before[field] for field in changed},
+            after={field: after[field] for field in changed},
+            request=request,
+        )
+    _invalidate_marketplace()
+
+
+def _plain(value):
+    return value if value is None or isinstance(value, bool | int | str) else str(value)
+
+
+class AdminServiceViewSet(AdminBase, mixins.ListModelMixin, mixins.UpdateModelMixin,
+                          viewsets.GenericViewSet):
+    serializer_class = AdminServiceSerializer
+    required_permission = AdminPermission.CATALOG_MANAGE
+    lookup_field = "slug"
+    pagination_class = None
+
+    def get_queryset(self):
+        return Service.objects.annotate(
+            offering_count=Count("offerings", distinct=True),
+            available_count=Count(
+                "offerings", filter=Q(offerings__is_available=True), distinct=True
+            ),
+        ).order_by("display_order", "name")
+
+    def perform_update(self, serializer):
+        _audited_update(self.request, serializer, "SERVICE_UPDATE")
+
+
+class AdminCountryViewSet(AdminBase, mixins.ListModelMixin, mixins.UpdateModelMixin,
+                          viewsets.GenericViewSet):
+    serializer_class = AdminCountrySerializer
+    required_permission = AdminPermission.CATALOG_MANAGE
+    lookup_field = "code"
+    pagination_class = None
+
+    def get_queryset(self):
+        return Country.objects.order_by("display_order", "name")
+
+    def perform_update(self, serializer):
+        _audited_update(self.request, serializer, "COUNTRY_UPDATE")
+
+
+class AdminOfferingViewSet(AdminBase, mixins.ListModelMixin, mixins.UpdateModelMixin,
+                           viewsets.GenericViewSet):
+    """Provider cost against customer price, per (service, country)."""
+
+    serializer_class = AdminOfferingSerializer
+    required_permission = AdminPermission.CATALOG_MANAGE
+
+    def get_queryset(self):
+        queryset = ProviderService.objects.select_related("provider", "service", "country")
+        service = self.request.query_params.get("service")
+        if service:
+            queryset = queryset.filter(service__slug=service)
+        country = self.request.query_params.get("country")
+        if country:
+            queryset = queryset.filter(country__code=country.upper())
+        return queryset.order_by("service__name", "country__name")
+
+    def perform_update(self, serializer):
+        _audited_update(self.request, serializer, "OFFERING_UPDATE")
+
+    @action(detail=False, methods=["post"], url_path="sync")
+    def sync(self, request):
+        self.required_permission = AdminPermission.PROVIDER_MANAGE
+        self.check_permissions(request)
+        from apps.catalog.services import sync_catalog
+
+        summary = sync_catalog()
+        record_admin_action(
+            admin=request.user, action="CATALOG_SYNC", target=None,
+            reason="Manual catalog sync", after=summary, request=request,
+        )
+        return Response(summary)
+
+
+class AdminPricingRuleViewSet(AdminBase, viewsets.ModelViewSet):
+    serializer_class = PricingRuleSerializer
+    required_permission = AdminPermission.PRICING_MANAGE
+    pagination_class = None
+    queryset = PricingRule.objects.select_related("service", "country").order_by(
+        "priority", "-created_at"
+    )
+
+    @transaction.atomic
+    def perform_create(self, serializer):
+        rule = serializer.save()
+        record_admin_action(
+            admin=self.request.user, action="PRICING_RULE_CREATE", target=rule,
+            reason=str(self.request.data.get("reason", "New pricing rule"))[:500]
+            or "New pricing rule",
+            after=PricingRuleSerializer(rule).data, request=self.request,
+        )
+        _invalidate_marketplace()
+
+    @transaction.atomic
+    def perform_update(self, serializer):
+        before = PricingRuleSerializer(serializer.instance).data
+        rule = serializer.save()
+        record_admin_action(
+            admin=self.request.user, action="PRICING_RULE_UPDATE", target=rule,
+            reason=str(self.request.data.get("reason", "Pricing update"))[:500]
+            or "Pricing update",
+            before=before, after=PricingRuleSerializer(rule).data, request=self.request,
+        )
+        _invalidate_marketplace()
+
+    @transaction.atomic
+    def perform_destroy(self, instance):
+        if instance.is_global_default:
+            raise Conflict(
+                "The global default pricing rule cannot be deleted - without it nothing "
+                "can be priced."
+            )
+        record_admin_action(
+            admin=self.request.user, action="PRICING_RULE_DELETE", target=instance,
+            reason=str(self.request.data.get("reason", "Pricing rule removed"))[:500]
+            or "Pricing rule removed",
+            before=PricingRuleSerializer(instance).data, request=self.request,
+        )
+        instance.delete()
+        _invalidate_marketplace()
+
+    @action(detail=False, methods=["post"])
+    def preview(self, request):
+        """Price an offering under proposed settings before saving them."""
+        offering_id = request.data.get("offering_id")
+        offering = ProviderService.objects.select_related(
+            "provider", "service", "country"
+        ).filter(pk=offering_id).first()
+        if offering is None:
+            raise NotFound("We could not find that offering.")
+
+        from apps.pricing.engine import quote_for_offering
+
+        rule = None
+        if request.data.get("rule"):
+            serializer = PricingRuleSerializer(data=request.data["rule"])
+            serializer.is_valid(raise_exception=True)
+            rule = PricingRule(**serializer.validated_data)
+
+        quote = quote_for_offering(offering, rule=rule)
+        return Response(quote.as_dict())
+
+
+class AdminExchangeRateViewSet(AdminBase, mixins.ListModelMixin, viewsets.GenericViewSet):
+    serializer_class = ExchangeRateSerializer
+    required_permission = AdminPermission.PRICING_MANAGE
+    pagination_class = None
+
+    def get_queryset(self):
+        return ExchangeRate.objects.order_by("-fetched_at", "-id")[:50]
+
+    @transaction.atomic
+    def create(self, request):
+        """Append a new rate. Existing rate rows are never edited."""
+        serializer = ExchangeRateSerializer(data=request.data)
+        serializer.is_valid(raise_exception=True)
+        data = serializer.validated_data
+
+        if Decimal(data["rate"]) <= 0:
+            raise ValidationFailed("The exchange rate must be greater than zero.")
+
+        rate = record_rate(
+            data["rate"],
+            base=data.get("base_currency", "USD"),
+            quote=data.get("quote_currency", "GHS"),
+            source="manual",
+            note=data.get("note", ""),
+        )
+        record_admin_action(
+            admin=request.user, action="EXCHANGE_RATE_SET", target=rate,
+            reason=str(request.data.get("reason", "Manual FX update"))[:500]
+            or "Manual FX update",
+            after={"rate": str(rate.rate)}, request=request,
+        )
+        _invalidate_marketplace()
+        return Response(ExchangeRateSerializer(rate).data, status=201)
+
+
+# ---------------------------------------------------------------------------
+# Audit and abuse
+# ---------------------------------------------------------------------------
+
+
+class AdminAuditViewSet(AdminBase, mixins.ListModelMixin, viewsets.GenericViewSet):
+    serializer_class = AuditLogSerializer
+    required_permission = AdminPermission.AUDIT_VIEW
+
+    def get_queryset(self):
+        queryset = AuditLog.objects.select_related("actor")
+        action_filter = self.request.query_params.get("action")
+        if action_filter:
+            queryset = queryset.filter(action__icontains=action_filter)
+        search = self.request.query_params.get("search")
+        if search:
+            queryset = queryset.filter(
+                Q(actor_email__icontains=search) | Q(target_id__icontains=search)
+            )
+        return queryset.order_by("-created_at")
+
+
+class AdminActionViewSet(AdminBase, mixins.ListModelMixin, viewsets.GenericViewSet):
+    serializer_class = AdminActionSerializer
+    required_permission = AdminPermission.AUDIT_VIEW
+
+    def get_queryset(self):
+        return AdminAction.objects.select_related("admin").order_by("-created_at")
+
+
+class AdminFlagViewSet(AdminBase, mixins.ListModelMixin, viewsets.GenericViewSet):
+    serializer_class = SuspiciousActivitySerializer
+    required_permission = AdminPermission.USER_VIEW
+
+    def get_queryset(self):
+        queryset = SuspiciousActivity.objects.select_related("user")
+        if self.request.query_params.get("resolved") != "true":
+            queryset = queryset.filter(resolved=False)
+        level = self.request.query_params.get("level")
+        if level:
+            queryset = queryset.filter(level=level.upper())
+        return queryset.order_by("-created_at")
+
+    @action(detail=True, methods=["post"])
+    @transaction.atomic
+    def resolve(self, request, pk=None):
+        # Support can see abuse signals, but dismissing one is a judgement that
+        # hides it from everyone else - it needs the same role as suspending.
+        self.required_permission = AdminPermission.USER_SUSPEND
+        self.check_permissions(request)
+
+        serializer = ResolveFlagSerializer(data=request.data)
+        serializer.is_valid(raise_exception=True)
+        entry = resolve_flag(
+            flag_id=pk, admin=request.user, note=serializer.validated_data["note"]
+        )
+        record_admin_action(
+            admin=request.user, action="FLAG_RESOLVE", target=entry,
+            reason=serializer.validated_data["note"], request=request,
+        )
+        return Response(SuspiciousActivitySerializer(entry).data)
+
+
+class AdminSystemHealthView(AdminBase, APIView):
+    """Is the platform actually able to trade right now?"""
+
+    required_permission = AdminPermission.METRICS_VIEW
+
+    def get(self, request):
+        from apps.catalog.models import Provider
+        from apps.payments.registry import get_payment_provider
+        from apps.pricing.rates import latest_rate_row
+        from apps.verification.registry import get_provider
+
+        verification = get_provider()
+        payments = get_payment_provider()
+        rate = latest_rate_row()
+
+        return Response(
+            {
+                "verification_provider": {
+                    "key": verification.key,
+                    "healthy": verification.health_check(),
+                    "is_mock": verification.key == "mock",
+                },
+                "payment_provider": {
+                    "key": payments.key,
+                    "healthy": payments.health_check(),
+                    "is_mock": payments.key == "mock",
+                },
+                "exchange_rate": {
+                    "configured": rate is not None,
+                    "rate": str(rate.rate) if rate else None,
+                    "fetched_at": rate.fetched_at if rate else None,
+                    "source": rate.source if rate else None,
+                },
+                "pricing_rules": PricingRule.objects.filter(is_active=True).count(),
+                "providers": [
+                    {
+                        "name": provider.name,
+                        "adapter_key": provider.adapter_key,
+                        "is_enabled": provider.is_enabled,
+                        "last_synced_at": provider.last_synced_at,
+                        "last_sync_error": provider.last_sync_error[:200],
+                    }
+                    for provider in Provider.objects.all()
+                ],
+                "unprocessed_webhooks": _unprocessed_webhooks(),
+            }
+        )
+
+
+def _unprocessed_webhooks() -> int:
+    from apps.payments.models import PaymentWebhookEvent
+
+    return PaymentWebhookEvent.objects.filter(processed=False, signature_valid=True).count()
+
+
+def _invalidate_marketplace() -> None:
+    from django.core.cache import cache
+
+    from apps.catalog.views import MARKETPLACE_CACHE_KEY
+
+    cache.delete(MARKETPLACE_CACHE_KEY)

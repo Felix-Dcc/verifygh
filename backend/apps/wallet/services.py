@@ -1,0 +1,351 @@
+"""The ledger service.
+
+This module is the **only** place in the codebase that writes `Wallet.balance`.
+Nothing else may touch it - not a view, not a task, not the Django admin.
+
+Three guarantees, each backed by the database rather than by Python:
+
+1. **Atomicity** - the ledger row and the balance move in one transaction.
+2. **Idempotency** - `UNIQUE(wallet, idempotency_key)`. A replayed webhook loses
+   the race to the index and returns the original entry instead of crediting twice.
+3. **No double-spend** - the wallet row is locked with `SELECT ... FOR UPDATE`
+   (where the backend supports it) *and* the balance update is a compare-and-set,
+   so two concurrent debits cannot both read the same starting balance and win.
+   `CHECK (balance >= 0)` catches anything that still slips through.
+"""
+
+from __future__ import annotations
+
+import logging
+import time
+from decimal import Decimal
+
+from django.db import IntegrityError, OperationalError, connection, transaction
+from django.db.models import F
+
+from apps.common.errors import Conflict, InsufficientFunds, ValidationFailed
+from apps.common.ids import ledger_reference
+from apps.common.money import ZERO, quantize
+from apps.wallet.models import (
+    ENTRY_TYPE_DIRECTIONS,
+    LedgerDirection,
+    LedgerEntryType,
+    Wallet,
+    WalletLedgerEntry,
+)
+
+logger = logging.getLogger("verifygh.wallet")
+
+MAX_CAS_ATTEMPTS = 4
+
+
+class WalletFrozen(Conflict):
+    code = "WALLET_FROZEN"
+    message = "This wallet is temporarily frozen. Please contact support."
+
+
+def get_or_create_wallet(user) -> Wallet:
+    wallet, _ = Wallet.objects.get_or_create(user=user)
+    return wallet
+
+
+def _lock(wallet_id) -> Wallet:
+    """Lock the wallet row where the backend supports it.
+
+    SQLite (dev/test) has no row locks; correctness there comes from the
+    compare-and-set below plus SQLite's whole-database write lock.
+    """
+    queryset = Wallet.objects.filter(pk=wallet_id)
+    if connection.features.has_select_for_update:
+        queryset = queryset.select_for_update()
+    return queryset.get()
+
+
+def post_entry(
+    *,
+    wallet: Wallet,
+    amount,
+    entry_type: str,
+    direction: str,
+    idempotency_key: str,
+    description: str = "",
+    counterparty: str = "",
+    metadata: dict | None = None,
+    related_payment_id=None,
+    related_order_id=None,
+    created_by=None,
+    allow_frozen: bool = False,
+) -> WalletLedgerEntry:
+    """Post one immutable ledger entry and move the balance with it.
+
+    Returns the existing entry unchanged if `idempotency_key` was already used
+    for this wallet - callers can safely retry.
+    """
+    amount = quantize(amount)
+    if amount <= ZERO:
+        raise ValidationFailed("Amount must be greater than zero.")
+    if not idempotency_key:
+        raise ValidationFailed("An idempotency key is required for every ledger entry.")
+
+    allowed = ENTRY_TYPE_DIRECTIONS.get(entry_type)
+    if allowed is None:
+        raise ValidationFailed(f"Unknown ledger entry type: {entry_type}")
+    if direction not in allowed:
+        raise ValidationFailed(f"{entry_type} entries cannot be a {direction}.")
+
+    last_error: Exception | None = None
+
+    for attempt in range(MAX_CAS_ATTEMPTS):
+        try:
+            with transaction.atomic():
+                locked = _lock(wallet.pk)
+
+                existing = WalletLedgerEntry.objects.filter(
+                    wallet_id=locked.pk, idempotency_key=idempotency_key
+                ).first()
+                if existing is not None:
+                    logger.info(
+                        "ledger_replay_ignored",
+                        extra={"reference": existing.reference, "entry_type": entry_type},
+                    )
+                    return existing
+
+                if direction == LedgerDirection.DEBIT:
+                    if locked.is_frozen and not allow_frozen:
+                        raise WalletFrozen()
+                    if locked.balance < amount:
+                        raise InsufficientFunds(
+                            "Your balance is insufficient.",
+                            details={
+                                "balance": str(locked.balance),
+                                "required": str(amount),
+                                "shortfall": str(quantize(amount - locked.balance)),
+                            },
+                        )
+
+                balance_before = locked.balance
+                delta = amount if direction == LedgerDirection.CREDIT else -amount
+                balance_after = quantize(balance_before + delta)
+
+                # Compare-and-set: the update only applies if nobody changed the
+                # balance since we read it. Without row locks this is what makes
+                # concurrent debits safe; with them, it simply never fails.
+                updates = {"balance": balance_after}
+                if entry_type == LedgerEntryType.DEPOSIT:
+                    updates["total_deposited"] = F("total_deposited") + amount
+                elif entry_type == LedgerEntryType.PURCHASE:
+                    updates["total_spent"] = F("total_spent") + amount
+                elif entry_type == LedgerEntryType.REFUND:
+                    updates["total_spent"] = F("total_spent") - amount
+
+                changed = Wallet.objects.filter(
+                    pk=locked.pk, balance=balance_before
+                ).update(**updates)
+
+                if changed != 1:
+                    raise _Retry()
+
+                last_sequence = (
+                    WalletLedgerEntry.objects.filter(wallet_id=locked.pk)
+                    .order_by("-sequence")
+                    .values_list("sequence", flat=True)
+                    .first()
+                    or 0
+                )
+
+                entry = WalletLedgerEntry.objects.create(
+                    wallet_id=locked.pk,
+                    reference=ledger_reference(),
+                    sequence=last_sequence + 1,
+                    idempotency_key=idempotency_key,
+                    entry_type=entry_type,
+                    direction=direction,
+                    amount=amount,
+                    currency=locked.currency,
+                    balance_before=balance_before,
+                    balance_after=balance_after,
+                    counterparty=counterparty,
+                    description=description[:255],
+                    metadata=metadata or {},
+                    related_payment_id=related_payment_id,
+                    related_order_id=related_order_id,
+                    created_by=created_by,
+                )
+
+            logger.info(
+                "ledger_entry_posted",
+                extra={
+                    "reference": entry.reference,
+                    "entry_type": entry_type,
+                    "direction": direction,
+                    "wallet_id": str(wallet.pk),
+                },
+            )
+            return entry
+
+        except _Retry as exc:
+            last_error = exc
+            continue
+        except OperationalError as exc:
+            # Transient lock contention (SQLite busy, or a lock timeout under
+            # Postgres). Safe to retry: nothing was committed.
+            if attempt >= MAX_CAS_ATTEMPTS - 1:
+                raise
+            last_error = exc
+            logger.info("ledger_lock_contention_retry", extra={"attempt": attempt})
+            time.sleep(0.05 * (attempt + 1))
+            continue
+        except IntegrityError as exc:
+            # Lost the race on UNIQUE(wallet, idempotency_key): the other writer
+            # already posted this exact entry. That is success, not failure.
+            existing = WalletLedgerEntry.objects.filter(
+                wallet_id=wallet.pk, idempotency_key=idempotency_key
+            ).first()
+            if existing is not None:
+                return existing
+            # Not a replay - two writers collided on the sequence or the
+            # reference. Both are safe to retry with fresh values.
+            last_error = exc
+            if attempt < MAX_CAS_ATTEMPTS - 1:
+                continue
+            raise exc
+
+    logger.error("ledger_cas_exhausted", extra={"wallet_id": str(wallet.pk)})
+    raise Conflict(
+        "We could not complete that just now. Please try again.",
+        code="WALLET_CONTENTION",
+    ) from last_error
+
+
+class _Retry(Exception):
+    """Internal: the compare-and-set lost, so re-read and try again."""
+
+
+# ---------------------------------------------------------------------------
+# Typed wrappers. Callers use these, not post_entry directly.
+# ---------------------------------------------------------------------------
+
+
+def credit_deposit(*, wallet: Wallet, amount, idempotency_key: str, payment_reference: str,
+                   provider: str, payment_id=None) -> WalletLedgerEntry:
+    return post_entry(
+        wallet=wallet,
+        amount=amount,
+        entry_type=LedgerEntryType.DEPOSIT,
+        direction=LedgerDirection.CREDIT,
+        idempotency_key=idempotency_key,
+        description=f"Mobile Money deposit {payment_reference}",
+        counterparty=f"MOMO:{provider}",
+        related_payment_id=payment_id,
+        metadata={"payment_reference": payment_reference},
+        # A deposit into a frozen wallet is allowed: we hold the money, we do
+        # not bounce it back to the user's MoMo account.
+        allow_frozen=True,
+    )
+
+
+def debit_purchase(*, wallet: Wallet, amount, idempotency_key: str, order_id, order_reference: str,
+                   service_name: str) -> WalletLedgerEntry:
+    return post_entry(
+        wallet=wallet,
+        amount=amount,
+        entry_type=LedgerEntryType.PURCHASE,
+        direction=LedgerDirection.DEBIT,
+        idempotency_key=idempotency_key,
+        description=f"{service_name} verification ({order_reference})",
+        counterparty="PLATFORM:orders",
+        related_order_id=order_id,
+        metadata={"order_reference": order_reference},
+    )
+
+
+def credit_refund(*, wallet: Wallet, amount, idempotency_key: str, order_id,
+                  order_reference: str, reason: str) -> WalletLedgerEntry:
+    return post_entry(
+        wallet=wallet,
+        amount=amount,
+        entry_type=LedgerEntryType.REFUND,
+        direction=LedgerDirection.CREDIT,
+        idempotency_key=idempotency_key,
+        description=f"Refund for {order_reference}",
+        counterparty="PLATFORM:orders",
+        related_order_id=order_id,
+        metadata={"reason": reason[:200], "order_reference": order_reference},
+        allow_frozen=True,
+    )
+
+
+def adjust(*, wallet: Wallet, amount, direction: str, idempotency_key: str, reason: str,
+           admin) -> WalletLedgerEntry:
+    """Admin balance adjustment. The reason is mandatory and is audited separately."""
+    if not reason or not reason.strip():
+        raise ValidationFailed("A reason is required for a wallet adjustment.")
+    return post_entry(
+        wallet=wallet,
+        amount=amount,
+        entry_type=LedgerEntryType.ADJUSTMENT,
+        direction=direction,
+        idempotency_key=idempotency_key,
+        description=f"Adjustment: {reason.strip()[:200]}",
+        counterparty=f"ADMIN:{admin.pk}",
+        metadata={"reason": reason.strip()[:500]},
+        created_by=admin,
+        allow_frozen=True,
+    )
+
+
+# ---------------------------------------------------------------------------
+# Integrity
+# ---------------------------------------------------------------------------
+
+
+def verify_wallet_integrity(wallet: Wallet) -> dict:
+    """Re-derive the balance from the ledger and report any drift.
+
+    Also walks the entries chronologically to confirm every row's
+    balance_before matches the previous row's balance_after. A break in that
+    chain means a row was inserted or edited outside this service.
+    """
+    derived = quantize(wallet.ledger_balance)
+    drift = quantize(wallet.balance - derived)
+
+    chain_breaks = []
+    running = Decimal("0.00")
+    expected_sequence = 1
+    entries = list(
+        wallet.ledger_entries.order_by("sequence").only(
+            "reference", "sequence", "balance_before", "balance_after", "amount", "direction"
+        )
+    )
+    for entry in entries:
+        if entry.balance_before != running:
+            chain_breaks.append(
+                {
+                    "reference": entry.reference,
+                    "sequence": entry.sequence,
+                    "expected_before": str(running),
+                    "recorded_before": str(entry.balance_before),
+                }
+            )
+        if entry.sequence != expected_sequence:
+            # A gap means a row was deleted; a repeat means the sequence was
+            # written outside this service.
+            chain_breaks.append(
+                {
+                    "reference": entry.reference,
+                    "sequence": entry.sequence,
+                    "expected_sequence": expected_sequence,
+                }
+            )
+        expected_sequence = entry.sequence + 1
+        running = entry.balance_after
+
+    return {
+        "wallet_id": str(wallet.pk),
+        "stored_balance": str(wallet.balance),
+        "derived_balance": str(derived),
+        "drift": str(drift),
+        "ok": drift == ZERO and not chain_breaks,
+        "chain_breaks": chain_breaks,
+        "entry_count": len(entries),
+    }

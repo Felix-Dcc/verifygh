@@ -1,0 +1,344 @@
+"""A full-fidelity mock verification provider.
+
+This exists so the entire product - marketplace, ordering, live order screen,
+refunds, admin - can be built, demoed and tested end to end with no upstream
+credentials and no real money.
+
+It simulates the states that actually matter operationally:
+
+    HAPPY        number assigned, code arrives, order completes
+    SLOW_CODE    code arrives late, exercising the waiting UI and the TTL
+    NO_CODE      number assigned, nothing ever arrives -> expiry -> auto refund
+    NO_STOCK     provider has no number -> order fails -> immediate refund
+    PROVIDER_ERR provider call raises -> order fails -> immediate refund
+
+State lives in the Django cache so the API process and Celery workers agree on
+what a given mock order is doing.
+"""
+
+from __future__ import annotations
+
+import logging
+import random
+import secrets
+from datetime import datetime, timedelta
+from decimal import Decimal
+
+from django.core.cache import cache
+from django.utils import timezone
+
+from apps.common.errors import ProviderError
+from apps.verification.base import (
+    AvailabilityDTO,
+    CodeDTO,
+    ProviderCountryDTO,
+    ProviderOrderDTO,
+    ProviderOrderState,
+    ProviderServiceDTO,
+    VerificationProvider,
+)
+
+logger = logging.getLogger("verifygh.provider.mock")
+
+CACHE_PREFIX = "mockprov:"
+CACHE_TTL = 60 * 60 * 6
+
+#: Tests set this to force a scenario. None means "pick by weight".
+FORCE_SCENARIO: str | None = None
+
+SCENARIO_WEIGHTS = {
+    "HAPPY": 80,
+    "SLOW_CODE": 10,
+    "NO_CODE": 5,
+    "NO_STOCK": 3,
+    "PROVIDER_ERR": 2,
+}
+
+# Seconds after creation at which each step happens, per scenario.
+SCENARIO_TIMINGS = {
+    # The number comes back with the reservation, as it does upstream; only the
+    # inbound SMS is delayed. "assign" is kept so an asynchronous provider can
+    # be simulated by raising it.
+    "HAPPY": {"assign": 0, "code": 8},
+    "SLOW_CODE": {"assign": 0, "code": 45},
+    "NO_CODE": {"assign": 0, "code": None},
+    "NO_STOCK": {"assign": None, "code": None},
+    "PROVIDER_ERR": {"assign": None, "code": None},
+}
+
+MOCK_COUNTRIES = [
+    ProviderCountryDTO(code="US", name="United States", dial_code="+1"),
+    ProviderCountryDTO(code="GB", name="United Kingdom", dial_code="+44"),
+    ProviderCountryDTO(code="CA", name="Canada", dial_code="+1"),
+    ProviderCountryDTO(code="NL", name="Netherlands", dial_code="+31"),
+    ProviderCountryDTO(code="DE", name="Germany", dial_code="+49"),
+]
+
+DIAL_CODES = {country.code: country.dial_code for country in MOCK_COUNTRIES}
+
+# (service code, display name, base USD cost, sms, voice)
+MOCK_SERVICES = [
+    ("instagram", "Instagram", Decimal("0.90"), True, False),
+    ("whatsapp", "WhatsApp", Decimal("1.40"), True, True),
+    ("telegram", "Telegram", Decimal("1.10"), True, True),
+    ("google", "Google", Decimal("1.25"), True, True),
+    ("facebook", "Facebook", Decimal("0.95"), True, False),
+    ("tiktok", "TikTok", Decimal("0.85"), True, False),
+    ("discord", "Discord", Decimal("0.70"), True, False),
+    ("x", "X", Decimal("1.05"), True, False),
+    ("github", "GitHub", Decimal("1.30"), True, False),
+    ("openai", "OpenAI", Decimal("1.60"), True, False),
+    ("linkedin", "LinkedIn", Decimal("1.15"), True, False),
+    ("amazon", "Amazon", Decimal("1.00"), True, True),
+    ("uber", "Uber", Decimal("1.20"), True, True),
+    ("airbnb", "Airbnb", Decimal("1.35"), True, False),
+    ("paypal", "PayPal", Decimal("1.80"), True, False),
+    ("signal", "Signal", Decimal("1.45"), True, True),
+]
+
+
+def _key(provider_order_id: str) -> str:
+    return f"{CACHE_PREFIX}{provider_order_id}"
+
+
+def _pick_scenario() -> str:
+    if FORCE_SCENARIO:
+        return FORCE_SCENARIO
+    population = list(SCENARIO_WEIGHTS)
+    weights = [SCENARIO_WEIGHTS[name] for name in population]
+    return random.choices(population, weights=weights, k=1)[0]
+
+
+def _fake_number(country_code: str) -> str:
+    dial = DIAL_CODES.get(country_code, "+1")
+    body = "".join(secrets.choice("0123456789") for _ in range(10 if dial == "+1" else 9))
+    return f"{dial}{body}"
+
+
+def _fake_code() -> str:
+    return "".join(secrets.choice("0123456789") for _ in range(6))
+
+
+class MockVerificationProvider(VerificationProvider):
+    key = "mock"
+    display_name = "Mock provider (development)"
+    permits_code_display = True
+    supports_webhooks = False
+
+    # -- catalog ---------------------------------------------------------
+
+    def get_countries(self) -> list[ProviderCountryDTO]:
+        return list(MOCK_COUNTRIES)
+
+    def get_services(self) -> list[ProviderServiceDTO]:
+        offerings: list[ProviderServiceDTO] = []
+        for country in MOCK_COUNTRIES:
+            for code, name, cost, sms, voice in MOCK_SERVICES:
+                # Deterministic per (service, country) so a demo does not flicker.
+                seed = sum(ord(char) for char in f"{code}{country.code}")
+                multiplier = Decimal("1.00") + Decimal(seed % 40) / Decimal("100")
+                available = seed % 11 != 0
+                offerings.append(
+                    ProviderServiceDTO(
+                        code=code,
+                        name=name,
+                        country_code=country.code,
+                        cost=(cost * multiplier).quantize(Decimal("0.0001")),
+                        currency="USD",
+                        supports_sms=sms,
+                        supports_voice=voice,
+                        available=available,
+                        available_count=None if not available else 5 + (seed % 90),
+                        ttl_minutes=20,
+                    )
+                )
+        return offerings
+
+    def get_pricing(self, service_code: str, country_code: str) -> Decimal:
+        for offering in self.get_services():
+            if offering.code == service_code and offering.country_code == country_code:
+                return offering.cost
+        raise ProviderError("That service is not offered for this country.")
+
+    def get_availability(self, service_code: str, country_code: str) -> AvailabilityDTO:
+        for offering in self.get_services():
+            if offering.code == service_code and offering.country_code == country_code:
+                return AvailabilityDTO(
+                    available=offering.available, count=offering.available_count
+                )
+        return AvailabilityDTO(available=False, count=0, note="Not offered.")
+
+    # -- orders ----------------------------------------------------------
+
+    def create_order(
+        self, service_code: str, country_code: str, idempotency_key: str
+    ) -> ProviderOrderDTO:
+        # Honour the idempotency key the way a real provider would: the same key
+        # returns the same reservation instead of booking a second number.
+        existing_id = cache.get(f"{CACHE_PREFIX}idem:{idempotency_key}")
+        if existing_id:
+            return self.get_order_status(existing_id)
+
+        scenario = _pick_scenario()
+
+        if scenario == "PROVIDER_ERR":
+            logger.info("mock_provider_simulated_error")
+            raise ProviderError("The provider rejected the request.")
+
+        provider_order_id = f"mock_{secrets.token_hex(8)}"
+        now = timezone.now()
+
+        if scenario == "NO_STOCK":
+            state = {
+                "scenario": scenario,
+                "service": service_code,
+                "country": country_code,
+                "created_at": now.isoformat(),
+                "failed": True,
+                "failure_reason": "NO_NUMBERS_AVAILABLE",
+            }
+            cache.set(_key(provider_order_id), state, CACHE_TTL)
+            cache.set(f"{CACHE_PREFIX}idem:{idempotency_key}", provider_order_id, CACHE_TTL)
+            return ProviderOrderDTO(
+                provider_order_id=provider_order_id,
+                state=ProviderOrderState.FAILED,
+                failure_reason="No numbers are available for this service right now.",
+            )
+
+        timings = SCENARIO_TIMINGS[scenario]
+        state = {
+            "scenario": scenario,
+            "service": service_code,
+            "country": country_code,
+            "created_at": now.isoformat(),
+            "assign_after": timings["assign"],
+            "code_after": timings["code"],
+            "phone": _fake_number(country_code),
+            "code": _fake_code(),
+            "expires_at": (now + timedelta(minutes=20)).isoformat(),
+            "cancelled": False,
+            "completed": False,
+            "failed": False,
+            "failure_reason": "",
+        }
+        cache.set(_key(provider_order_id), state, CACHE_TTL)
+        cache.set(f"{CACHE_PREFIX}idem:{idempotency_key}", provider_order_id, CACHE_TTL)
+        logger.info(
+            "mock_order_created",
+            extra={"provider_order_id": provider_order_id, "scenario": scenario},
+        )
+        return self.get_order_status(provider_order_id)
+
+    def get_order_status(self, provider_order_id: str) -> ProviderOrderDTO:
+        state = cache.get(_key(provider_order_id))
+        if state is None:
+            raise ProviderError("Unknown provider order.")
+
+        created_at = datetime.fromisoformat(state["created_at"])
+        elapsed = (timezone.now() - created_at).total_seconds()
+
+        if state.get("failed"):
+            return ProviderOrderDTO(
+                provider_order_id=provider_order_id,
+                state=ProviderOrderState.FAILED,
+                failure_reason=state.get("failure_reason", "Provider failure."),
+            )
+        if state.get("cancelled"):
+            return ProviderOrderDTO(
+                provider_order_id=provider_order_id,
+                state=ProviderOrderState.CANCELLED,
+                phone_number=state.get("phone", ""),
+            )
+
+        expires_at = datetime.fromisoformat(state["expires_at"])
+        assign_after = state.get("assign_after")
+        code_after = state.get("code_after")
+
+        if assign_after is None or elapsed < assign_after:
+            return ProviderOrderDTO(
+                provider_order_id=provider_order_id, state=ProviderOrderState.PENDING
+            )
+
+        code_ready = code_after is not None and elapsed >= code_after
+
+        if code_ready and timezone.now() <= expires_at:
+            return ProviderOrderDTO(
+                provider_order_id=provider_order_id,
+                state=ProviderOrderState.CODE_RECEIVED,
+                phone_number=state["phone"],
+                expires_at=expires_at,
+                code=CodeDTO(
+                    code=state["code"],
+                    full_text=f"{state['code']} is your verification code.",
+                    received_at=created_at + timedelta(seconds=code_after),
+                ),
+            )
+
+        if timezone.now() > expires_at:
+            return ProviderOrderDTO(
+                provider_order_id=provider_order_id,
+                state=ProviderOrderState.EXPIRED,
+                phone_number=state["phone"],
+                expires_at=expires_at,
+            )
+
+        return ProviderOrderDTO(
+            provider_order_id=provider_order_id,
+            state=ProviderOrderState.WAITING_FOR_CODE,
+            phone_number=state["phone"],
+            expires_at=expires_at,
+        )
+
+    def get_verification_code(self, provider_order_id: str) -> CodeDTO | None:
+        status = self.get_order_status(provider_order_id)
+        return status.code
+
+    def cancel_order(self, provider_order_id: str) -> bool:
+        state = cache.get(_key(provider_order_id))
+        if state is None:
+            return False
+        # A real provider refuses to cancel once a code has landed; mirror that.
+        if self.get_order_status(provider_order_id).state == ProviderOrderState.CODE_RECEIVED:
+            return False
+        state["cancelled"] = True
+        cache.set(_key(provider_order_id), state, CACHE_TTL)
+        return True
+
+    def refund_order(self, provider_order_id: str) -> bool:
+        state = cache.get(_key(provider_order_id))
+        if state is None:
+            return False
+        status = self.get_order_status(provider_order_id)
+        # Providers refund unused reservations, not delivered ones.
+        return status.state in {
+            ProviderOrderState.FAILED,
+            ProviderOrderState.CANCELLED,
+            ProviderOrderState.EXPIRED,
+        }
+
+    def health_check(self) -> bool:
+        return True
+
+
+# -- test helpers -----------------------------------------------------------
+
+
+def force_scenario(name: str | None) -> None:
+    """Pin the next mock orders to one scenario. Used by tests and demos."""
+    global FORCE_SCENARIO
+    if name is not None and name not in SCENARIO_WEIGHTS:
+        raise ValueError(f"Unknown mock scenario: {name}")
+    FORCE_SCENARIO = name
+
+
+def fast_forward(provider_order_id: str, seconds: int) -> None:
+    """Pretend `seconds` have passed for a mock order.
+
+    Lets a test drive an order from created to code-received without sleeping.
+    """
+    state = cache.get(_key(provider_order_id))
+    if state is None:
+        return
+    created_at = datetime.fromisoformat(state["created_at"])
+    state["created_at"] = (created_at - timedelta(seconds=seconds)).isoformat()
+    cache.set(_key(provider_order_id), state, CACHE_TTL)

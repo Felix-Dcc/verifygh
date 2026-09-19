@@ -1,0 +1,105 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+@layer base {
+  :root {
+    /* Safe-area insets, so the bottom navigation clears the iOS home bar. */
+    --safe-bottom: env(safe-area-inset-bottom, 0px);
+  }
+
+  html {
+    -webkit-text-size-adjust: 100%;
+    -webkit-tap-highlight-color: transparent;
+  }
+
+  body {
+    @apply bg-canvas text-ink font-sans antialiased;
+    /* Prevents the horizontal scroll that kills a mobile layout. */
+    overflow-x: hidden;
+  }
+
+  /* A visible focus ring is a feature, not a blemish. Only shown for keyboard
+     users so it never fights with touch input. */
+  :focus-visible {
+    @apply outline-none ring-2 ring-brand-500/60 ring-offset-2 ring-offset-canvas;
+  }
+
+  /* Tabular figures keep money columns from jittering as digits change. */
+  .tabular {
+    font-variant-numeric: tabular-nums;
+    font-feature-settings: "tnum";
+  }
+
+  @media (prefers-reduced-motion: reduce) {
+    *,
+    *::before,
+    *::after {
+      animation-duration: 0.01ms !important;
+      animation-iteration-count: 1 !important;
+      transition-duration: 0.01ms !important;
+      scroll-behavior: auto !important;
+    }
+  }
+}
+
+@layer components {
+  .container-page {
+    @apply mx-auto w-full max-w-6xl px-4 sm:px-6 lg:px-8;
+  }
+
+  .card {
+    @apply rounded-2xl border border-line bg-surface shadow-card;
+    /* Grid and flex items default to min-width:auto, which means a card
+       refuses to shrink below its content and pushes the page wider than the
+       viewport. Cards are containers, so they may always shrink. */
+    min-width: 0;
+  }
+
+  .skeleton {
+    @apply relative overflow-hidden rounded-lg bg-line/60;
+  }
+
+  .skeleton::after {
+    content: "";
+    @apply absolute inset-0 -translate-x-full animate-shimmer;
+    background-image: linear-gradient(
+      90deg,
+      rgba(255, 255, 255, 0) 0,
+      rgba(255, 255, 255, 0.6) 50%,
+      rgba(255, 255, 255, 0) 100%
+    );
+  }
+
+  /* Ghana-inspired accent: a thin green/gold rule, used sparingly as a
+     section marker rather than as decoration. */
+  .accent-rule {
+    @apply h-px w-full;
+    background-image: linear-gradient(
+      90deg,
+      theme("colors.brand.500") 0%,
+      theme("colors.gold.500") 45%,
+      transparent 100%
+    );
+  }
+}
+
+@layer utilities {
+  .pb-safe {
+    padding-bottom: calc(1rem + var(--safe-bottom));
+  }
+
+  .mb-safe-nav {
+    /* Clears the fixed bottom navigation on mobile. */
+    margin-bottom: calc(4.5rem + var(--safe-bottom));
+  }
+
+  .no-scrollbar::-webkit-scrollbar {
+    display: none;
+  }
+
+  .no-scrollbar {
+    -ms-overflow-style: none;
+    scrollbar-width: none;
+  }
+}
