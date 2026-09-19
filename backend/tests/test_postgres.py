@@ -126,3 +126,33 @@ def test_the_database_rejects_a_ledger_row_whose_arithmetic_is_wrong(user):
             amount=Decimal("5.00"), balance_before=Decimal("10.00"),
             balance_after=Decimal("50.00"), currency="GHS",
         )
+
+
+@pytest.mark.django_db
+def test_supabase_data_api_roles_are_locked_out():
+    """Recreate Supabase's API roles and its default grant, then migrate-hook.
+    CREATE ROLE is transactional, so the test's rollback removes them again."""
+    from apps.common.supabase import lock_down_data_api
+
+    with connection.cursor() as cursor:
+        cursor.execute("SELECT rolname FROM pg_roles WHERE rolname IN ('anon', 'authenticated')")
+        existing = {row[0] for row in cursor.fetchall()}
+        for role in {"anon", "authenticated"} - existing:
+            cursor.execute(f"CREATE ROLE {role} NOLOGIN")
+        cursor.execute("GRANT USAGE ON SCHEMA public TO anon, authenticated")
+        cursor.execute("GRANT ALL ON ALL TABLES IN SCHEMA public TO anon, authenticated")
+
+        assert lock_down_data_api() > 0
+
+        for table in ("wallet_wallet", "wallet_ledger_entry", "payments_payment",
+                      "accounts_user"):
+            for role in ("anon", "authenticated"):
+                cursor.execute("SELECT has_table_privilege(%s, %s, 'SELECT')", [role, table])
+                assert cursor.fetchone()[0] is False, (role, table)
+            cursor.execute("SELECT relrowsecurity FROM pg_class WHERE relname = %s", [table])
+            assert cursor.fetchone()[0] is True, table
+
+    # The application, as table owner, still reads and writes normally.
+    from apps.accounts.models import User
+
+    assert User.objects.count() >= 0

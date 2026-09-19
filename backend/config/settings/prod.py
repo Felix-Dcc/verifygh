@@ -57,6 +57,17 @@ if env("DB_SSLMODE", "prefer") not in ("require", "verify-ca", "verify-full") an
 ):
     _problems.append("DB_SSLMODE must be require, verify-ca or verify-full.")
 
+_pool_mode = env("DB_POOL_MODE", "session")
+if _pool_mode not in ("session", "transaction"):
+    _problems.append("DB_POOL_MODE must be 'session' or 'transaction'.")
+# 6543 is the transaction-mode port on Supabase's pooler. Without the matching
+# settings the app boots and works, then the nightly wallet reconciliation
+# fails - the one job that would notice a ledger problem.
+if str(DATABASES["default"].get("PORT")) == "6543" and _pool_mode != "transaction":  # noqa: F405
+    _problems.append(
+        "DATABASE_URL uses port 6543 (a transaction pooler): set DB_POOL_MODE=transaction."
+    )
+
 for _name in ("CORS_ALLOWED_ORIGINS", "FRONTEND_URL"):
     for _origin in env_list(_name):
         if not _origin.startswith("https://"):

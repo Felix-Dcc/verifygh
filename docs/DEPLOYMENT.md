@@ -15,8 +15,9 @@
                                        └──────────┬──────────┘
                                                   │
                                     ┌─────────────┼─────────────┐
-                              PostgreSQL 16    Redis 7      S3 (optional)
-                              + PITR backups   managed
+                              PostgreSQL       Redis 7      S3 (optional)
+                              on Supabase      managed
+                              + PITR backups
 ```
 
 Three backend processes, not one. The web process must never run scheduled work, and the
@@ -101,9 +102,97 @@ production refuses to boot without secrets. Neither guard can silently regress.
 
 ---
 
+## Database on Supabase
+
+VerifyGH treats Supabase as a managed PostgreSQL server and nothing more. It does **not**
+use Supabase Auth, Storage, Realtime, or the auto-generated Data API: Django is the only
+client of the database. Everything below follows from that.
+
+### 1. Create the project
+
+* **Plan: Pro or above.** Free projects pause after a week without activity and are not
+  meant to hold customer money. Add **Point-in-Time Recovery**: the ledger is the business.
+* **Region:** the same one as the backend (for example Supabase `eu-central-1` with Render
+  Frankfurt). Every request makes several queries, so cross-region latency multiplies.
+* **Database password:** let Supabase generate a long one. It goes in exactly one place,
+  the deploy platform's `DATABASE_URL`. Never commit it and never paste it into a chat.
+  Characters such as `@ : / ?` must be percent-encoded inside the URL.
+
+### 2. Close the Data API: two locks
+
+Supabase publishes every table in the `public` schema over REST/GraphQL, and by default the
+`anon` and `authenticated` roles are granted access to new tables there. Django creates all
+of VerifyGH's tables in `public`. Without these locks, anyone holding the project's anon key
+could try to query the users, wallets or ledger tables directly, skipping every check in
+this codebase.
+
+1. **In the dashboard:** turn the Data API off in the project's API settings. VerifyGH does
+   not use it.
+2. **In the database (automatic):** after every `migrate`, `apps/common/supabase.py`
+   removes all `anon`/`authenticated` privileges on `public` (current objects and future
+   defaults) and enables row-level security, with no policies, on every table. Django
+   connects as the table owner, which RLS does not restrict, so the app is unaffected. On
+   any database without Supabase's roles this does nothing.
+
+After the first `migrate`, the dashboard's **Security Advisor** should show no tables that
+are exposed to `anon`.
+
+### 3. Pick the connection string
+
+Supabase → **Connect** offers three. Use the **session pooler**:
+
+| Option | Host / port | Use it? |
+|---|---|---|
+| Direct connection | `db.<ref>.supabase.co:5432` | IPv6 only unless you buy the IPv4 add-on. Render has no IPv6 egress, so it will not connect there. |
+| **Session pooler** | `aws-0-<region>.pooler.supabase.com:5432`, user `postgres.<ref>` | **Yes.** IPv4, behaves like a normal connection. |
+| Transaction pooler | same host, port **6543** | Only if you run out of session-pooler connections. Set `DB_POOL_MODE=transaction` as well. Production refuses to boot on port 6543 without it. |
+
+In transaction mode each transaction may run on a different server connection. The setting
+turns off server-side cursors (the nightly wallet reconciliation uses one), server-side
+prepared statements and persistent client connections. Row locks still work, because
+`SELECT … FOR UPDATE` lives inside a single transaction.
+
+### 4. Environment
+
+```bash
+DATABASE_URL=postgresql://postgres.<ref>:<password>@aws-0-<region>.pooler.supabase.com:5432/postgres
+DB_SSLMODE=require            # production refuses anything weaker
+DB_POOL_MODE=session          # or transaction, with port 6543
+# Optional, stronger: download the CA certificate from the dashboard's database settings
+# DB_SSLMODE=verify-full
+# DB_SSLROOTCERT=/etc/secrets/supabase-ca.crt
+```
+
+In the dashboard, also turn on **Enforce SSL** for incoming connections. If you want to
+restrict which IPs can connect (Network Restrictions), allow only the backend's outbound
+addresses, and remember that CI does not use this database.
+
+### 5. Migrate
+
+From the backend's shell on the deploy platform (not your laptop, so the password stays
+there):
+
+```bash
+python manage.py migrate      # also applies the Data API lockdown and the ledger CHECKs
+python manage.py createsuperuser
+```
+
+`wallet.0003` adds the `ledger_arithmetic_consistent` constraint, which exists on PostgreSQL
+only. It is how the database itself refuses a ledger row whose arithmetic is wrong.
+
+### Connection budget
+
+With the blueprint's defaults the backend holds about 6 connections for web (3 workers × 2
+threads, each reused for 60 seconds), plus the Celery worker's concurrency, plus 1 for beat.
+Supabase's pooler limits clients by compute size. If the logs show "max clients reached",
+raise the compute size, lower `DB_CONN_MAX_AGE`, or move to the transaction pooler.
+
+---
+
 ## Backend — Render
 
-`infrastructure/render.yaml` is a working blueprint: web, worker, beat, Postgres and Redis.
+`infrastructure/render.yaml` is a working blueprint: web, worker, beat and Redis. The
+database is on Supabase (previous section).
 
 ```bash
 render blueprint launch     # or point the dashboard at the repo
@@ -262,8 +351,11 @@ take seconds.
 
 ## Backups
 
-* Postgres: automated daily snapshots **plus** point-in-time recovery. The ledger is the
-  business; losing a day of it is not recoverable by any other means.
+* Postgres (Supabase Pro): automated daily backups **plus** the Point-in-Time Recovery
+  add-on. The ledger is the business; losing a day of it is not recoverable by any other means.
+* Supabase restores replace the whole project. Rehearse on a **separate** project: restore
+  into it, point a staging backend at it, and run `reconcile_wallets`, which must report
+  zero drift.
 * **Test a restore before launch, and quarterly after.** An untested backup is a hope.
 * Redis holds cache and queue state only. Losing it costs you in-flight mock state and a
   cache warm-up, not money.

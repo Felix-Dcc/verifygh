@@ -40,7 +40,8 @@ SAFE = {
 }
 
 #: Variables that must not leak in from the developer's shell.
-SCRUB = set(SAFE) | {"DEBUG", "MOCK_PAYMENT_SECRET", "REQUIRE_POSTGRES"}
+SCRUB = set(SAFE) | {"DEBUG", "MOCK_PAYMENT_SECRET", "REQUIRE_POSTGRES", "DB_POOL_MODE",
+                    "DB_CONN_MAX_AGE", "DB_SSLROOTCERT"}
 
 
 def boot(**changes) -> subprocess.CompletedProcess:
@@ -124,3 +125,57 @@ def test_textverified_is_inert_in_the_safe_baseline():
     )
     assert result.returncode == 0, result.stderr[-2000:]
     assert "CONFIGURED False" in result.stdout
+
+
+# ---------------------------------------------------------------------------
+# Supabase connection shapes (placeholder project ref and password)
+# ---------------------------------------------------------------------------
+
+SUPABASE_SESSION = ("postgresql://postgres.abcdefghijklmnop:placeholder"
+                    "@aws-0-eu-central-1.pooler.supabase.com:5432/postgres")
+SUPABASE_TRANSACTION = SUPABASE_SESSION.replace(":5432/", ":6543/")
+
+
+def _db_settings(**changes) -> dict:
+    import json
+
+    child_env = {key: value for key, value in os.environ.items() if key not in SCRUB}
+    child_env.update(SAFE)
+    child_env.update(changes)
+    result = subprocess.run(
+        [sys.executable, "-c",
+         "import django, json; django.setup(); from django.conf import settings; "
+         "db = settings.DATABASES['default']; "
+         "print(json.dumps({k: db.get(k) for k in "
+         "('HOST', 'PORT', 'CONN_MAX_AGE', 'DISABLE_SERVER_SIDE_CURSORS', 'OPTIONS')}))"],
+        cwd=BACKEND, env=child_env, capture_output=True, text=True, timeout=120,
+    )
+    assert result.returncode == 0, result.stderr[-2000:]
+    return json.loads(result.stdout.strip().splitlines()[-1])
+
+
+def test_supabase_session_pooler_boots_with_persistent_connections():
+    db = _db_settings(DATABASE_URL=SUPABASE_SESSION)
+    assert db["PORT"] == "5432"
+    assert db["OPTIONS"]["sslmode"] == "require"
+    assert db["CONN_MAX_AGE"] == 60
+    assert not db["DISABLE_SERVER_SIDE_CURSORS"]
+
+
+def test_supabase_transaction_pooler_is_refused_without_the_matching_mode():
+    result = boot(DATABASE_URL=SUPABASE_TRANSACTION)
+    assert result.returncode != 0
+    assert "DB_POOL_MODE=transaction" in result.stderr
+
+
+def test_supabase_transaction_pooler_disables_what_it_cannot_carry():
+    db = _db_settings(DATABASE_URL=SUPABASE_TRANSACTION, DB_POOL_MODE="transaction")
+    assert db["DISABLE_SERVER_SIDE_CURSORS"] is True
+    assert db["CONN_MAX_AGE"] == 0
+    assert db["OPTIONS"]["prepare_threshold"] is None
+
+
+def test_an_unknown_pool_mode_is_refused():
+    result = boot(DB_POOL_MODE="statement")
+    assert result.returncode != 0
+    assert "DB_POOL_MODE must be" in result.stderr

@@ -131,7 +131,16 @@ def database_from_url(url: str) -> dict:
         return {"ENGINE": "django.db.backends.sqlite3", "NAME": name.lstrip("/") or "db.sqlite3"}
     if parsed.scheme not in {"postgres", "postgresql", "psql"}:
         raise ValueError(f"Unsupported DATABASE_URL scheme: {parsed.scheme}")
-    return {
+    options = {
+        "sslmode": env("DB_SSLMODE", "prefer"),
+        # Fail fast instead of hanging a worker when the database is unreachable.
+        "connect_timeout": env_int("DB_CONNECT_TIMEOUT", 10),
+    }
+    if env("DB_SSLROOTCERT"):
+        # For sslmode=verify-full, e.g. Supabase's CA certificate.
+        options["sslrootcert"] = env("DB_SSLROOTCERT")
+
+    config = {
         "ENGINE": "django.db.backends.postgresql",
         "NAME": unquote(parsed.path.lstrip("/")),
         "USER": unquote(parsed.username or ""),
@@ -139,8 +148,24 @@ def database_from_url(url: str) -> dict:
         "HOST": parsed.hostname or "",
         "PORT": str(parsed.port or ""),
         "CONN_MAX_AGE": env_int("DB_CONN_MAX_AGE", 60),
-        "OPTIONS": {"sslmode": env("DB_SSLMODE", "prefer")},
+        "OPTIONS": options,
     }
+
+    # DB_POOL_MODE=transaction when connecting through a transaction-mode
+    # pooler (Supabase's pooler on port 6543, PgBouncer). Each transaction may
+    # land on a different server connection, so nothing may outlive one:
+    #   * server-side cursors (QuerySet.iterator(), used by the nightly wallet
+    #     reconciliation) would vanish between fetches;
+    #   * prepared statements would be missing on the next backend. Django uses
+    #     client-side binding by default, so this is a guard, not a fix;
+    #   * persistent client connections buy nothing - the pooler already pools.
+    # Row locks are unaffected: SELECT ... FOR UPDATE lives inside one
+    # transaction, which the pooler keeps on one server connection.
+    if env("DB_POOL_MODE", "session") == "transaction":
+        config["DISABLE_SERVER_SIDE_CURSORS"] = True
+        config["CONN_MAX_AGE"] = 0
+        options["prepare_threshold"] = None
+    return config
 
 
 DATABASE_URL = env("DATABASE_URL")
