@@ -26,6 +26,8 @@ export type SignUpInput = {
   full_name?: string;
   phone?: string;
   accepted_terms: boolean;
+  /** From /register?ref=CODE. The backend resolves it; we only pass it on. */
+  referral_code?: string;
 };
 
 const AuthContext = React.createContext<AuthContextValue | null>(null);

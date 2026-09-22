@@ -140,6 +140,23 @@ export const CopyIcon = (p: IconProps) => (
   </Svg>
 );
 
+export const ShareIcon = (p: IconProps) => (
+  <Svg {...p}>
+    <path d="M12 3.5v11" />
+    <path d="M8.25 7.25 12 3.5l3.75 3.75" />
+    <path d="M6.5 12.5v6a2 2 0 0 0 2 2h7a2 2 0 0 0 2-2v-6" />
+  </Svg>
+);
+
+export const GiftIcon = (p: IconProps) => (
+  <Svg {...p}>
+    <rect x="3.5" y="9.5" width="17" height="11" rx="2" />
+    <path d="M3.5 13.5h17M12 9.5v11" />
+    <path d="M12 9.5S10.5 3.5 7.75 3.5a2.25 2.25 0 0 0 0 4.5H12Z" />
+    <path d="M12 9.5s1.5-6 4.25-6a2.25 2.25 0 0 1 0 4.5H12Z" />
+  </Svg>
+);
+
 export const RefreshIcon = (p: IconProps) => (
   <Svg {...p}>
     <path d="M20 12a8 8 0 1 1-2.6-5.9" />

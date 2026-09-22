@@ -24,6 +24,11 @@ class RegisterSerializer(serializers.Serializer):
     full_name = serializers.CharField(max_length=150, required=False, allow_blank=True, default="")
     phone = PhoneField(required=False, allow_blank=True, default="")
     accepted_terms = serializers.BooleanField()
+    #: Optional, from /register?ref=CODE. Never trusted: the backend resolves
+    #: it, and silently ignores anything it does not recognise.
+    referral_code = serializers.CharField(
+        max_length=16, required=False, allow_blank=True, default=""
+    )
 
     def validate_email(self, value: str) -> str:
         value = value.strip().lower()

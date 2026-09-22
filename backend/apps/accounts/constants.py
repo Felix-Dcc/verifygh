@@ -31,6 +31,8 @@ class AdminPermission(models.TextChoices):
     PRICING_MANAGE = "PRICING_MANAGE", "Change pricing rules and markup"
     PROVIDER_MANAGE = "PROVIDER_MANAGE", "Configure providers"
     AUDIT_VIEW = "AUDIT_VIEW", "View the audit log"
+    REFERRAL_VIEW = "REFERRAL_VIEW", "View referrals and referral analytics"
+    REFERRAL_MANAGE = "REFERRAL_MANAGE", "Approve, reject and flag referrals"
     METRICS_VIEW = "METRICS_VIEW", "View dashboards and metrics"
 
 
@@ -40,6 +42,7 @@ _SUPPORT = {
     AdminPermission.ORDER_VIEW,
     AdminPermission.PAYMENT_VIEW,
     AdminPermission.METRICS_VIEW,
+    AdminPermission.REFERRAL_VIEW,
 }
 
 _ADMIN = _SUPPORT | {
@@ -48,6 +51,9 @@ _ADMIN = _SUPPORT | {
     AdminPermission.ORDER_REFUND,
     AdminPermission.CATALOG_MANAGE,
     AdminPermission.AUDIT_VIEW,
+    # Approving a held referral issues promotional credit, so it stays with
+    # admins. Reversing one needs WALLET_ADJUST, which is super-admin only.
+    AdminPermission.REFERRAL_MANAGE,
 }
 
 _SUPER_ADMIN = _ADMIN | {

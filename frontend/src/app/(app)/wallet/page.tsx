@@ -26,6 +26,7 @@ export default function WalletPage() {
   const { data: payments } = useSWR<Paginated<Payment>>(["/payments/", { page_size: 5 }]);
 
   const wallet = summary?.wallet;
+  const hasPromo = Number(wallet?.promo_balance ?? 0) > 0;
 
   return (
     <div className="space-y-4">
@@ -51,14 +52,31 @@ export default function WalletPage() {
           aria-hidden
         />
         <div className="relative">
-          <p className="text-sm text-brand-200">Available balance</p>
+          <p className="text-sm text-brand-200">
+            {hasPromo ? "Available to spend" : "Available balance"}
+          </p>
           {isLoading ? (
             <Skeleton className="mt-2 h-10 w-44 bg-white/20" />
           ) : (
             <p className="tabular mt-1 text-4xl font-semibold tracking-tight sm:text-5xl">
-              {cedis(wallet?.balance)}
+              {cedis(hasPromo ? wallet?.spendable : wallet?.balance)}
             </p>
           )}
+
+          {/* Cash and promotional credit are shown apart, always. One can be
+              withdrawn and refunded as money; the other cannot. */}
+          {hasPromo ? (
+            <dl className="mt-4 flex flex-wrap gap-x-6 gap-y-2 text-sm">
+              <div className="flex items-baseline gap-2">
+                <dt className="text-brand-200">Cash</dt>
+                <dd className="tabular font-semibold">{cedis(wallet?.balance)}</dd>
+              </div>
+              <div className="flex items-baseline gap-2">
+                <dt className="text-brand-200">Promotional credit</dt>
+                <dd className="tabular font-semibold">{cedis(wallet?.promo_balance)}</dd>
+              </div>
+            </dl>
+          ) : null}
 
           <dl className="mt-6 grid grid-cols-2 gap-4 border-t border-white/15 pt-4 sm:max-w-sm">
             <div>
@@ -121,7 +139,14 @@ export default function WalletPage() {
                     )}
                   </span>
                   <div className="min-w-0 flex-1">
-                    <p className="truncate text-sm font-medium text-ink">{entry.description}</p>
+                    <p className="truncate text-sm font-medium text-ink">
+                      {entry.description}
+                      {entry.funds === "PROMO" ? (
+                        <span className="ml-2 rounded-md bg-gold-100 px-1.5 py-0.5 text-[11px] font-semibold text-gold-700">
+                          Promo
+                        </span>
+                      ) : null}
+                    </p>
                     <p className="tabular text-xs text-ink-muted">
                       {entry.reference}
                       <span className="mx-1.5" aria-hidden>

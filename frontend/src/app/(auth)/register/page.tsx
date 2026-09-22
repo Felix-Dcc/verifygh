@@ -5,6 +5,11 @@ import { useRouter } from "next/navigation";
 import * as React from "react";
 
 import { errorMessage, useAuth } from "@/components/auth-provider";
+import {
+  ReferralInviteBanner,
+  clearReferralInvite,
+  useReferralInvite,
+} from "@/components/referral-invite";
 import { Alert, Button, Card, Checkbox, Field, Input } from "@/components/ui/primitives";
 import { ApiError } from "@/lib/api";
 
@@ -14,6 +19,7 @@ const MIN_PASSWORD_LENGTH = 10;
 export default function RegisterPage() {
   const router = useRouter();
   const { signUp, user, ready } = useAuth();
+  const invite = useReferralInvite();
 
   const [form, setForm] = React.useState({
     full_name: "",
@@ -59,7 +65,11 @@ export default function RegisterPage() {
         full_name: form.full_name.trim(),
         phone: form.phone.trim(),
         accepted_terms: true,
+        // Sent as-is. The backend resolves it, ignores anything it does not
+        // recognise, and records the attribution itself.
+        referral_code: invite.code || undefined,
       });
+      clearReferralInvite();
       router.replace("/dashboard?welcome=1");
     } catch (error) {
       if (error instanceof ApiError) {
@@ -83,6 +93,8 @@ export default function RegisterPage() {
 
       <Card className="p-5 sm:p-6">
         <form onSubmit={onSubmit} noValidate className="space-y-4">
+          <ReferralInviteBanner invite={invite} />
+
           {formError ? (
             <Alert tone="danger" title="Could not create your account">
               {formError}

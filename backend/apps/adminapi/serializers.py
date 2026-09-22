@@ -14,6 +14,7 @@ from apps.pricing.models import ExchangeRate, PricingRule
 
 class AdminUserSerializer(serializers.ModelSerializer):
     balance = serializers.SerializerMethodField()
+    promo_balance = serializers.SerializerMethodField()
     order_count = serializers.IntegerField(read_only=True, default=0)
     open_flags = serializers.IntegerField(read_only=True, default=0)
 
@@ -22,13 +23,19 @@ class AdminUserSerializer(serializers.ModelSerializer):
         fields = [
             "id", "email", "full_name", "phone", "role", "is_active", "is_suspended",
             "suspension_reason", "is_email_verified", "is_phone_verified", "risk_score",
-            "balance", "order_count", "open_flags", "last_login", "created_at",
+            "balance", "promo_balance", "order_count", "open_flags", "last_login",
+            "created_at",
         ]
         read_only_fields = fields
 
     def get_balance(self, obj: User) -> str:
         wallet = getattr(obj, "wallet", None)
         return str(wallet.balance) if wallet else "0.00"
+
+    def get_promo_balance(self, obj: User) -> str:
+        """Promotional credit, shown apart from cash so staff never confuse the two."""
+        wallet = getattr(obj, "wallet", None)
+        return str(wallet.promo_balance) if wallet else "0.00"
 
 
 class SuspendUserSerializer(serializers.Serializer):

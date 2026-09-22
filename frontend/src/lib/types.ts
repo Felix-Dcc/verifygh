@@ -24,10 +24,16 @@ export type User = {
 export type Wallet = {
   id: string;
   currency: string;
+  /** Cash the user paid in. Withdrawable, refundable as cash. */
   balance: string;
+  /** Promotional credit (referral bonuses). Spendable, never withdrawable. */
+  promo_balance: string;
+  /** promo_balance + balance: what a purchase can actually draw on. */
+  spendable: string;
   is_frozen: boolean;
   total_deposited: string;
   total_spent: string;
+  promo_granted: string;
   updated_at: string;
 };
 
@@ -45,12 +51,17 @@ export type LedgerEntryType =
   | "REFUND"
   | "ADJUSTMENT"
   | "WITHDRAWAL"
-  | "REVERSAL";
+  | "REVERSAL"
+  | "REFERRAL_BONUS";
+
+/** Which bucket of the wallet a ledger entry moved. */
+export type FundType = "CASH" | "PROMO";
 
 export type Transaction = {
   id: string;
   reference: string;
   entry_type: LedgerEntryType;
+  funds: FundType;
   direction: "CREDIT" | "DEBIT";
   status: string;
   amount: string;
@@ -507,4 +518,85 @@ export type AdminActionEntry = {
   before: Record<string, unknown>;
   after: Record<string, unknown>;
   created_at: string;
+};
+
+// ---------------------------------------------------------------------------
+// Referrals
+// ---------------------------------------------------------------------------
+
+export type ReferralStats = {
+  successful: number;
+  pending: number;
+  rejected: number;
+  total: number;
+  rewards_issued: string;
+};
+
+export type MyReferral = {
+  enabled: boolean;
+  code: string;
+  share_url: string;
+  bonus_amount: string;
+  currency: string;
+  stats: ReferralStats;
+};
+
+/** What a referrer may see about someone they invited: no name, no address. */
+export type ReferralHistoryItem = {
+  friend: string;
+  status: "PENDING" | "REWARDED" | "REJECTED";
+  reward_amount: string | null;
+  created_at: string;
+  rewarded_at: string | null;
+};
+
+export type ReferralRiskFlag = {
+  kind: string;
+  level: "LOW" | "MEDIUM" | "HIGH";
+  detail: string;
+  blocking: boolean;
+  created_at: string;
+};
+
+export type AdminReferral = {
+  id: string;
+  code: string;
+  status: "PENDING" | "ELIGIBLE" | "REWARDED" | "REJECTED" | "FRAUD_FLAGGED";
+  reason: string;
+  staff_note: string;
+  referrer_id: string;
+  referrer_email: string;
+  referred_id: string;
+  referred_email: string;
+  referred_email_verified: boolean;
+  referred_suspended: boolean;
+  signup_ip: string | null;
+  risk_score: number;
+  reward: {
+    reference: string;
+    amount: string;
+    currency: string;
+    status: "ISSUED" | "REVERSED";
+    ledger_entry_id: string | null;
+    reversed_at: string | null;
+    created_at: string;
+  } | null;
+  risk_flags: ReferralRiskFlag[];
+  created_at: string;
+  eligible_at: string | null;
+  rewarded_at: string | null;
+  rejected_at: string | null;
+};
+
+export type ReferralAnalytics = {
+  registrations: number;
+  pending: number;
+  eligible: number;
+  rewarded: number;
+  rejected: number;
+  fraud_flagged: number;
+  promotional_credit_issued: string;
+  promotional_credit_reversed: string;
+  average_acquisition_cost: string;
+  conversion_rate: number;
 };

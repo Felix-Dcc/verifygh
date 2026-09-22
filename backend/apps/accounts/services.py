@@ -25,7 +25,7 @@ def _frontend(path: str) -> str:
 
 @transaction.atomic
 def register_user(*, email: str, password: str, full_name: str = "", phone: str = "",
-                  accepted_terms: bool = False, request=None) -> User:
+                  accepted_terms: bool = False, referral_code: str = "", request=None) -> User:
     """Create an account. The wallet is created by a post_save signal."""
     if not accepted_terms:
         raise ValidationFailed(
@@ -46,6 +46,13 @@ def register_user(*, email: str, password: str, full_name: str = "", phone: str 
 
     if request is not None:
         track_device(user, request)
+
+    # Attribution happens here, once, from the code the backend resolves - not
+    # from anything the browser claims later. An unknown code is ignored and
+    # registration continues.
+    from apps.referrals.services import attach_referral
+
+    attach_referral(new_user=user, raw_code=referral_code, request=request)
 
     transaction.on_commit(lambda: send_verification_email(user, ip=ip))
     logger.info("user_registered", extra={"user_id": str(user.id)})
@@ -95,6 +102,11 @@ def verify_email(raw_token: str) -> User:
         user.save(update_fields=["is_email_verified", "email_verified_at", "updated_at"])
 
     logger.info("email_verified", extra={"user_id": str(user.id)})
+
+    # Verification is the usual last gate before a referral becomes eligible.
+    from apps.referrals.services import process_for_user
+
+    process_for_user(user)
     return user
 
 

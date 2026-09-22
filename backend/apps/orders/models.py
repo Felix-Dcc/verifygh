@@ -151,7 +151,19 @@ class Order(BaseModel):
     completed_at = models.DateTimeField(null=True, blank=True)
 
     # -- money -----------------------------------------------------------
+    #: The cash half of the purchase. Kept under its original name so every
+    #: order written before promotional credit existed still reads correctly.
     debit_entry_id = models.UUIDField(null=True, blank=True)
+    #: The promotional half, when promotional credit paid for part of the order.
+    promo_debit_entry_id = models.UUIDField(null=True, blank=True)
+    #: How the price was split. Recorded at purchase so a refund can return each
+    #: bucket to itself instead of converting promotional credit into cash.
+    promo_amount = models.DecimalField(
+        max_digits=12, decimal_places=2, default=Decimal("0.00")
+    )
+    cash_amount = models.DecimalField(
+        max_digits=12, decimal_places=2, default=Decimal("0.00")
+    )
     refund_status = models.CharField(
         max_length=10, choices=RefundStatus.choices, default=RefundStatus.NONE, db_index=True
     )
@@ -171,6 +183,11 @@ class Order(BaseModel):
             ),
             models.CheckConstraint(
                 check=models.Q(price__gte=Decimal("0.00")), name="order_price_non_negative"
+            ),
+            models.CheckConstraint(
+                check=models.Q(promo_amount__gte=Decimal("0.00"))
+                & models.Q(cash_amount__gte=Decimal("0.00")),
+                name="order_split_non_negative",
             ),
             models.CheckConstraint(
                 check=models.Q(status__in=[
@@ -274,6 +291,13 @@ class Refund(BaseModel):
     is_automatic = models.BooleanField(default=True)
 
     ledger_entry_id = models.UUIDField(null=True, blank=True)
+    #: How the refund was returned, mirroring how the order was paid.
+    promo_amount = models.DecimalField(
+        max_digits=12, decimal_places=2, default=Decimal("0.00")
+    )
+    cash_amount = models.DecimalField(
+        max_digits=12, decimal_places=2, default=Decimal("0.00")
+    )
     provider_refund_requested = models.BooleanField(default=False)
     provider_refund_accepted = models.BooleanField(default=False)
 

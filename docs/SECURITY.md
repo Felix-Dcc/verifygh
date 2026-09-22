@@ -65,6 +65,28 @@ is a new transaction of its own.
 
 ---
 
+### Promotional credit is not money
+
+Referral bonuses live in a second bucket of the same wallet (`promo_balance`) and move
+through the same ledger service, with the same lock, the same compare-and-set and the same
+idempotency key. The separation is enforced by the database rather than by convention:
+
+* `ledger_funds_allow_entry_type` - a `WITHDRAWAL` may only move `CASH` and a
+  `REFERRAL_BONUS` only `PROMO`, so promotional credit has **no exit path**;
+* refunds return each bucket to itself, and partial-refund rounding favours the
+  promotional side, so nothing converts credit into withdrawable cash;
+* one signup bonus per account, checked against the ledger itself;
+* the reward is idempotent three times over - a row lock, a `OneToOne` on the reward, and a
+  ledger key derived from the referral id. Ten concurrent calls credit GH₵5 once.
+
+Abuse signals (shared device, referral velocity, duplicate accounts) **hold** a referral for
+human review rather than rejecting it, and are never shown to customers. A shared IP address
+is recorded but never blocking: in Ghana, homes, offices, schools, hostels and mobile
+networks all put many legitimate people behind one address. See
+[REFERRALS.md](REFERRALS.md).
+
+---
+
 ## 2. Payments
 
 **The client never confirms a payment.** A deposit becomes money through exactly one of two

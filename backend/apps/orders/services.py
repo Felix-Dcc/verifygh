@@ -18,6 +18,7 @@ from __future__ import annotations
 
 import logging
 from datetime import timedelta
+from decimal import Decimal
 
 from django.conf import settings
 from django.db import IntegrityError, transaction
@@ -37,7 +38,7 @@ from apps.common.errors import (
     TermsNotAccepted,
 )
 from apps.common.ids import order_reference, refund_reference
-from apps.common.money import quantize
+from apps.common.money import TWO_PLACES, ZERO, quantize, round_to
 from apps.orders.models import (
     ACTIVE_ORDER_STATUSES,
     ALLOWED_TRANSITIONS,
@@ -51,8 +52,8 @@ from apps.orders.models import (
 from apps.pricing.engine import quote_for_offering
 from apps.verification.base import ProviderOrderState
 from apps.verification.registry import get_provider
-from apps.wallet.models import LedgerEntryType
-from apps.wallet.services import credit_refund, debit_purchase, get_or_create_wallet
+from apps.wallet.models import FundType, LedgerEntryType
+from apps.wallet.services import charge_order, credit_refund, get_or_create_wallet
 
 logger = logging.getLogger("verifygh.orders")
 
@@ -300,17 +301,21 @@ def create_order(*, user, service_slug: str, country_code: str, idempotency_key:
             )
 
             # Raises InsufficientFunds before anything else is written.
-            entry = debit_purchase(
+            # Promotional credit is spent first, then cash; see split_charge.
+            charge = charge_order(
                 wallet=wallet,
                 amount=price,
-                idempotency_key=f"order:{order.id}",
                 order_id=order.id,
                 order_reference=order.reference,
                 service_name=offering.service.name,
             )
 
             Order.objects.filter(pk=order.pk).update(
-                debit_entry_id=entry.id, status=OrderStatus.PROCESSING
+                debit_entry_id=getattr(charge.cash_entry, "id", None),
+                promo_debit_entry_id=getattr(charge.promo_entry, "id", None),
+                promo_amount=charge.promo,
+                cash_amount=charge.cash,
+                status=OrderStatus.PROCESSING,
             )
 
             OrderEvent.objects.create(
@@ -323,7 +328,12 @@ def create_order(*, user, service_slug: str, country_code: str, idempotency_key:
                 order=order,
                 status=OrderStatus.PROCESSING,
                 label=STATUS_LABELS[OrderStatus.PROCESSING],
-                detail=f"GHS {price} debited from your wallet.",
+                detail=(
+                    f"GHS {charge.cash} debited from your wallet and "
+                    f"GHS {charge.promo} from your promotional credit."
+                    if charge.promo > 0
+                    else f"GHS {price} debited from your wallet."
+                ),
             )
     except IntegrityError:
         # Lost the race on UNIQUE(user, idempotency_key): the concurrent request
@@ -606,6 +616,29 @@ def fail_order(order: Order, *, reason: str, provider_order_id: str = "") -> Ord
 # ---------------------------------------------------------------------------
 
 
+def split_refund(order: Order, amount) -> tuple[Decimal, Decimal]:
+    """Split a refund back into (promotional, cash), matching how it was paid.
+
+    A refund must not turn promotional credit into withdrawable cash. For a
+    full refund each bucket simply gets back what it paid. For a partial one
+    the split is proportional, with the rounding remainder given to the
+    promotional side, so the cash returned is never more than its true share.
+    """
+    amount = quantize(amount)
+    promo_paid = quantize(order.promo_amount)
+    cash_paid = quantize(order.cash_amount)
+    price = quantize(promo_paid + cash_paid)
+
+    if price <= ZERO:
+        # Orders placed before promotional credit existed recorded no split.
+        return ZERO, amount
+    if amount >= price:
+        return promo_paid, cash_paid
+
+    promo_part = min(promo_paid, round_to(amount * promo_paid / price, TWO_PLACES, ceiling=True))
+    return promo_part, quantize(amount - promo_part)
+
+
 def issue_refund(order: Order, *, reason: str, amount=None, actor=None, note: str = "",
                  automatic: bool = True) -> Order:
     """Refund an order.
@@ -656,18 +689,35 @@ def issue_refund(order: Order, *, reason: str, amount=None, actor=None, note: st
             if not created and refund.status == RefundStatus.COMPLETED:
                 return order
 
-            entry = credit_refund(
-                wallet=wallet,
-                amount=refund_amount,
-                idempotency_key=f"refund:{order.id}",
-                order_id=order.id,
-                order_reference=order.reference,
-                reason=reason,
-            )
+            promo_part, cash_part = split_refund(order, refund_amount)
+            promo_entry = None
+            if promo_part > 0:
+                promo_entry = credit_refund(
+                    wallet=wallet,
+                    amount=promo_part,
+                    idempotency_key=f"refund:{order.id}:promo",
+                    order_id=order.id,
+                    order_reference=order.reference,
+                    reason=reason,
+                    funds=FundType.PROMO,
+                )
+            entry = promo_entry
+            if cash_part > 0:
+                entry = credit_refund(
+                    wallet=wallet,
+                    amount=cash_part,
+                    idempotency_key=f"refund:{order.id}",
+                    order_id=order.id,
+                    order_reference=order.reference,
+                    reason=reason,
+                    funds=FundType.CASH,
+                )
 
             Refund.objects.filter(pk=refund.pk).update(
                 status=RefundStatus.COMPLETED,
                 ledger_entry_id=entry.id,
+                promo_amount=promo_part,
+                cash_amount=cash_part,
                 completed_at=timezone.now(),
             )
 

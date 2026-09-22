@@ -63,6 +63,12 @@ app.conf.beat_schedule = {
         "task": "apps.orders.tasks.purge_verification_data",
         "schedule": crontab(minute=40, hour=3),
     },
+    # Settles referrals that became eligible while the programme was paused,
+    # or whose referrer was at their monthly cap. Idempotent by construction.
+    "process-pending-referrals": {
+        "task": "apps.referrals.tasks.process_pending_referrals",
+        "schedule": crontab(minute="*/30"),
+    },
     # Catches deposits whose provider callback never arrived.
     "reconcile-recent-payments": {
         "task": "apps.payments.tasks.reconcile_recent_payments",

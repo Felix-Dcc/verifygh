@@ -13,6 +13,7 @@ from apps.catalog import views as catalog_views
 from apps.notifications import views as notification_views
 from apps.orders import views as order_views
 from apps.payments import views as payment_views
+from apps.referrals import admin_api as referral_admin
 from apps.wallet import views as wallet_views
 
 router = DefaultRouter()
@@ -45,9 +46,23 @@ admin_router.register(
     "admin-actions", admin_views.AdminActionViewSet, basename="admin-action"
 )
 admin_router.register("flags", admin_views.AdminFlagViewSet, basename="admin-flag")
+admin_router.register(
+    "referrals", referral_admin.AdminReferralViewSet, basename="admin-referral"
+)
 
 api_v1 = [
     path("auth/", include("apps.accounts.urls")),
+    path("referrals/", include("apps.referrals.urls")),
+    path(
+        "admin/referrals-analytics/",
+        referral_admin.AdminReferralAnalyticsView.as_view(),
+        name="admin-referral-analytics",
+    ),
+    path(
+        "admin/referral-program/",
+        referral_admin.AdminReferralProgramView.as_view(),
+        name="admin-referral-program",
+    ),
     path("payments/options/", payment_views.PaymentOptionsView.as_view(), name="payment-options"),
     path(
         "payments/webhooks/<str:provider_key>/",

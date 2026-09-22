@@ -79,6 +79,7 @@ class RegisterView(APIView):
             full_name=data.get("full_name", ""),
             phone=data.get("phone", ""),
             accepted_terms=data["accepted_terms"],
+            referral_code=data.get("referral_code", ""),
             request=request,
         )
         record_audit(

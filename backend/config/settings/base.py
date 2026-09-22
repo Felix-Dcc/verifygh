@@ -81,6 +81,7 @@ INSTALLED_APPS = [
     "apps.orders",
     "apps.notifications",
     "apps.adminapi",
+    "apps.referrals",
 ]
 
 MIDDLEWARE = [
@@ -262,6 +263,7 @@ REST_FRAMEWORK = {
         # Per-IP ceiling across *all* accounts - stops credential stuffing,
         # which the per-(IP, email) bucket above does not see at all.
         "login_ip": "30/min",
+        "referral_validate": "30/min",
         "register": "5/hour",
         "password_reset": "5/hour",
         "email_verify": "10/hour",
@@ -388,6 +390,17 @@ VERIFYGH = {
     # Upstream call budget — we never hammer a provider API.
     "PROVIDER_RATE_LIMIT_PER_MINUTE": env_int("PROVIDER_RATE_LIMIT_PER_MINUTE", 120),
     "CURRENT_TERMS_VERSION": env("CURRENT_TERMS_VERSION", "2026-01-01"),
+    # -- referral programme. These seed the ReferralProgram row the first time
+    # it is read; after that the database is the source of truth, so an admin
+    # can change the bonus without a deploy.
+    "REFERRAL_PROGRAM_ENABLED": env_bool("REFERRAL_PROGRAM_ENABLED", True),
+    "REFERRAL_SIGNUP_BONUS": env("REFERRAL_SIGNUP_BONUS_GHS", "5.00"),
+    "REFERRAL_MAX_MONTHLY_SUCCESSFUL_REFERRALS": env_int(
+        "REFERRAL_MAX_MONTHLY_SUCCESSFUL_REFERRALS", 20
+    ),
+    "REFERRAL_REQUIRE_PHONE_VERIFICATION": env_bool(
+        "REFERRAL_REQUIRE_PHONE_VERIFICATION", False
+    ),
     # Codes and SMS text are erased from finished orders after this many days.
     "VERIFICATION_DATA_RETENTION_DAYS": env_int("VERIFICATION_DATA_RETENTION_DAYS", 30),
 }

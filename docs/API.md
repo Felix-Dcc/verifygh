@@ -206,13 +206,43 @@ anywhere in the API.
 
 | Method | Path | Description |
 |---|---|---|
-| GET | `/wallet/` | Balance and totals. |
-| GET | `/wallet/summary/` | Balance plus today's spend and order counts. |
+| GET | `/wallet/` | Both balances and totals. |
+| GET | `/wallet/summary/` | Balances plus today's spend and order counts. |
 | GET | `/transactions/` | Ledger entries. Filters: `entry_type`, `direction`, `search`. |
 | GET | `/transactions/{id}/` | One entry. |
 
 Ledger entries are immutable and carry `balance_after`, so any historical balance can be
 reconstructed without replaying the table.
+
+A wallet holds two buckets, and every entry says which one it moved (`funds`):
+
+| Field | Meaning |
+|---|---|
+| `balance` | Cash the user paid in. Withdrawable, refunded as cash. |
+| `promo_balance` | Promotional credit (referral bonuses). Spendable on verifications, **never** withdrawable, transferable or convertible. |
+| `spendable` | `promo_balance + balance` — what a purchase can draw on. |
+
+A purchase spends promotional credit first and writes one entry per bucket. A refund
+returns each bucket to itself. See [REFERRALS.md](REFERRALS.md).
+
+---
+
+## Referrals
+
+| Method | Path | Description |
+|---|---|---|
+| GET | `/referrals/me/` | Your code, link, the current bonus and your stats. |
+| GET | `/referrals/stats/` | Successful, pending, rejected, credit issued. |
+| GET | `/referrals/history/` | Your invitations. Emails are masked (`k***@example.com`). |
+| POST | `/referrals/validate/` | `{"code": "VGH8K4P2"}` → `{"valid": true, "bonus_amount": "5.00"}`. Anonymous, throttled, and says nothing about the code's owner. |
+
+Registration accepts an optional `referral_code`. The backend resolves it and records the
+attribution itself; an unknown code is ignored and registration continues. An account has
+exactly one referrer, for ever.
+
+**There is no claim endpoint.** Eligibility is decided by the backend — after email
+verification, an admin review, or the periodic sweep — and the reward is issued through the
+ledger. Nothing the browser sends can award credit.
 
 ---
 
@@ -338,6 +368,11 @@ reason and write an immutable `AdminAction` **before** the effect is applied.
 | GET | `/admin/health/` | `METRICS_VIEW` |
 | GET | `/admin/users/` | `USER_VIEW` |
 | POST | `/admin/users/{id}/suspend/` | `USER_SUSPEND` |
+| GET | `/admin/referrals/` | `REFERRAL_VIEW` |
+| POST | `/admin/referrals/{id}/approve\|reject\|flag/` | `REFERRAL_MANAGE` |
+| POST | `/admin/referrals/{id}/reverse-reward/` | `WALLET_ADJUST` |
+| GET | `/admin/referrals-analytics/` | `REFERRAL_VIEW` |
+| GET\|PATCH | `/admin/referral-program/` | `REFERRAL_VIEW` / `PRICING_MANAGE` |
 | POST | `/admin/users/{id}/unsuspend/` | `USER_SUSPEND` |
 | POST | `/admin/users/{id}/wallet-adjustment/` | `WALLET_ADJUST` |
 | GET | `/admin/users/{id}/orders/` | `USER_VIEW` |
@@ -365,9 +400,9 @@ reason and write an immutable `AdminAction` **before** the effect is applied.
 
 | | SUPPORT | ADMIN | SUPER_ADMIN |
 |---|:-:|:-:|:-:|
-| View users, orders, payments, wallets, metrics | ✓ | ✓ | ✓ |
-| Suspend users, cancel orders, refund, manage catalog, view audit | | ✓ | ✓ |
-| Change roles, adjust wallets, manage pricing and providers | | | ✓ |
+| View users, orders, payments, wallets, metrics, referrals | ✓ | ✓ | ✓ |
+| Suspend users, cancel orders, refund, manage catalog, view audit, decide referrals | | ✓ | ✓ |
+| Change roles, adjust wallets, reverse referral credit, manage pricing and providers | | | ✓ |
 
 The admin order list exposes `has_code` (whether a message arrived) but **never the code
 itself** — support can confirm delivery without reading a customer's one-time code.

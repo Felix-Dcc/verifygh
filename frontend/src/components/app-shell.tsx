@@ -10,6 +10,7 @@ import { Logo, Logomark } from "@/components/brand";
 import {
   BellIcon,
   ChartIcon,
+  GiftIcon,
   GridIcon,
   HomeIcon,
   LogoutIcon,
@@ -38,6 +39,7 @@ const USER_NAV: NavItem[] = [
   { href: "/services", label: "Services", icon: GridIcon },
   { href: "/orders", label: "Orders", icon: ReceiptIcon },
   { href: "/wallet", label: "Wallet", icon: WalletIcon, match: ["/wallet", "/transactions"] },
+  { href: "/refer", label: "Refer", icon: GiftIcon },
   { href: "/account", label: "Account", icon: UserIcon },
 ];
 
@@ -47,6 +49,7 @@ const ADMIN_NAV: NavItem[] = [
   { href: "/admin/orders", label: "Orders", icon: ReceiptIcon },
   { href: "/admin/payments", label: "Payments", icon: WalletIcon },
   { href: "/admin/catalog", label: "Catalog", icon: GridIcon },
+  { href: "/admin/referrals", label: "Referrals", icon: GiftIcon },
   { href: "/admin/system", label: "System", icon: SettingsIcon },
 ];
 

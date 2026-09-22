@@ -23,7 +23,17 @@ class Wallet(BaseModel):
         settings.AUTH_USER_MODEL, on_delete=models.CASCADE, related_name="wallet"
     )
     currency = models.CharField(max_length=3, default="GHS")
+
+    #: Cash the user paid in. Withdrawable and refundable as cash.
     balance = models.DecimalField(max_digits=14, decimal_places=2, default=Decimal("0.00"))
+
+    #: Promotional credit (referral bonuses). Spendable on eligible purchases,
+    #: never withdrawable, transferable or convertible to cash. It is a second
+    #: bucket of the same wallet, not a second wallet: every movement is still
+    #: an entry in the one ledger, written by the one service.
+    promo_balance = models.DecimalField(
+        max_digits=14, decimal_places=2, default=Decimal("0.00")
+    )
 
     # Set by an admin when a wallet is under investigation. Blocks spending
     # without touching the user's ability to sign in and see their history.
@@ -34,6 +44,11 @@ class Wallet(BaseModel):
         max_digits=14, decimal_places=2, default=Decimal("0.00")
     )
     total_spent = models.DecimalField(max_digits=14, decimal_places=2, default=Decimal("0.00"))
+    #: Lifetime promotional credit granted. Never decreases, so the cost of the
+    #: referral programme stays auditable even after the credit is spent.
+    promo_granted = models.DecimalField(
+        max_digits=14, decimal_places=2, default=Decimal("0.00")
+    )
 
     class Meta:
         db_table = "wallet_wallet"
@@ -42,8 +57,13 @@ class Wallet(BaseModel):
                 check=models.Q(balance__gte=Decimal("0.00")), name="wallet_balance_non_negative"
             ),
             models.CheckConstraint(
+                check=models.Q(promo_balance__gte=Decimal("0.00")),
+                name="wallet_promo_balance_non_negative",
+            ),
+            models.CheckConstraint(
                 check=models.Q(total_deposited__gte=Decimal("0.00"))
-                & models.Q(total_spent__gte=Decimal("0.00")),
+                & models.Q(total_spent__gte=Decimal("0.00"))
+                & models.Q(promo_granted__gte=Decimal("0.00")),
                 name="wallet_totals_non_negative",
             ),
         ]
@@ -53,8 +73,15 @@ class Wallet(BaseModel):
 
     @property
     def ledger_balance(self) -> Decimal:
-        """Balance recomputed from the ledger. Used by the integrity checker."""
-        aggregate = self.ledger_entries.aggregate(
+        """Cash balance recomputed from the ledger. Used by the integrity checker."""
+        return self.ledger_balance_for(FundType.CASH)
+
+    @property
+    def promo_ledger_balance(self) -> Decimal:
+        return self.ledger_balance_for(FundType.PROMO)
+
+    def ledger_balance_for(self, funds: str) -> Decimal:
+        aggregate = self.ledger_entries.filter(funds=funds).aggregate(
             credits=models.Sum(
                 "amount", filter=models.Q(direction=LedgerDirection.CREDIT)
             ),
@@ -63,6 +90,25 @@ class Wallet(BaseModel):
         credits = aggregate["credits"] or Decimal("0.00")
         debits = aggregate["debits"] or Decimal("0.00")
         return credits - debits
+
+    @property
+    def spendable(self) -> Decimal:
+        """What the user can pay with: promotional credit plus cash."""
+        return self.promo_balance + self.balance
+
+
+class FundType(models.TextChoices):
+    """Which bucket of the wallet an entry moves.
+
+    CASH is money the user paid in: withdrawable, refundable as cash.
+    PROMO is promotional credit we granted: spendable on eligible purchases
+    only, and never convertible back to cash. Keeping them in one ledger (one
+    sequence, one set of constraints) means promotional money gets exactly the
+    same guarantees as real money, while staying countable apart from it.
+    """
+
+    CASH = "CASH", "Cash"
+    PROMO = "PROMO", "Promotional credit"
 
 
 class LedgerDirection(models.TextChoices):
@@ -77,6 +123,7 @@ class LedgerEntryType(models.TextChoices):
     ADJUSTMENT = "ADJUSTMENT", "Adjustment"
     WITHDRAWAL = "WITHDRAWAL", "Withdrawal"
     REVERSAL = "REVERSAL", "Reversal"
+    REFERRAL_BONUS = "REFERRAL_BONUS", "Referral bonus"
 
 
 # Which direction each entry type is allowed to move money. Enforced in the
@@ -90,6 +137,16 @@ ENTRY_TYPE_DIRECTIONS: dict[str, tuple[str, ...]] = {
     # admin-only and require a reason.
     LedgerEntryType.ADJUSTMENT: (LedgerDirection.CREDIT, LedgerDirection.DEBIT),
     LedgerEntryType.REVERSAL: (LedgerDirection.CREDIT, LedgerDirection.DEBIT),
+    LedgerEntryType.REFERRAL_BONUS: (LedgerDirection.CREDIT,),
+}
+
+#: Entry types that may only ever move one bucket. Promotional credit is
+#: granted as REFERRAL_BONUS and can never leave as cash, so WITHDRAWAL is
+#: pinned to CASH - there is no code path that turns promo into money.
+ENTRY_TYPE_FUNDS: dict[str, tuple[str, ...]] = {
+    LedgerEntryType.DEPOSIT: (FundType.CASH,),
+    LedgerEntryType.WITHDRAWAL: (FundType.CASH,),
+    LedgerEntryType.REFERRAL_BONUS: (FundType.PROMO,),
 }
 
 
@@ -120,6 +177,10 @@ class WalletLedgerEntry(ImmutableModel):
     sequence = models.PositiveBigIntegerField()
 
     entry_type = models.CharField(max_length=16, choices=LedgerEntryType.choices, db_index=True)
+    #: Which bucket this entry moved. Existing rows are all CASH.
+    funds = models.CharField(
+        max_length=5, choices=FundType.choices, default=FundType.CASH, db_index=True
+    )
     direction = models.CharField(max_length=6, choices=LedgerDirection.choices)
     status = models.CharField(
         max_length=10, choices=LedgerStatus.choices, default=LedgerStatus.POSTED
@@ -167,7 +228,8 @@ class WalletLedgerEntry(ImmutableModel):
             ),
             models.CheckConstraint(
                 check=(
-                    models.Q(entry_type__in=["DEPOSIT", "REFUND"], direction="CREDIT")
+                    models.Q(entry_type__in=["DEPOSIT", "REFUND", "REFERRAL_BONUS"],
+                             direction="CREDIT")
                     | models.Q(entry_type__in=["PURCHASE", "WITHDRAWAL"], direction="DEBIT")
                     | models.Q(entry_type__in=["ADJUSTMENT", "REVERSAL"],
                                direction__in=["CREDIT", "DEBIT"])
@@ -176,6 +238,20 @@ class WalletLedgerEntry(ImmutableModel):
             ),
             models.CheckConstraint(
                 check=models.Q(sequence__gte=1), name="ledger_sequence_positive"
+            ),
+            # Promotional credit can only be granted as a REFERRAL_BONUS, and
+            # cash can never leave the system as one. A withdrawal - the only
+            # way money exits to a person - is cash-only by construction.
+            models.CheckConstraint(
+                check=(
+                    models.Q(funds="CASH", entry_type__in=[
+                        "DEPOSIT", "PURCHASE", "REFUND", "ADJUSTMENT", "WITHDRAWAL", "REVERSAL",
+                    ])
+                    | models.Q(funds="PROMO", entry_type__in=[
+                        "REFERRAL_BONUS", "PURCHASE", "REFUND", "ADJUSTMENT", "REVERSAL",
+                    ])
+                ),
+                name="ledger_funds_allow_entry_type",
             ),
         ]
         indexes = [

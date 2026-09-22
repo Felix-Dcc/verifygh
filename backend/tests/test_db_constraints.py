@@ -9,7 +9,7 @@ from __future__ import annotations
 from decimal import Decimal
 
 import pytest
-from django.db import IntegrityError, transaction
+from django.db import DataError, IntegrityError, transaction
 from django.utils import timezone
 
 from apps.payments.models import Payment
@@ -20,7 +20,13 @@ pytestmark = pytest.mark.django_db
 
 
 def refused(fn):
-    with pytest.raises(IntegrityError), transaction.atomic():
+    """The database refuses the write.
+
+    Either error counts: PostgreSQL rejects an over-long enum value with
+    DataError before the CHECK constraint is reached, while SQLite has no
+    length enforcement and fails the CHECK. Both mean "the database said no".
+    """
+    with pytest.raises((IntegrityError, DataError)), transaction.atomic():
         fn()
 
 

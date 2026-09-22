@@ -69,6 +69,7 @@ Admin console: <http://localhost:3000/admin> as `admin@verifygh.local`.
 | Document | What is in it |
 |---|---|
 | [AUDIT.md](docs/AUDIT.md) | **Pre-production audit: 33 findings fixed; open items and the GO / NOT GO checklist** |
+| [REFERRALS.md](docs/REFERRALS.md) | Referral programme and promotional credit: the two-bucket wallet, eligibility, anti-abuse |
 | [ARCHITECTURE.md](docs/ARCHITECTURE.md) | System design, module map, the money path, state machines |
 | [SETUP.md](docs/SETUP.md) | Local development, Celery, Postgres, seeding, troubleshooting |
 | [API.md](docs/API.md) | Every endpoint, the error envelope, auth and idempotency |
@@ -88,7 +89,8 @@ backend/            Django 5 + DRF + Celery
     common/         base models, error envelope, money, logging, throttles
     accounts/       User, roles, cookie JWT auth, email verification
     audit/          AuditLog, AdminAction, SuspiciousActivity
-    wallet/         Wallet, immutable ledger - the only writer of a balance
+    wallet/         Wallet (cash + promotional buckets), immutable ledger
+    referrals/      Referral codes, attribution, eligibility, rewards, risk flags
     payments/       Payment, webhooks, PaymentProvider interface + adapters
     catalog/        Country, Service, Provider, ProviderService, sync
     pricing/        PricingRule, ExchangeRate, the quote engine

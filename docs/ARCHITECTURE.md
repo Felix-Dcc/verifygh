@@ -55,13 +55,16 @@ backend/
     common/          base models, errors, pagination, idempotency, money, throttles
     accounts/        User, roles, email verification, sessions, AUP acceptance
     audit/           AuditLog, AdminAction, SuspiciousActivity
-    wallet/          Wallet, WalletLedgerEntry, ledger service (the only writer)
+    wallet/          Wallet (cash + promotional buckets), WalletLedgerEntry,
+                     ledger service (the only writer of either balance)
     payments/        Payment, PaymentWebhookEvent, provider interface + adapters
     catalog/         Country, Service, Provider, ProviderService, ExchangeRate
     pricing/         PricingRule, quote engine
     verification/    VerificationProvider interface + Mock/TextVerified adapters
     orders/          Order, OrderEvent, Refund, order state machine, Celery tasks
     notifications/   Notification model, channel abstraction (email now, SMS later)
+    referrals/       ReferralCode, Referral, ReferralReward, ReferralRiskFlag,
+                     eligibility policy and the idempotent reward
     adminapi/        admin-only endpoints, dashboards, RBAC
 ```
 

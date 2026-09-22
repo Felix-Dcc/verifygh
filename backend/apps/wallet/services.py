@@ -12,6 +12,12 @@ Three guarantees, each backed by the database rather than by Python:
    (where the backend supports it) *and* the balance update is a compare-and-set,
    so two concurrent debits cannot both read the same starting balance and win.
    `CHECK (balance >= 0)` catches anything that still slips through.
+
+**Two buckets, one ledger.** A wallet holds cash (`balance`) and promotional
+credit (`promo_balance`). Every entry declares which one it moves, so the three
+guarantees above apply to promotional credit unchanged, and the two can still be
+counted separately. Promotional credit is never withdrawable: the database
+refuses a WITHDRAWAL against it, and nothing converts one bucket into the other.
 """
 
 from __future__ import annotations
@@ -28,6 +34,8 @@ from apps.common.ids import ledger_reference
 from apps.common.money import ZERO, quantize
 from apps.wallet.models import (
     ENTRY_TYPE_DIRECTIONS,
+    ENTRY_TYPE_FUNDS,
+    FundType,
     LedgerDirection,
     LedgerEntryType,
     Wallet,
@@ -37,6 +45,9 @@ from apps.wallet.models import (
 logger = logging.getLogger("verifygh.wallet")
 
 MAX_CAS_ATTEMPTS = 4
+
+#: The wallet column each bucket keeps its balance in.
+BALANCE_FIELD = {FundType.CASH: "balance", FundType.PROMO: "promo_balance"}
 
 
 class WalletFrozen(Conflict):
@@ -75,9 +86,11 @@ def post_entry(
     related_order_id=None,
     created_by=None,
     allow_frozen: bool = False,
+    funds: str = FundType.CASH,
 ) -> WalletLedgerEntry:
     """Post one immutable ledger entry and move the balance with it.
 
+    `funds` selects the bucket: CASH by default, PROMO for promotional credit.
     Returns the existing entry unchanged if `idempotency_key` was already used
     for this wallet - callers can safely retry.
     """
@@ -92,6 +105,15 @@ def post_entry(
         raise ValidationFailed(f"Unknown ledger entry type: {entry_type}")
     if direction not in allowed:
         raise ValidationFailed(f"{entry_type} entries cannot be a {direction}.")
+
+    if funds not in BALANCE_FIELD:
+        raise ValidationFailed(f"Unknown fund type: {funds}")
+    allowed_funds = ENTRY_TYPE_FUNDS.get(entry_type)
+    if allowed_funds is not None and funds not in allowed_funds:
+        # e.g. a WITHDRAWAL against promotional credit: promotional credit is
+        # not money and must never leave the platform.
+        raise ValidationFailed(f"{entry_type} entries cannot move {funds} funds.")
+    balance_field = BALANCE_FIELD[funds]
 
     last_error: Exception | None = None
 
@@ -110,36 +132,42 @@ def post_entry(
                     )
                     return existing
 
+                bucket_balance = getattr(locked, balance_field)
+
                 if direction == LedgerDirection.DEBIT:
                     if locked.is_frozen and not allow_frozen:
                         raise WalletFrozen()
-                    if locked.balance < amount:
+                    if bucket_balance < amount:
                         raise InsufficientFunds(
                             "Your balance is insufficient.",
                             details={
-                                "balance": str(locked.balance),
+                                "balance": str(bucket_balance),
                                 "required": str(amount),
-                                "shortfall": str(quantize(amount - locked.balance)),
+                                "shortfall": str(quantize(amount - bucket_balance)),
+                                "funds": funds,
                             },
                         )
 
-                balance_before = locked.balance
+                balance_before = bucket_balance
                 delta = amount if direction == LedgerDirection.CREDIT else -amount
                 balance_after = quantize(balance_before + delta)
 
                 # Compare-and-set: the update only applies if nobody changed the
                 # balance since we read it. Without row locks this is what makes
                 # concurrent debits safe; with them, it simply never fails.
-                updates = {"balance": balance_after}
+                updates = {balance_field: balance_after}
                 if entry_type == LedgerEntryType.DEPOSIT:
                     updates["total_deposited"] = F("total_deposited") + amount
                 elif entry_type == LedgerEntryType.PURCHASE:
                     updates["total_spent"] = F("total_spent") + amount
                 elif entry_type == LedgerEntryType.REFUND:
                     updates["total_spent"] = F("total_spent") - amount
+                elif entry_type == LedgerEntryType.REFERRAL_BONUS:
+                    # Lifetime cost of the referral programme; never decreases.
+                    updates["promo_granted"] = F("promo_granted") + amount
 
                 changed = Wallet.objects.filter(
-                    pk=locked.pk, balance=balance_before
+                    pk=locked.pk, **{balance_field: balance_before}
                 ).update(**updates)
 
                 if changed != 1:
@@ -159,6 +187,7 @@ def post_entry(
                     sequence=last_sequence + 1,
                     idempotency_key=idempotency_key,
                     entry_type=entry_type,
+                    funds=funds,
                     direction=direction,
                     amount=amount,
                     currency=locked.currency,
@@ -178,6 +207,7 @@ def post_entry(
                     "reference": entry.reference,
                     "entry_type": entry_type,
                     "direction": direction,
+                    "funds": funds,
                     "wallet_id": str(wallet.pk),
                 },
             )
@@ -245,7 +275,7 @@ def credit_deposit(*, wallet: Wallet, amount, idempotency_key: str, payment_refe
 
 
 def debit_purchase(*, wallet: Wallet, amount, idempotency_key: str, order_id, order_reference: str,
-                   service_name: str) -> WalletLedgerEntry:
+                   service_name: str, funds: str = FundType.CASH) -> WalletLedgerEntry:
     return post_entry(
         wallet=wallet,
         amount=amount,
@@ -256,11 +286,102 @@ def debit_purchase(*, wallet: Wallet, amount, idempotency_key: str, order_id, or
         counterparty="PLATFORM:orders",
         related_order_id=order_id,
         metadata={"order_reference": order_reference},
+        funds=funds,
+    )
+
+
+class Charge:
+    """How one purchase was paid for: promotional credit first, then cash."""
+
+    def __init__(self, promo=ZERO, cash=ZERO, promo_entry=None, cash_entry=None):
+        self.promo = quantize(promo)
+        self.cash = quantize(cash)
+        self.promo_entry = promo_entry
+        self.cash_entry = cash_entry
+
+    @property
+    def total(self) -> Decimal:
+        return quantize(self.promo + self.cash)
+
+
+def split_charge(wallet: Wallet, amount) -> tuple[Decimal, Decimal]:
+    """Split `amount` into (promotional, cash) at the documented priority.
+
+    **Promotional credit is spent first.** It is the part the user cannot
+    withdraw or get back as cash, so spending it first is what makes it worth
+    something to them - and it means a refund returns cash as cash.
+    """
+    amount = quantize(amount)
+    promo = min(quantize(wallet.promo_balance), amount)
+    return promo, quantize(amount - promo)
+
+
+def charge_order(*, wallet: Wallet, amount, order_id, order_reference: str,
+                 service_name: str) -> Charge:
+    """Pay for an order from the wallet: promotional credit first, then cash.
+
+    Runs inside the caller's transaction and posts one ledger entry per bucket,
+    each with its own idempotency key, so a retry of the same order repeats
+    neither. Insufficiency is judged on the two buckets together, because that
+    is what the user can actually spend.
+    """
+    amount = quantize(amount)
+    wallet.refresh_from_db(fields=["balance", "promo_balance", "is_frozen"])
+    if wallet.is_frozen:
+        raise WalletFrozen()
+
+    promo_part, cash_part = split_charge(wallet, amount)
+    if quantize(wallet.balance) < cash_part:
+        raise InsufficientFunds(
+            "Your balance is insufficient.",
+            details={
+                "balance": str(wallet.balance),
+                "promotional_balance": str(wallet.promo_balance),
+                "spendable": str(wallet.spendable),
+                "required": str(amount),
+                "shortfall": str(quantize(amount - wallet.spendable)),
+            },
+        )
+
+    charge = Charge(promo=promo_part, cash=cash_part)
+    if promo_part > ZERO:
+        charge.promo_entry = debit_purchase(
+            wallet=wallet, amount=promo_part, idempotency_key=f"order:{order_id}:promo",
+            order_id=order_id, order_reference=order_reference, service_name=service_name,
+            funds=FundType.PROMO,
+        )
+    if cash_part > ZERO:
+        # The cash key keeps its original form, so orders placed before
+        # promotional credit existed stay idempotent against their old key.
+        charge.cash_entry = debit_purchase(
+            wallet=wallet, amount=cash_part, idempotency_key=f"order:{order_id}",
+            order_id=order_id, order_reference=order_reference, service_name=service_name,
+            funds=FundType.CASH,
+        )
+    return charge
+
+
+def credit_referral_bonus(*, wallet: Wallet, amount, idempotency_key: str, referral_id,
+                          reward_reference: str) -> WalletLedgerEntry:
+    """Grant promotional credit for a referral. Not cash, and never becomes cash."""
+    return post_entry(
+        wallet=wallet,
+        amount=amount,
+        entry_type=LedgerEntryType.REFERRAL_BONUS,
+        direction=LedgerDirection.CREDIT,
+        idempotency_key=idempotency_key,
+        description="Referral bonus (promotional credit)",
+        counterparty="PLATFORM:referrals",
+        metadata={"referral_id": str(referral_id), "reward_reference": reward_reference},
+        funds=FundType.PROMO,
+        # A frozen wallet can receive the credit; spending is what freezing stops.
+        allow_frozen=True,
     )
 
 
 def credit_refund(*, wallet: Wallet, amount, idempotency_key: str, order_id,
-                  order_reference: str, reason: str) -> WalletLedgerEntry:
+                  order_reference: str, reason: str,
+                  funds: str = FundType.CASH) -> WalletLedgerEntry:
     return post_entry(
         wallet=wallet,
         amount=amount,
@@ -272,11 +393,12 @@ def credit_refund(*, wallet: Wallet, amount, idempotency_key: str, order_id,
         related_order_id=order_id,
         metadata={"reason": reason[:200], "order_reference": order_reference},
         allow_frozen=True,
+        funds=funds,
     )
 
 
 def adjust(*, wallet: Wallet, amount, direction: str, idempotency_key: str, reason: str,
-           admin) -> WalletLedgerEntry:
+           admin, funds: str = FundType.CASH) -> WalletLedgerEntry:
     """Admin balance adjustment. The reason is mandatory and is audited separately."""
     if not reason or not reason.strip():
         raise ValidationFailed("A reason is required for a wallet adjustment.")
@@ -291,6 +413,7 @@ def adjust(*, wallet: Wallet, amount, direction: str, idempotency_key: str, reas
         metadata={"reason": reason.strip()[:500]},
         created_by=admin,
         allow_frozen=True,
+        funds=funds,
     )
 
 
@@ -300,30 +423,35 @@ def adjust(*, wallet: Wallet, amount, direction: str, idempotency_key: str, reas
 
 
 def verify_wallet_integrity(wallet: Wallet) -> dict:
-    """Re-derive the balance from the ledger and report any drift.
+    """Re-derive both balances from the ledger and report any drift.
 
-    Also walks the entries chronologically to confirm every row's
-    balance_before matches the previous row's balance_after. A break in that
-    chain means a row was inserted or edited outside this service.
+    Also walks the entries in order to confirm every row's balance_before
+    matches the previous row's balance_after *in its own bucket*. A break in
+    that chain means a row was inserted or edited outside this service. The
+    sequence is shared across buckets, so it is checked once, globally.
     """
     derived = quantize(wallet.ledger_balance)
     drift = quantize(wallet.balance - derived)
+    promo_derived = quantize(wallet.promo_ledger_balance)
+    promo_drift = quantize(wallet.promo_balance - promo_derived)
 
     chain_breaks = []
-    running = Decimal("0.00")
+    running = {FundType.CASH: Decimal("0.00"), FundType.PROMO: Decimal("0.00")}
     expected_sequence = 1
     entries = list(
         wallet.ledger_entries.order_by("sequence").only(
-            "reference", "sequence", "balance_before", "balance_after", "amount", "direction"
+            "reference", "sequence", "balance_before", "balance_after", "amount", "direction",
+            "funds",
         )
     )
     for entry in entries:
-        if entry.balance_before != running:
+        if entry.balance_before != running[entry.funds]:
             chain_breaks.append(
                 {
                     "reference": entry.reference,
                     "sequence": entry.sequence,
-                    "expected_before": str(running),
+                    "funds": entry.funds,
+                    "expected_before": str(running[entry.funds]),
                     "recorded_before": str(entry.balance_before),
                 }
             )
@@ -338,14 +466,17 @@ def verify_wallet_integrity(wallet: Wallet) -> dict:
                 }
             )
         expected_sequence = entry.sequence + 1
-        running = entry.balance_after
+        running[entry.funds] = entry.balance_after
 
     return {
         "wallet_id": str(wallet.pk),
         "stored_balance": str(wallet.balance),
         "derived_balance": str(derived),
         "drift": str(drift),
-        "ok": drift == ZERO and not chain_breaks,
+        "stored_promo_balance": str(wallet.promo_balance),
+        "derived_promo_balance": str(promo_derived),
+        "promo_drift": str(promo_drift),
+        "ok": drift == ZERO and promo_drift == ZERO and not chain_breaks,
         "chain_breaks": chain_breaks,
         "entry_count": len(entries),
     }
