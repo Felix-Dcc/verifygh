@@ -41,6 +41,13 @@ function backendEnv(databaseUrl: VariableValue, redisUrl: VariableValue) {
   return {
     DJANGO_SETTINGS_MODULE: "config.settings.prod",
 
+    // Railpack defaults to the newest Python (3.13 at the time of writing).
+    // Pin the version the test suite and CI actually run, so production is
+    // never the first place a dependency meets a new interpreter - psycopg's
+    // pinned build has no 3.13 wheel, for one. backend/.python-version says
+    // the same thing for anyone building outside this file.
+    RAILPACK_PYTHON_VERSION: "3.11",
+
     // Railway's Postgres image is SSL-enabled, so the connection is encrypted
     // even inside the private network. Production refuses anything weaker.
     DATABASE_URL: databaseUrl,

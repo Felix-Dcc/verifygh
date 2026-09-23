@@ -122,6 +122,14 @@ railway config apply
 `plan` only reads. `apply` shows the same plan and waits for confirmation, and marks
 anything destructive.
 
+### Root directory
+
+Every service builds from **`backend/`**. `.railway/railway.ts` sets that
+(`rootDirectory: "backend"`), but a service created by hand in the dashboard builds from the
+repository root instead - where it finds the `package.json` that exists only for the Railway
+SDK, decides the project is a Node app, and fails with "No start command detected". If you
+see that, set **Settings → Source → Root Directory** to `backend`, or apply the IaC.
+
 ### Set the secrets first
 
 Everything marked `preserve()` in the file must exist in Railway before the first deploy —
@@ -141,7 +149,7 @@ railway variables --set PAYSTACK_SECRET_KEY="sk_live_..."
 
 The two keys must differ and be at least 50 characters; `prod.py` enforces both.
 
-### Five things Railway does differently
+### Six things Railway does differently
 
 **1. Healthchecks come from `healthcheck.railway.app`.** Django answers `400 DisallowedHost`
 to a hostname that is not in `ALLOWED_HOSTS`, so every deploy would fail its healthcheck.
@@ -165,7 +173,13 @@ with a wrong password from your phone, then check the recorded IP in
 `/api/v1/admin/audit/`. If it is a Railway internal address rather than your own, the
 count is wrong.
 
-**5. The database is SSL-enabled.** Railway's Postgres image supports TLS, so
+**5. Pin the Python version.** Railpack defaults to the newest Python, which is ahead of
+what this project is tested on and ahead of some pinned wheels - `psycopg[binary]==3.2.1`
+has no 3.13 build, and the install fails outright. `backend/.python-version` and
+`RAILPACK_PYTHON_VERSION` both say **3.11**, matching CI and the local virtualenv.
+Production should never be the first place a dependency meets a new interpreter.
+
+**6. The database is SSL-enabled.** Railway's Postgres image supports TLS, so
 `DB_SSLMODE=require` works as-is and the production guard needs no exception. Traffic
 between services is also Wireguard-encrypted.
 
