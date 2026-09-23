@@ -121,7 +121,9 @@ export default defineRailway(() => {
   const cache = redis("Redis");
   const env = backendEnv(db.env.DATABASE_URL, cache.env.REDIS_URL);
 
-  const api = service("verifygh-api", {
+  // Named to match the service already in the project, so applying adopts it
+  // (keeping its variables and domain) instead of replacing it.
+  const api = service("verifygh", {
     source,
     build: BUILD,
     // Runs between build and deploy, with the private network and the service

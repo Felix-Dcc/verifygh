@@ -419,6 +419,14 @@ PAYMENT_CREDENTIALS = {
         "public_key": env("PAYSTACK_PUBLIC_KEY", ""),
         "base_url": env("PAYSTACK_BASE_URL", "https://api.paystack.co"),
     },
+    "hubtel": {
+        "client_id": env("HUBTEL_CLIENT_ID", ""),
+        "client_secret": env("HUBTEL_CLIENT_SECRET", ""),
+        # Hubtel identifies the merchant account the money lands in; the
+        # documentation will say whether it belongs in the path or the body.
+        "merchant_account": env("HUBTEL_MERCHANT_ACCOUNT", ""),
+        "base_url": env("HUBTEL_BASE_URL", ""),
+    },
     "mock": {"secret_key": env("MOCK_PAYMENT_SECRET", "mock-webhook-secret")},
 }
 

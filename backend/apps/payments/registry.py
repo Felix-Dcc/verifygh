@@ -13,6 +13,7 @@ from django.conf import settings
 
 from apps.common.errors import ServiceUnavailable
 from apps.payments.base import PaymentProvider
+from apps.payments.hubtel import HubtelProvider
 from apps.payments.mock import MockPaymentProvider
 from apps.payments.paystack import PaystackProvider
 
@@ -21,6 +22,9 @@ logger = logging.getLogger("verifygh.payments")
 _REGISTRY: dict[str, type[PaymentProvider]] = {
     MockPaymentProvider.key: MockPaymentProvider,
     PaystackProvider.key: PaystackProvider,
+    # Registered so it can be selected and tested, but its endpoints are blank
+    # until the official documentation is in hand - see hubtel.py.
+    HubtelProvider.key: HubtelProvider,
 }
 
 

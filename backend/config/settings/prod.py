@@ -108,6 +108,19 @@ if _payment_provider == "paystack":
         _problems.append("PAYSTACK_SECRET_KEY is not a live key (sk_live_...). "
                          "Set ALLOW_PAYSTACK_TEST_KEYS=true only on a non-public staging stack.")
 
+# An adapter whose endpoints are still blank cannot take a single cedi. Booting
+# with one selected would leave every deposit failing in production while the
+# app looked healthy, so refuse it here instead. This reads a plain data module:
+# importing the adapters themselves from settings would be circular.
+from apps.payments.implemented import IMPLEMENTED_PAYMENT_PROVIDERS  # noqa: E402
+
+if _payment_provider not in IMPLEMENTED_PAYMENT_PROVIDERS:
+    _problems.append(
+        f"PAYMENT_PROVIDER={_payment_provider} is not implemented: its endpoints are still "
+        "blank pending the provider's official API documentation. "
+        f"Implemented: {', '.join(sorted(IMPLEMENTED_PAYMENT_PROVIDERS))}."
+    )
+
 # The mock verification provider hands out simulated numbers. In production
 # that means taking real cedis for nothing. Until an authorised provider is
 # configured, run with VERIFICATION_PROVIDER=textverified: its endpoints are

@@ -4,6 +4,68 @@ How to replace the mock MoMo provider with a real Ghanaian aggregator.
 
 ---
 
+## Hubtel
+
+The adapter exists at `backend/apps/payments/hubtel.py` with its structure
+complete and **every endpoint deliberately blank**. Hubtel publishes its API
+reference behind a merchant account, so the values were not available when it
+was written, and guessing them would produce code that reads as finished and
+fails in production.
+
+While it is blank:
+
+* `PAYMENT_PROVIDER=hubtel` **refuses to boot in production** - the guard names
+  the reason rather than letting every deposit fail quietly;
+* a deposit attempt raises `PAYMENT_PROVIDER_NOT_CONFIGURED`;
+* a callback to `/api/v1/payments/webhooks/hubtel/` answers `401` and moves no
+  money, whatever it claims;
+* `tests/test_hubtel_safety.py` (10 tests) fails if anyone fills in an endpoint
+  without the documentation, or forgets to update
+  `apps/payments/implemented.py` when they do.
+
+### What to bring back from the documentation
+
+| Constant | What it needs |
+|---|---|
+| `BASE_URL`, `PATH_RECEIVE_MONEY` | The direct Mobile Money charge that sends the approval prompt |
+| `PATH_TRANSACTION_STATUS` | The authoritative status lookup |
+| `AUTH_SCHEME` | Basic with client id/secret, bearer, or otherwise - and where the merchant account number belongs |
+| `NETWORK_CHANNELS` | The exact channel strings for MTN, Telecel and AirtelTigo (Telecel was Vodafone; confirm the current value) |
+| `STATUS_MAP` | Every status the API and callback can return. Anything unmapped must read as PROCESSING, never SUCCESS |
+| `CALLBACK_*` | The callback body's field names |
+
+### The question that decides the design
+
+**Does Hubtel sign its callbacks?**
+
+* **Yes** - implement `verify_webhook` as an HMAC over the raw request bytes
+  with a constant-time compare, exactly as `paystack.py` does. Never verify
+  re-serialised JSON: whitespace and key order change, and a forged body would
+  pass.
+* **No** - then an unauthenticated callback is a stranger's HTTP request and
+  must never credit a wallet by itself. Leave `verify_webhook` returning False
+  and treat the callback purely as a hint to re-check the transaction with
+  `fetch_charge`, whose answer is authoritative. That path already exists:
+  `reconcile_payment` credits only on what the provider tells us directly, and
+  the reconciliation task runs every 15 minutes.
+
+Either way the rule from the rest of this document holds: the browser never
+confirms a payment.
+
+### Going live
+
+1. Fill in the constants above, and add `"hubtel"` to
+   `IMPLEMENTED_PAYMENT_PROVIDERS` in `apps/payments/implemented.py`.
+2. Set `HUBTEL_CLIENT_ID`, `HUBTEL_CLIENT_SECRET`, `HUBTEL_MERCHANT_ACCOUNT`
+   and `HUBTEL_BASE_URL`.
+3. Register the callback URL with Hubtel:
+   `https://<your-api-domain>/api/v1/payments/webhooks/hubtel/`, and restrict
+   it to their published IP range at the edge if they publish one.
+4. Run the webhook tests against a sandbox account before pointing real money
+   at it.
+
+---
+
 ## The interface
 
 Every payment provider implements four methods (`apps/payments/base.py`):

@@ -41,7 +41,8 @@ SAFE = {
 
 #: Variables that must not leak in from the developer's shell.
 SCRUB = set(SAFE) | {"DEBUG", "MOCK_PAYMENT_SECRET", "REQUIRE_POSTGRES", "DB_POOL_MODE",
-                    "DB_CONN_MAX_AGE", "DB_SSLROOTCERT"}
+                    "DB_CONN_MAX_AGE", "DB_SSLROOTCERT", "HUBTEL_CLIENT_ID",
+                    "HUBTEL_CLIENT_SECRET", "HUBTEL_MERCHANT_ACCOUNT", "HUBTEL_BASE_URL"}
 
 
 def boot(**changes) -> subprocess.CompletedProcess:
@@ -74,6 +75,12 @@ UNSAFE = [
     ("short jwt key", {"JWT_SIGNING_KEY": "k" * 20}, "JWT_SIGNING_KEY must be at least"),
     ("jwt key reused", {"JWT_SIGNING_KEY": "s" * 64}, "must differ"),
     ("mock payments", {"PAYMENT_PROVIDER": "mock"}, "PAYMENT_PROVIDER=mock"),
+    # An adapter whose endpoints are still blank cannot take a cedi. Booting
+    # with it selected would look healthy while every deposit failed.
+    ("unimplemented provider", {"PAYMENT_PROVIDER": "hubtel", "PAYSTACK_SECRET_KEY": None},
+     "is not implemented"),
+    ("unknown provider", {"PAYMENT_PROVIDER": "wakanda-pay", "PAYSTACK_SECRET_KEY": None},
+     "is not implemented"),
     ("paystack without key", {"PAYSTACK_SECRET_KEY": None}, "PAYSTACK_SECRET_KEY is required"),
     ("paystack test key", {"PAYSTACK_SECRET_KEY": "sk_test_" + "0" * 40}, "not a live key"),
     ("paystack public key", {"PAYSTACK_SECRET_KEY": "pk_live_" + "0" * 40}, "public key"),
