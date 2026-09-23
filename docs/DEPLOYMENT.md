@@ -7,7 +7,7 @@
                            │
         ┌──────────────────┴──────────────────┐
         │                                     │
-   Vercel                              Render / Railway / AWS
+   Vercel                              Railway (Render / AWS also fine)
    Next.js frontend                    ┌─────────────────────┐
    verifygh.com                        │ web (gunicorn)      │
                                        │ worker (celery)     │
@@ -15,9 +15,9 @@
                                        └──────────┬──────────┘
                                                   │
                                     ┌─────────────┼─────────────┐
-                              PostgreSQL       Redis 7      S3 (optional)
-                              on Supabase      managed
-                              + PITR backups
+                              PostgreSQL       Redis        S3 (optional)
+                              + backups        managed
+                              (Railway)        (Railway)
 ```
 
 Three backend processes, not one. The web process must never run scheduled work, and the
@@ -53,10 +53,10 @@ CELERY_TASK_ALWAYS_EAGER=false
 LOG_FORMAT=json
 LOG_LEVEL=INFO
 
-# Proxy hops in front of Django (Render: 1). The client IP for rate limits and
-# audit logs is read this many hops from the RIGHT of X-Forwarded-For. Too low
-# and every request looks like the proxy; too high (or unset with a proxy) and
-# clients can forge their IP and walk straight past every rate limit.
+# Proxy hops in front of Django (Railway: 1, Render: 1). The client IP for rate
+# limits and audit logs is read this many hops from the RIGHT of X-Forwarded-For.
+# Too low and every request looks like the proxy; too high (or unset with a
+# proxy) and clients can forge their IP and walk past every rate limit.
 TRUSTED_PROXY_COUNT=1
 
 PAYMENT_PROVIDER=paystack
@@ -102,7 +102,10 @@ production refuses to boot without secrets. Neither guard can silently regress.
 
 ---
 
-## Database on Supabase
+## Database on Supabase (alternative)
+
+> Not in use: the database is hosted on Railway (see "Backend and database — Railway"
+> below). This section remains valid if you ever move it to Supabase.
 
 VerifyGH treats Supabase as a managed PostgreSQL server and nothing more. It does **not**
 use Supabase Auth, Storage, Realtime, or the auto-generated Data API: Django is the only
@@ -189,10 +192,103 @@ raise the compute size, lower `DB_CONN_MAX_AGE`, or move to the transaction pool
 
 ---
 
-## Backend — Render
+## Backend and database — Railway
 
-`infrastructure/render.yaml` is a working blueprint: web, worker, beat and Redis. The
-database is on Supabase (previous section).
+`.railway/railway.ts` describes the whole Railway project: **PostgreSQL, Redis, and the
+three backend processes** (web, Celery worker, Celery beat). It is Railway
+*Infrastructure as Code*; `railway.json` / `railway.toml` is deprecated and stops being
+read on **2026-12-01**.
+
+Railway never reads this file during a deploy. You apply it from your machine or from CI:
+
+```bash
+npm install            # the `railway` SDK that .railway/railway.ts imports
+railway login
+railway link           # choose the project and environment
+railway config plan    # review every change first
+railway config apply
+```
+
+`plan` only reads. `apply` shows the same plan and waits for confirmation, and marks
+anything destructive.
+
+### Set the secrets first
+
+Everything marked `preserve()` in the file must exist in Railway before the first deploy —
+`preserve()` means "keep whatever is already set", not "invent one". Production refuses to
+boot when any is missing and names it in the logs.
+
+```bash
+railway variables --set SECRET_KEY="$(python -c 'import secrets;print(secrets.token_urlsafe(64))')"
+railway variables --set JWT_SIGNING_KEY="$(python -c 'import secrets;print(secrets.token_urlsafe(64))')"
+railway variables --set FRONTEND_URL="https://verifygh.com"
+railway variables --set CORS_ALLOWED_ORIGINS="https://verifygh.com"
+railway variables --set CSRF_TRUSTED_ORIGINS="https://verifygh.com"
+railway variables --set AUTH_COOKIE_DOMAIN=".verifygh.com"
+railway variables --set PAYMENT_PROVIDER="paystack"
+railway variables --set PAYSTACK_SECRET_KEY="sk_live_..."
+```
+
+The two keys must differ and be at least 50 characters; `prod.py` enforces both.
+
+### Five things Railway does differently
+
+**1. Healthchecks come from `healthcheck.railway.app`.** Django answers `400 DisallowedHost`
+to a hostname that is not in `ALLOWED_HOSTS`, so every deploy would fail its healthcheck.
+The file sets `ALLOWED_HOSTS=healthcheck.railway.app,${{RAILWAY_PUBLIC_DOMAIN}}`. Add your
+custom API domain to that list when you attach one.
+
+**2. Migrations run in `preDeploy`, never in the build.** Railway's private network is
+runtime-only: a build cannot reach the database. The pre-deploy command *can*, it has the
+service variables, and a failure stops the deployment — so a broken migration never reaches
+live traffic. `collectstatic` stays in the build and deliberately runs under
+`config.settings.base`, because static files need no production secrets.
+
+**3. Bind `[::]`, not `0.0.0.0`.** The private network is IPv6 (environments created before
+16 October 2025 are IPv6-only). A dual-stack socket on Linux accepts IPv4 as well, so
+`--bind [::]:$PORT` works for both the public edge and internal traffic.
+
+**4. `TRUSTED_PROXY_COUNT=1`.** Railway's edge is one proxy hop. This governs the client IP
+used by rate limits, audit logs and device fingerprints — too low and every user looks like
+the proxy, too high and they can forge it. Verify it once after the first deploy: sign in
+with a wrong password from your phone, then check the recorded IP in
+`/api/v1/admin/audit/`. If it is a Railway internal address rather than your own, the
+count is wrong.
+
+**5. The database is SSL-enabled.** Railway's Postgres image supports TLS, so
+`DB_SSLMODE=require` works as-is and the production guard needs no exception. Traffic
+between services is also Wireguard-encrypted.
+
+### After the first apply
+
+1. **Generate a domain** for `verifygh-api` (Settings → Networking), or attach your own.
+2. **Create the first admin**: `railway run --service verifygh-api python manage.py createsuperuser`.
+3. **Sync the catalogue**: `railway run --service verifygh-api python manage.py sync_catalog`.
+   It reports errors and lists nothing while the verification provider is unconfigured —
+   that is the intended, inert state.
+4. **Point Paystack's webhook** at `https://<your-api-domain>/api/v1/payments/webhooks/paystack/`.
+5. **Turn on Railway's backups** for the Postgres service, then **restore one into a scratch
+   project** and run `reconcile_wallets` against it. An untested backup is a hope.
+
+Do **not** run `seed_demo` in production. It skips demo accounts when `DEBUG=false`, but it
+also seeds a placeholder exchange rate you do not want.
+
+### Scaling notes
+
+`verifygh-beat` must stay at **one replica**. Two beats run every scheduled task twice: two
+catalogue syncs, two reconciliations, two referral sweeps. The web service can scale
+horizontally; the worker can too.
+
+Railway's Postgres is a single instance unless you convert it to the Patroni-backed
+high-availability cluster. For a system holding customer balances, plan that conversion (or
+an external managed database) before volume grows.
+
+---
+
+## Backend — Render (alternative)
+
+`infrastructure/render.yaml` is a working blueprint: web, worker, beat and Redis, with the
+database supplied separately. Kept for anyone deploying outside Railway.
 
 ```bash
 render blueprint launch     # or point the dashboard at the repo

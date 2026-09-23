@@ -1,0 +1,8 @@
+{
+  "name": "verifygh-infrastructure",
+  "private": true,
+  "description": "Root package: only the Railway IaC SDK, which .railway/railway.ts imports. The applications live in backend/ and frontend/.",
+  "devDependencies": {
+    "railway": "^3.11.0"
+  }
+}
