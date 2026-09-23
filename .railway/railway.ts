@@ -18,8 +18,8 @@
  * `railway variables --set`. Production refuses to boot if any is missing, and
  * says which - see docs/DEPLOYMENT.md.
  *
- * The frontend is not here: it deploys to Vercel. If you move it to Railway,
- * add it as another service in this same file.
+ * Five services: the Next.js frontend, the Django API, a Celery worker, a
+ * Celery beat scheduler, and the Postgres and Redis they share.
  */
 
 import {
@@ -35,6 +35,22 @@ import {
 } from "railway/iac";
 
 const REPO = "Felix-Dcc/verifygh";
+
+/** The API's public domain. Swap this for your own when you attach one. */
+const API_DOMAIN = "verifygh-production.up.railway.app";
+
+/**
+ * The frontend's public domain.
+ *
+ * Note for go-live: these two are different *sites*, because `up.railway.app`
+ * is a public suffix. The auth cookie is therefore a third-party cookie, which
+ * browsers increasingly block. Put both behind one registrable domain
+ * (app.verifygh.com and api.verifygh.com) before taking real customers, and
+ * set AUTH_COOKIE_DOMAIN to `.verifygh.com` then - never to `.up.railway.app`,
+ * which is shared with every other Railway app.
+ */
+const WEB_DOMAIN = "verifygh-web-production.up.railway.app";
+const WEB_ORIGIN = `https://${WEB_DOMAIN}`;
 
 /** Everything Django needs. The three processes share one configuration. */
 function backendEnv(databaseUrl: VariableValue, redisUrl: VariableValue) {
@@ -57,7 +73,7 @@ function backendEnv(databaseUrl: VariableValue, redisUrl: VariableValue) {
 
     // Healthchecks arrive as healthcheck.railway.app; without it here Django
     // answers 400 DisallowedHost and every deploy fails its healthcheck.
-    ALLOWED_HOSTS: "healthcheck.railway.app,${{RAILWAY_PUBLIC_DOMAIN}}",
+    ALLOWED_HOSTS: `healthcheck.railway.app,${API_DOMAIN},\${{RAILWAY_PUBLIC_DOMAIN}}`,
 
     // Railway's edge is one proxy hop. The client IP is read that many hops
     // from the right of X-Forwarded-For; wrong here means either everyone
@@ -83,12 +99,16 @@ function backendEnv(databaseUrl: VariableValue, redisUrl: VariableValue) {
     REFERRAL_SIGNUP_BONUS_GHS: "5.00",
     REFERRAL_MAX_MONTHLY_SUCCESSFUL_REFERRALS: "20",
 
+    FRONTEND_URL: WEB_ORIGIN,
+    CORS_ALLOWED_ORIGINS: WEB_ORIGIN,
+    CSRF_TRUSTED_ORIGINS: WEB_ORIGIN,
+
     // --- set these in the Railway dashboard -----------------------------
     SECRET_KEY: preserve(),
     JWT_SIGNING_KEY: preserve(),
-    FRONTEND_URL: preserve(),
-    CORS_ALLOWED_ORIGINS: preserve(),
-    CSRF_TRUSTED_ORIGINS: preserve(),
+    // Left unset on purpose: a cookie domain of .up.railway.app would be
+    // shared with every Railway app, and browsers reject it anyway. Set it
+    // only once the API and app share a registrable domain.
     AUTH_COOKIE_DOMAIN: preserve(),
     PAYMENT_PROVIDER: preserve(),
     PAYSTACK_SECRET_KEY: preserve(),
@@ -160,8 +180,29 @@ export default defineRailway(() => {
     env,
   });
 
+  const web = service("verifygh-web", {
+    source: github(REPO, { rootDirectory: "frontend" }),
+    // --include=dev is not optional: Tailwind, PostCSS and TypeScript are
+    // devDependencies, and `next build` needs all three. A production install
+    // would drop them and fail at the CSS step.
+    build: "npm ci --include=dev && npm run build",
+    // The package.json script pins port 3000. Railway assigns $PORT, and the
+    // private network is IPv6, so both are overridden here.
+    start: "npx next start -H :: -p $PORT",
+    healthcheck: "/",
+    healthcheckTimeout: 120,
+    env: {
+      // Compiled into the browser bundle at build time, so it must be the
+      // API's public URL - not the private one, which a browser cannot reach.
+      // Nothing secret belongs in a NEXT_PUBLIC_ variable.
+      NEXT_PUBLIC_API_URL: `https://${API_DOMAIN}/api/v1`,
+      NEXT_PUBLIC_BRAND_NAME: "VerifyGH",
+    },
+  });
+
   return project("verifygh", {
     resources: [
+      group("Frontend", [web]),
       group("Backend", [api, worker, beat]),
       group("Data", [db, cache]),
     ],
