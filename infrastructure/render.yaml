@@ -1,5 +1,6 @@
-# Render blueprint: web + worker + beat + Redis. PostgreSQL is hosted on
-# Supabase - see docs/DEPLOYMENT.md -> "Database on Supabase".
+# Render blueprint: web + worker + beat + Redis. Bring your own PostgreSQL and
+# set DATABASE_URL in the dashboard. The production stack runs on Railway - see
+# docs/DEPLOYMENT.md.
 #
 # Secrets are marked `sync: false` and must be set in the dashboard.
 # Nothing sensitive belongs in this file.
@@ -36,9 +37,9 @@ services:
         generateValue: true
       - key: JWT_SIGNING_KEY
         generateValue: true
-      # Supabase -> Connect -> "Session pooler" URI (port 5432, IPv4). Render
-      # has no IPv6 egress, so the direct db.<ref>.supabase.co host will not
-      # connect. For the transaction pooler (6543) also set DB_POOL_MODE.
+      # A PostgreSQL connection string. Render has no IPv6 egress, so the host
+      # must resolve to IPv4. Behind a transaction pooler, also set
+      # DB_POOL_MODE=transaction.
       - key: DATABASE_URL
         sync: false
       - key: DB_POOL_MODE

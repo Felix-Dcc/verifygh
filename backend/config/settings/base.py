@@ -138,7 +138,7 @@ def database_from_url(url: str) -> dict:
         "connect_timeout": env_int("DB_CONNECT_TIMEOUT", 10),
     }
     if env("DB_SSLROOTCERT"):
-        # For sslmode=verify-full, e.g. Supabase's CA certificate.
+        # The CA bundle to verify the server against, for sslmode=verify-full.
         options["sslrootcert"] = env("DB_SSLROOTCERT")
 
     config = {
@@ -153,8 +153,8 @@ def database_from_url(url: str) -> dict:
     }
 
     # DB_POOL_MODE=transaction when connecting through a transaction-mode
-    # pooler (Supabase's pooler on port 6543, PgBouncer). Each transaction may
-    # land on a different server connection, so nothing may outlive one:
+    # pooler such as PgBouncer. Each transaction may land on a different server
+    # connection, so nothing may outlive one:
     #   * server-side cursors (QuerySet.iterator(), used by the nightly wallet
     #     reconciliation) would vanish between fetches;
     #   * prepared statements would be missing on the next backend. Django uses

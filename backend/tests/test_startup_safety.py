@@ -128,12 +128,11 @@ def test_textverified_is_inert_in_the_safe_baseline():
 
 
 # ---------------------------------------------------------------------------
-# Supabase connection shapes (placeholder project ref and password)
+# Connection poolers (placeholder host and password)
 # ---------------------------------------------------------------------------
 
-SUPABASE_SESSION = ("postgresql://postgres.abcdefghijklmnop:placeholder"
-                    "@aws-0-eu-central-1.pooler.supabase.com:5432/postgres")
-SUPABASE_TRANSACTION = SUPABASE_SESSION.replace(":5432/", ":6543/")
+SESSION_POOLER = "postgresql://app:placeholder@pooler.internal:5432/verifygh"
+TRANSACTION_POOLER = SESSION_POOLER.replace(":5432/", ":6543/")
 
 
 def _db_settings(**changes) -> dict:
@@ -154,22 +153,24 @@ def _db_settings(**changes) -> dict:
     return json.loads(result.stdout.strip().splitlines()[-1])
 
 
-def test_supabase_session_pooler_boots_with_persistent_connections():
-    db = _db_settings(DATABASE_URL=SUPABASE_SESSION)
+def test_a_session_pooler_keeps_persistent_connections():
+    db = _db_settings(DATABASE_URL=SESSION_POOLER)
     assert db["PORT"] == "5432"
     assert db["OPTIONS"]["sslmode"] == "require"
     assert db["CONN_MAX_AGE"] == 60
     assert not db["DISABLE_SERVER_SIDE_CURSORS"]
 
 
-def test_supabase_transaction_pooler_is_refused_without_the_matching_mode():
-    result = boot(DATABASE_URL=SUPABASE_TRANSACTION)
+def test_the_transaction_pooler_port_is_refused_without_the_matching_mode():
+    """Port 6543 is the conventional transaction-pooler port. Booting without
+    DB_POOL_MODE=transaction works until the nightly reconciliation runs."""
+    result = boot(DATABASE_URL=TRANSACTION_POOLER)
     assert result.returncode != 0
     assert "DB_POOL_MODE=transaction" in result.stderr
 
 
-def test_supabase_transaction_pooler_disables_what_it_cannot_carry():
-    db = _db_settings(DATABASE_URL=SUPABASE_TRANSACTION, DB_POOL_MODE="transaction")
+def test_transaction_mode_disables_what_a_pooler_cannot_carry():
+    db = _db_settings(DATABASE_URL=TRANSACTION_POOLER, DB_POOL_MODE="transaction")
     assert db["DISABLE_SERVER_SIDE_CURSORS"] is True
     assert db["CONN_MAX_AGE"] == 0
     assert db["OPTIONS"]["prepare_threshold"] is None
