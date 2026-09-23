@@ -182,10 +182,13 @@ export default defineRailway(() => {
 
   const web = service("verifygh-web", {
     source: github(REPO, { rootDirectory: "frontend" }),
-    // --include=dev is not optional: Tailwind, PostCSS and TypeScript are
-    // devDependencies, and `next build` needs all three. A production install
-    // would drop them and fail at the CSS step.
-    build: "npm ci --include=dev && npm run build",
+    // `npm install`, not `npm ci`: the lockfile is generated on Windows, and
+    // npm omits other platforms' optional binaries from it (the wasm32 resolver
+    // binaries behind eslint-config-next), so `npm ci` refuses to install on
+    // Linux. Every dependency is pinned to an exact version, so this resolves
+    // the same tree anyway. --include=dev because Tailwind, PostCSS and
+    // TypeScript are devDependencies that `next build` needs.
+    build: "npm install --include=dev --no-audit --no-fund && npm run build",
     // The package.json script pins port 3000. Railway assigns $PORT, and the
     // private network is IPv6, so both are overridden here.
     start: "npx next start -H :: -p $PORT",
