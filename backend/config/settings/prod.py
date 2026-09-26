@@ -79,6 +79,12 @@ ALLOWED_HOSTS = env_list("ALLOWED_HOSTS")
 # Terminated at the load balancer; trust its forwarded scheme header.
 SECURE_PROXY_SSL_HEADER = ("HTTP_X_FORWARDED_PROTO", "https")
 SECURE_SSL_REDIRECT = env_bool("SECURE_SSL_REDIRECT", True)
+# The platform healthcheck reaches the container over plain HTTP on the private
+# network and does not set X-Forwarded-Proto, so SECURE_SSL_REDIRECT answers it
+# with a 301 and the deployment is marked unhealthy - the old container then
+# keeps serving, which is a silent and very confusing failure. Exempt the health
+# endpoint only; every other path still redirects to HTTPS.
+SECURE_REDIRECT_EXEMPT = [r"^health/?$"]
 SECURE_HSTS_SECONDS = env_int("SECURE_HSTS_SECONDS", 31536000)
 SECURE_HSTS_INCLUDE_SUBDOMAINS = True
 SECURE_HSTS_PRELOAD = True

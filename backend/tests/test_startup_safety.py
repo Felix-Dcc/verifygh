@@ -187,3 +187,28 @@ def test_an_unknown_pool_mode_is_refused():
     result = boot(DB_POOL_MODE="statement")
     assert result.returncode != 0
     assert "DB_POOL_MODE must be" in result.stderr
+
+
+def test_the_health_endpoint_is_exempt_from_the_https_redirect():
+    """A platform healthcheck arrives over plain HTTP on the private network,
+    without X-Forwarded-Proto. If SECURE_SSL_REDIRECT answers it with a 301,
+    every deployment is marked unhealthy and the previous container keeps
+    serving - a failure that looks like success from the outside."""
+    import re
+
+    result = subprocess.run(
+        [sys.executable, "-c",
+         "import django; django.setup(); from django.conf import settings; "
+         "print(settings.SECURE_SSL_REDIRECT, '|', settings.SECURE_REDIRECT_EXEMPT)"],
+        cwd=BACKEND,
+        env={**{k: v for k, v in os.environ.items() if k not in SCRUB}, **SAFE},
+        capture_output=True, text=True, timeout=120,
+    )
+    assert result.returncode == 0, result.stderr[-2000:]
+    redirect, _, exempt = result.stdout.strip().rpartition("|")
+
+    assert "True" in redirect, "HTTPS redirect should stay on for ordinary traffic"
+    patterns = re.findall(r"'([^']+)'", exempt)
+    assert any(re.match(pattern, "health/") for pattern in patterns), (
+        f"no exemption matches the health endpoint: {patterns}"
+    )
