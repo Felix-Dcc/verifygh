@@ -64,6 +64,14 @@ STATUS_MAP = {
 }
 
 
+def _fallback_email() -> str:
+    """The address used only if a charge somehow has no customer email."""
+    sender = str(settings.DEFAULT_FROM_EMAIL or "")
+    if "<" in sender and ">" in sender:
+        sender = sender.split("<", 1)[1].split(">", 1)[0]
+    return sender.strip() or "payments@verifygh.com"
+
+
 def to_subunit(amount: Decimal) -> int:
     """GHS 12.34 -> 1234 pesewas. Paystack works in the smallest unit."""
     return int((Decimal(amount) * 100).to_integral_value())
@@ -151,7 +159,11 @@ class PaystackProvider(PaymentProvider):
             raise ProviderError("That mobile money network is not supported yet.")
 
         body = {
-            "email": email or "payments@verifygh.example",
+            # Paystack validates this and rejects reserved domains such as
+            # .example, so the fallback comes from configuration rather than a
+            # placeholder. In practice every account has an email: registration
+            # requires one, and initiate_deposit passes the customer's.
+            "email": email or _fallback_email(),
             "amount": to_subunit(amount),
             "currency": currency,
             "reference": reference,
