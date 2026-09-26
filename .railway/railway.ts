@@ -99,6 +99,15 @@ function backendEnv(databaseUrl: VariableValue, redisUrl: VariableValue) {
     REFERRAL_SIGNUP_BONUS_GHS: "5.00",
     REFERRAL_MAX_MONTHLY_SUCCESSFUL_REFERRALS: "20",
 
+    // Paystack, in TEST mode. The sk_test_ key credits real wallets with
+    // simulated money, so production normally refuses it - ALLOW_PAYSTACK_TEST_KEYS
+    // is the deliberate staging exception.
+    //
+    // BEFORE REAL CUSTOMERS: set PAYSTACK_SECRET_KEY to the sk_live_ key and
+    // delete the line below. Leaving it set means every "payment" is free.
+    PAYMENT_PROVIDER: "paystack",
+    ALLOW_PAYSTACK_TEST_KEYS: "true",
+
     FRONTEND_URL: WEB_ORIGIN,
     CORS_ALLOWED_ORIGINS: WEB_ORIGIN,
     CSRF_TRUSTED_ORIGINS: WEB_ORIGIN,
@@ -110,7 +119,6 @@ function backendEnv(databaseUrl: VariableValue, redisUrl: VariableValue) {
     // shared with every Railway app, and browsers reject it anyway. Set it
     // only once the API and app share a registrable domain.
     AUTH_COOKIE_DOMAIN: preserve(),
-    PAYMENT_PROVIDER: preserve(),
     PAYSTACK_SECRET_KEY: preserve(),
     TEXTVERIFIED_API_KEY: preserve(),
     TEXTVERIFIED_BASE_URL: preserve(),
