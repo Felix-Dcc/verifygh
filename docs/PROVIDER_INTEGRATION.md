@@ -103,14 +103,29 @@ That residual cost is ours and is bounded by one activation price.
 
 ### Before going live
 
-1. **Ask what the concurrency limit actually is.** Support confirmed a standard
-   limit exists and is raised case by case, but did not name it. This is the
-   number that made TextVerified unusable at 1 rising to 4, and capacity cannot
-   be planned without it.
-2. Set `ONLINESIM_API_KEY`, and `ONLINESIM_CURRENCY` to match the profile's
+1. Set `ONLINESIM_API_KEY`, and `ONLINESIM_CURRENCY` to match the profile's
    currency or the exchange rate is applied to the wrong unit.
-3. Set `VERIFICATION_PROVIDER=onlinesim`, then run a catalogue sync and check
+2. Set `VERIFICATION_PROVIDER=onlinesim`, then run a catalogue sync and check
    the prices that land.
+
+### Concurrency
+
+**40 numbers on hold**, confirmed by support on 2026-09-27, raisable case by
+case. Ten times TextVerified's ceiling of 4, which is what made that provider
+unusable.
+
+`MAX_PLATFORM_ACTIVE_ORDERS` is set to **32** against it. The headroom is not
+timidity: their protective interval refuses to close an operation for 120
+seconds when no SMS has arrived, so a number we consider released can still be
+held upstream. Our count drifts below theirs, and the eight spare slots absorb
+it.
+
+With `MAX_ACTIVE_ORDERS = 5` per user, 32 lets six users sit at their personal
+maximum simultaneously without blocking anyone else.
+
+Ask for an increase when the queue actually fills - `platform_capacity_reached`
+in the logs is the signal, and arriving with traffic figures is a better
+argument than asking up front.
 
 ---
 

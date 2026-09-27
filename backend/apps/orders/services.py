@@ -156,6 +156,24 @@ def check_purchase_eligibility(user) -> None:
             code="TOO_MANY_ACTIVE_ORDERS",
         )
 
+    # Platform-wide, across every user: our supplier caps how many numbers one
+    # account may hold at once. Checked here, before any money moves, so a full
+    # queue is a polite refusal rather than a debited wallet and an upstream
+    # rejection. Distinct from the per-user cap above, and phrased so the user
+    # knows it is us and not them.
+    platform_cap = int(settings.VERIFYGH["MAX_PLATFORM_ACTIVE_ORDERS"])
+    if platform_cap:
+        in_flight = Order.objects.filter(status__in=ACTIVE_ORDER_STATUSES).count()
+        if in_flight >= platform_cap:
+            logger.warning(
+                "platform_capacity_reached",
+                extra={"in_flight": in_flight, "cap": platform_cap},
+            )
+            raise ServiceUnavailable(
+                "We are at capacity right now. Please try again in a few minutes.",
+                code="PLATFORM_AT_CAPACITY",
+            )
+
     since = timezone.now() - timedelta(days=1)
     today_orders = Order.objects.filter(user=user, created_at__gte=since).count()
     if today_orders >= settings.VERIFYGH["MAX_ORDERS_PER_DAY"]:

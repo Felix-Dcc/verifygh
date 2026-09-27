@@ -433,6 +433,21 @@ VERIFYGH = {
     "MAX_WALLET_BALANCE": env("MAX_WALLET_BALANCE", "10000.00"),
     # Anti-abuse controls
     "MAX_ACTIVE_ORDERS": env_int("MAX_ACTIVE_ORDERS", 5),
+    # How many orders the whole platform may have in flight at once, across
+    # every user. This exists to stay *below* the provider's own ceiling on
+    # numbers held simultaneously - OnlineSim's standard limit is 40, confirmed
+    # by their support on 2026-09-27.
+    #
+    # Deliberately lower than theirs. Our count and the provider's can drift:
+    # closing an operation is not instant (their protective interval refuses a
+    # close for 120s with no SMS), so a number we consider released may still be
+    # held upstream. Without headroom we would discover their ceiling by hitting
+    # it - mid-purchase, after the wallet was debited, with an opaque upstream
+    # error. 32 of 40 leaves eight slots for that drift.
+    #
+    # Set to 0 to disable, which is right for the mock provider, where no
+    # upstream ceiling exists.
+    "MAX_PLATFORM_ACTIVE_ORDERS": env_int("MAX_PLATFORM_ACTIVE_ORDERS", 32),
     "MAX_ORDERS_PER_DAY": env_int("MAX_ORDERS_PER_DAY", 25),
     "MAX_DAILY_SPEND": env("MAX_DAILY_SPEND", "1500.00"),
     "MAX_FAILED_LOGINS": env_int("MAX_FAILED_LOGINS", 8),

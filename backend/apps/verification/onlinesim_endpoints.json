@@ -177,7 +177,10 @@
       "channel": "OnlineSim support live chat",
       "agent": "Mikhail",
       "quote": "according to the terms of use, the API may be integrated into third-party software products. However, your account will be held responsible for all actions taken by users who purchase numbers.",
-      "concurrency_quote": "There is a standard limit in place, but if you need to increase your account's limit, please contact us in this chat, and we will handle your request on an individual basis."
+      "concurrency_quote": "There is a standard limit in place, but if you need to increase your account's limit, please contact us in this chat, and we will handle your request on an individual basis.",
+      "concurrency_limit_quote": "The standard limit is 40 numbers on hold.",
+      "concurrency_limit": 40,
+      "concurrency_raisable": true
     },
     "_comment": [
       "This is the permission TextVerified refused, and it is the single fact that",
@@ -193,10 +196,14 @@
       "AUP gate, the abuse flags and the risk scoring exist, and why they must not",
       "be relaxed.",
       "",
-      "OUTSTANDING: the concurrency ceiling. Support confirmed a standard limit",
-      "exists and can be raised case by case, but did not state the number. Until",
-      "it is known, capacity is unplanned - this is exactly the figure that made",
-      "TextVerified unusable at 1 rising to 4."
+      "The concurrency ceiling is 40 numbers held at once, confirmed by support",
+      "on 2026-09-27, and raisable case by case. Ten times TextVerified's, which",
+      "topped out at 4 and is why that provider was unusable.",
+      "",
+      "MAX_PLATFORM_ACTIVE_ORDERS is set below it (32), because our count of what",
+      "is in flight and theirs can drift: their protective interval refuses to",
+      "close an operation for 120 seconds when no SMS has arrived, so a number we",
+      "consider released may still be held upstream."
     ]
   }
 }
