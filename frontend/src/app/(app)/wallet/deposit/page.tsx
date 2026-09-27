@@ -1,12 +1,13 @@
 "use client";
 
+import Link from "next/link";
 import { useRouter } from "next/navigation";
 import * as React from "react";
 import useSWR, { mutate as globalMutate } from "swr";
 
 import { PageHeader } from "@/components/app-shell";
 import { useAuth } from "@/components/auth-provider";
-import { CheckCircleIcon, ClockIcon, PhoneIcon } from "@/components/icons";
+import { AlertIcon, CheckCircleIcon, ClockIcon, PhoneIcon } from "@/components/icons";
 import {
   Alert,
   Button,
@@ -108,6 +109,28 @@ function DepositForm({
         <Skeleton className="h-12 w-full rounded-xl" />
         <Skeleton className="h-12 w-full rounded-xl" />
         <Skeleton className="h-12 w-full rounded-xl" />
+      </Card>
+    );
+  }
+
+  if (!options.deposits_enabled) {
+    // No form at all, rather than a disabled one. A form that cannot be
+    // submitted invites people to keep trying and then contact support; the
+    // backend would refuse this anyway, so showing it would be a lie.
+    return (
+      <Card className="flex flex-col items-center p-8 text-center">
+        <div className="flex h-12 w-12 items-center justify-center rounded-2xl bg-warn-50 text-warn-700">
+          <AlertIcon className="h-6 w-6" />
+        </div>
+        <h2 className="mt-4 text-lg font-semibold text-ink">Top-ups are paused</h2>
+        <p className="mt-2 max-w-sm text-sm text-ink-muted">
+          {options.deposits_disabled_reason}
+        </p>
+        <Link href="/wallet" className="mt-6 w-full max-w-xs">
+          <Button variant="secondary" fullWidth size="lg">
+            Back to wallet
+          </Button>
+        </Link>
       </Card>
     );
   }

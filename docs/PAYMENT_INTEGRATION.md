@@ -4,6 +4,48 @@ How to replace the mock MoMo provider with a real Ghanaian aggregator.
 
 ---
 
+## Deposits close when the shelves are empty
+
+`REQUIRE_CATALOG_FOR_DEPOSIT` (default **true**) refuses Mobile Money top-ups
+while nothing is purchasable.
+
+Deposits and the catalogue are otherwise independent, and that independence is
+a trap. Money can be taken while the verification provider is inert, the
+exchange rate is missing, or the last offering has sold out - and nothing
+errors. The wallet credits exactly as designed. But that money cannot be spent,
+because there is nothing to buy, and it cannot be withdrawn, because balances
+are not withdrawable. From the customer's side that is indistinguishable from
+having been robbed.
+
+`apps/payments/services.py::deposits_blocked_reason` runs first in
+`initiate_deposit` - before the amount is validated, because an empty
+marketplace makes the amount moot. A refused deposit returns **503
+DEPOSITS_PAUSED**, creates no `Payment` row, and leaves the wallet untouched.
+
+Readiness is defined once, in `apps/catalog/services.py::marketplace_readiness`,
+and used by the landing page, this guard and the admin health panel. A test
+asserts nobody re-implements the query: three copies would drift until one
+screen said "open" while another knew nothing could be bought.
+
+**The guard sits on starting a deposit, never on settling one.** If the last
+offering sells out while a customer is on the Mobile Money prompt, their
+payment still credits. They have parted with real cash, and refusing it because
+the shop shut mid-transaction is the exact harm the guard exists to prevent.
+
+**The message never names the failing precondition.** "No exchange rate
+configured" is useless to a customer and advertises how the platform is wired.
+One message, which also says the existing balance is safe - anyone told
+"top-ups are paused" fears for their money first.
+
+`/payments/options/` carries `deposits_enabled` and `deposits_disabled_reason`,
+so the deposit screen shows an explanation instead of a form that is guaranteed
+to fail.
+
+Turn it off (`REQUIRE_CATALOG_FOR_DEPOSIT=false`) only on a stack that
+deliberately exercises deposits against an empty catalogue.
+
+---
+
 ## Hubtel
 
 The adapter exists at `backend/apps/payments/hubtel.py` with its structure

@@ -58,6 +58,40 @@ COUNTRY_FLAGS = {
 }
 
 
+def marketplace_readiness() -> dict:
+    """Can the marketplace actually sell anything right now?
+
+    Three things have to be true together, and each fails differently: a
+    provider must be configured, an exchange rate must exist to price in cedis,
+    and at least one offering must be purchasable.
+
+    Deliberately one function rather than a query repeated wherever the question
+    comes up. The landing page, the deposit guard and the admin health panel all
+    need the same answer, and three copies of it would drift until they
+    disagreed - at which point we would be taking money on one screen while
+    another said the shop was shut.
+    """
+    from apps.pricing.rates import latest_rate_row
+    from apps.verification.registry import get_default_provider_row
+
+    provider_row = get_default_provider_row()
+    rate = latest_rate_row()
+    purchasable = ProviderService.objects.filter(
+        is_enabled=True,
+        is_available=True,
+        provider__is_enabled=True,
+        service__is_enabled=True,
+        country__is_enabled=True,
+    ).count()
+
+    return {
+        "ready": bool(provider_row and rate and purchasable),
+        "provider_configured": provider_row is not None,
+        "exchange_rate_configured": rate is not None,
+        "purchasable_offerings": purchasable,
+    }
+
+
 def ensure_provider_row(adapter_key: str) -> Provider:
     provider, created = Provider.objects.get_or_create(
         adapter_key=adapter_key,

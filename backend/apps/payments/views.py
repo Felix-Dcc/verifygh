@@ -18,7 +18,12 @@ from apps.common.throttling import DepositThrottle, WebhookThrottle
 from apps.payments.models import Payment
 from apps.payments.registry import get_payment_provider, webhook_providers
 from apps.payments.serializers import DepositSerializer, PaymentSerializer
-from apps.payments.services import initiate_deposit, process_webhook, reconcile_payment
+from apps.payments.services import (
+    deposits_blocked_reason,
+    initiate_deposit,
+    process_webhook,
+    reconcile_payment,
+)
 
 logger = logging.getLogger("verifygh.payments")
 
@@ -68,6 +73,9 @@ class PaymentOptionsView(APIView):
     def get(self, request):
         provider = get_payment_provider()
         supported = set(provider.supported_networks)
+        # So the deposit screen can explain itself instead of offering a form
+        # that is guaranteed to fail on submit.
+        blocked = deposits_blocked_reason()
         networks = [
             {
                 "value": str(value),
@@ -85,6 +93,8 @@ class PaymentOptionsView(APIView):
                 "max_deposit": str(settings.VERIFYGH["MAX_DEPOSIT"]),
                 "max_balance": str(settings.VERIFYGH["MAX_WALLET_BALANCE"]),
                 "quick_amounts": ["10.00", "20.00", "50.00", "100.00", "200.00"],
+                "deposits_enabled": not blocked,
+                "deposits_disabled_reason": blocked,
             }
         )
 

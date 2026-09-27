@@ -22,6 +22,7 @@ from apps.audit.services import flag, record_audit
 from apps.common.errors import (
     LimitExceeded,
     ProviderError,
+    ServiceUnavailable,
     ValidationFailed,
 )
 from apps.common.ids import payment_reference
@@ -65,9 +66,44 @@ _KEPT_HEADERS = {
 # ---------------------------------------------------------------------------
 
 
+def deposits_blocked_reason() -> str:
+    """Why top-ups are closed right now, or "" when they are open.
+
+    Money in is only safe when money can also be spent. A wallet the user cannot
+    buy with and cannot withdraw from is, from their side, money we took and
+    kept - so the catalogue being empty has to close the till, not just empty
+    the shelves.
+    """
+    from django.conf import settings as django_settings
+
+    if not django_settings.VERIFYGH["REQUIRE_CATALOG_FOR_DEPOSIT"]:
+        return ""
+
+    from apps.catalog.services import marketplace_readiness
+
+    readiness = marketplace_readiness()
+    if readiness["ready"]:
+        return ""
+
+    # One message whatever the cause. Which of the three preconditions failed is
+    # an operational detail: a customer can do nothing with "no exchange rate",
+    # and it advertises how the platform is wired.
+    logger.warning("deposits_blocked", extra={k: v for k, v in readiness.items()})
+    return (
+        "Top-ups are paused while we restock verification numbers. "
+        "Your existing balance is safe and is not affected."
+    )
+
+
 def initiate_deposit(*, user, amount, phone: str, network: str, request=None) -> Payment:
     amount = quantize(amount)
     wallet = get_or_create_wallet(user)
+
+    # Checked first, before the amount is even validated: there is no useful
+    # deposit into a marketplace with nothing in it, so the amount is moot.
+    blocked = deposits_blocked_reason()
+    if blocked:
+        raise ServiceUnavailable(blocked, code="DEPOSITS_PAUSED")
 
     minimum = quantize(settings.VERIFYGH["MIN_DEPOSIT"])
     maximum = quantize(settings.VERIFYGH["MAX_DEPOSIT"])

@@ -228,23 +228,6 @@ class CatalogHealthView(APIView):
     permission_classes = [AllowAny]
 
     def get(self, request):
-        from apps.pricing.rates import latest_rate_row
-        from apps.verification.registry import get_default_provider_row
+        from apps.catalog.services import marketplace_readiness
 
-        provider_row = get_default_provider_row()
-        rate = latest_rate_row()
-        purchasable = ProviderService.objects.filter(
-            is_enabled=True, is_available=True, provider__is_enabled=True,
-            service__is_enabled=True, country__is_enabled=True,
-        ).count()
-
-        ready = bool(provider_row and rate and purchasable)
-        return Response(
-            {
-                "ready": ready,
-                "provider_configured": provider_row is not None,
-                "exchange_rate_configured": rate is not None,
-                "purchasable_offerings": purchasable,
-            },
-            status=status.HTTP_200_OK,
-        )
+        return Response(marketplace_readiness(), status=status.HTTP_200_OK)

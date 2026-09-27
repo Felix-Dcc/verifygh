@@ -38,6 +38,13 @@ VERIFYGH = {
     "VERIFICATION_PROVIDER": "mock",
     "PAYMENT_PROVIDER": "mock",
     "ORDER_TTL_MINUTES": 10,
+    # Off by default so that tests about webhooks, the ledger and refunds do not
+    # each have to stock a catalogue to be allowed to deposit - they are about
+    # money movement, not marketplace readiness.
+    #
+    # tests/test_deposit_guard.py turns it back on and covers it properly, and
+    # asserts separately that production ships with it enabled.
+    "REQUIRE_CATALOG_FOR_DEPOSIT": False,
 }
 
 LOGGING["root"]["level"] = "CRITICAL"  # noqa: F405

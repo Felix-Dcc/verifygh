@@ -448,6 +448,16 @@ VERIFYGH = {
     # Set to 0 to disable, which is right for the mock provider, where no
     # upstream ceiling exists.
     "MAX_PLATFORM_ACTIVE_ORDERS": env_int("MAX_PLATFORM_ACTIVE_ORDERS", 32),
+    # Refuse Mobile Money top-ups while there is nothing to spend them on.
+    #
+    # Taking a deposit into an empty marketplace is taking real money for
+    # something we cannot deliver. The money is not lost - it sits in the wallet
+    # - but the user cannot buy with it and cannot withdraw it, which is
+    # indistinguishable from having been robbed.
+    #
+    # Set to false only where an empty catalogue is expected and deposits are
+    # being exercised deliberately, e.g. a staging stack on the mock provider.
+    "REQUIRE_CATALOG_FOR_DEPOSIT": env_bool("REQUIRE_CATALOG_FOR_DEPOSIT", True),
     "MAX_ORDERS_PER_DAY": env_int("MAX_ORDERS_PER_DAY", 25),
     "MAX_DAILY_SPEND": env("MAX_DAILY_SPEND", "1500.00"),
     "MAX_FAILED_LOGINS": env_int("MAX_FAILED_LOGINS", 8),

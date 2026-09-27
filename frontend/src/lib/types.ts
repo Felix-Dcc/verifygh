@@ -111,6 +111,10 @@ export type PaymentOptions = {
   max_deposit: string;
   max_balance: string;
   quick_amounts: string[];
+  /** False while there is nothing to buy; the deposit endpoint would refuse. */
+  deposits_enabled: boolean;
+  /** Shown to the user when deposits_enabled is false. Empty otherwise. */
+  deposits_disabled_reason: string;
 };
 
 export type CountryOption = {
