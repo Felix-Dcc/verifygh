@@ -18,6 +18,12 @@ urlpatterns = [
         name="password-reset-confirm",
     ),
     path("email/verify/send/", views.SendEmailVerificationView.as_view(), name="email-send"),
+    # Reachable without a session, for someone who lost the first email.
+    path(
+        "resend-verification/",
+        views.ResendVerificationView.as_view(),
+        name="email-resend",
+    ),
     path("email/verify/confirm/", views.ConfirmEmailVerificationView.as_view(),
          name="email-confirm"),
     path("terms/accept/", views.AcceptTermsView.as_view(), name="terms-accept"),

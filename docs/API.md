@@ -157,7 +157,8 @@ replayed webhook can never credit twice.
 | POST | `/auth/password/reset/` | — | Request a link. Response is identical whether or not the account exists. |
 | POST | `/auth/password/reset/confirm/` | — | `token`, `new_password`. |
 | POST | `/auth/email/verify/send/` | yes | Resend the confirmation link. |
-| POST | `/auth/email/verify/confirm/` | — | `token`. |
+| POST | `/auth/email/verify/confirm/` | — | `token`. Single use; `TOKEN_EXPIRED` and `INVALID_TOKEN` are told apart. |
+| POST | `/auth/resend-verification/` | — | `email`. Answers identically whatever the address is, so it cannot be used to discover who has an account. Rate limited per (IP, address). |
 | POST | `/auth/terms/accept/` | yes | `accepted: true`. Records the current version. |
 
 `POST /auth/register/`

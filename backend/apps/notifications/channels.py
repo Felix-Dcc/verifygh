@@ -24,7 +24,7 @@ class NotificationChannel(abc.ABC):
 
     @abc.abstractmethod
     def send(self, *, user, title: str, body: str, template: str = "",
-             context: dict | None = None) -> tuple[bool, str]:
+             context: dict | None = None, subject: str = "") -> tuple[bool, str]:
         """Return (delivered, error_message)."""
 
 
@@ -33,14 +33,21 @@ class InAppChannel(NotificationChannel):
 
     key = "IN_APP"
 
-    def send(self, *, user, title, body, template="", context=None):
+    def send(self, *, user, title, body, template="", context=None, subject=""):
         return True, ""
 
 
 class EmailChannel(NotificationChannel):
+    """Sends through whatever EMAIL_BACKEND is configured - Resend in production.
+
+    Every message goes out as multipart: a plain-text body, plus an HTML
+    alternative when a matching `.html` template exists. Text is the source of
+    truth, so a message is never empty in a client that refuses HTML.
+    """
+
     key = "EMAIL"
 
-    def send(self, *, user, title, body, template="", context=None):
+    def send(self, *, user, title, body, template="", context=None, subject=""):
         if not user.email:
             return False, "No email address on file."
 
@@ -61,20 +68,63 @@ class EmailChannel(NotificationChannel):
             except TemplateDoesNotExist:
                 logger.warning("email_template_missing", extra={"template": template})
 
+        html_body = ""
+        if template:
+            html_template = template.rsplit(".", 1)[0] + ".html"
+            try:
+                html_body = render_to_string(html_template, context)
+            except TemplateDoesNotExist:
+                # Plain text only. Not an error - most messages do not need it.
+                pass
+
         try:
             message = EmailMultiAlternatives(
-                subject=f"{settings.VERIFYGH['BRAND_NAME']}: {title}",
+                # An explicit subject wins, so a transactional email can say
+                # what it is ("Verify your VerifyGH email address") instead of
+                # wearing the in-app notification's title.
+                subject=subject or f"{settings.VERIFYGH['BRAND_NAME']}: {title}",
                 body=text_body,
                 from_email=settings.DEFAULT_FROM_EMAIL,
                 to=[user.email],
             )
-            message.send(fail_silently=False)
-            return True, ""
+            if html_body:
+                message.attach_alternative(html_body, "text/html")
+            sent = message.send(fail_silently=False)
         except Exception as exc:
             # A failed email must never fail the business operation that
             # triggered it; it is recorded and moved on from.
-            logger.warning("email_send_failed", extra={"error": exc.__class__.__name__})
+            #
+            # The class name and the provider's own message are logged, never
+            # the message body, the recipient's address or the SMTP password.
+            logger.warning(
+                "email_send_failed",
+                extra={
+                    "user_id": str(getattr(user, "pk", "")),
+                    "template": template or "-",
+                    "error": exc.__class__.__name__,
+                    "detail": str(exc)[:200],
+                },
+            )
             return False, str(exc)[:255]
+
+        if not sent:
+            # The backend accepted the call and delivered nothing. Recording
+            # this as sent is how a broken mailer stays invisible.
+            logger.warning(
+                "email_not_accepted",
+                extra={"user_id": str(getattr(user, "pk", "")), "template": template or "-"},
+            )
+            return False, "The mail server accepted no recipients."
+
+        logger.info(
+            "email_sent",
+            extra={
+                "user_id": str(getattr(user, "pk", "")),
+                "template": template or "-",
+                "backend": settings.EMAIL_BACKEND.rsplit(".", 2)[-2:][0],
+            },
+        )
+        return True, ""
 
 
 class UnconfiguredChannel(NotificationChannel):
@@ -83,7 +133,7 @@ class UnconfiguredChannel(NotificationChannel):
     def __init__(self, key: str):
         self.key = key
 
-    def send(self, *, user, title, body, template="", context=None):
+    def send(self, *, user, title, body, template="", context=None, subject=""):
         logger.info("notification_channel_not_configured", extra={"channel": self.key})
         return False, f"The {self.key} channel is not configured."
 

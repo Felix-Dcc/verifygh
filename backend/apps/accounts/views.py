@@ -39,6 +39,7 @@ from apps.audit.services import flag, record_audit
 from apps.common.errors import AccountSuspended, APIError, AuthenticationRequired
 from apps.common.middleware import get_client_ip
 from apps.common.throttling import (
+    EmailVerifyResendThrottle,
     EmailVerifyThrottle,
     LoginIPThrottle,
     LoginThrottle,
@@ -87,6 +88,14 @@ class RegisterView(APIView):
             metadata={"email": user.email},
         )
         return _auth_response(user, status.HTTP_201_CREATED)
+
+
+class EmailDeliveryFailed(APIError):
+    status_code = status.HTTP_503_SERVICE_UNAVAILABLE
+    code = "EMAIL_DELIVERY_FAILED"
+    # Deliberately says nothing about which provider, or why: that is an
+    # operational detail, and the user's only useful action is to try again.
+    message = "We could not send that email just now. Please try again in a few minutes."
 
 
 class LoginFailed(APIError):
@@ -282,7 +291,16 @@ class SendEmailVerificationView(APIView):
     throttle_classes = [EmailVerifyThrottle]
 
     def post(self, request):
-        services.send_verification_email(request.user, ip=get_client_ip(request) or None)
+        if request.user.is_email_verified:
+            return Response({"detail": "Your email address is already verified."})
+
+        delivered = services.send_verification_email(
+            request.user, ip=get_client_ip(request) or None
+        )
+        if not delivered:
+            # The provider refused it. Saying "sent" would leave the user
+            # waiting for an email that is not coming.
+            raise EmailDeliveryFailed()
         return Response({"detail": "Verification email sent."})
 
 
@@ -299,6 +317,36 @@ class ConfirmEmailVerificationView(APIView):
         user = services.verify_email(serializer.validated_data["token"])
         record_audit(actor=user, action="EMAIL_VERIFIED", target=user, request=request)
         return Response({"user": UserSerializer(user).data})
+
+
+class ResendVerificationView(APIView):
+    """Ask for another verification email, without being signed in.
+
+    Someone who registered, lost the email and closed the tab has no session to
+    authenticate with, so this has to be reachable anonymously. The response is
+    therefore identical in every case - existing address, unknown address,
+    already-verified address - because a caller able to tell them apart could
+    use this endpoint to test whether an address has a VerifyGH account.
+    """
+
+    permission_classes = [AllowAny]
+    # Authenticates from the request body, not from the session. Ignoring the
+    # access cookie keeps the CSRF gate out of a flow it has no part in.
+    authentication_classes: list = []
+    throttle_classes = [EmailVerifyResendThrottle]
+
+    def post(self, request):
+        serializer = EmailSerializer(data=request.data)
+        serializer.is_valid(raise_exception=True)
+        services.resend_verification_email(
+            serializer.validated_data["email"], request=request
+        )
+        return Response(
+            {
+                "detail": "If an account exists with this email address and still needs "
+                          "verifying, a verification email has been sent."
+            }
+        )
 
 
 class PasswordResetRequestView(APIView):

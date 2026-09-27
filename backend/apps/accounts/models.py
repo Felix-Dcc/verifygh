@@ -6,7 +6,7 @@ from datetime import timedelta
 
 from django.conf import settings
 from django.contrib.auth.models import AbstractBaseUser, PermissionsMixin
-from django.db import models
+from django.db import models, transaction
 from django.utils import timezone
 
 from apps.accounts.constants import ROLE_PERMISSIONS, STAFF_ROLES, Role
@@ -194,28 +194,59 @@ class SecurityToken(BaseModel):
 
     @classmethod
     def issue(cls, user: User, purpose: str, ttl_hours: int, ip: str | None = None):
-        """Returns (instance, raw_token). The raw token is never stored."""
+        """Returns (instance, raw_token). The raw token is never stored.
+
+        One live token per purpose: issuing a new one invalidates the old, so
+        the most recent email is always the only one that works.
+
+        Invalidating and inserting have to happen under a lock, not as two
+        independent statements. Without it two overlapping requests - a user
+        clicking "resend" twice, or a retry arriving beside the original - would
+        each find nothing to invalidate and each insert, leaving two live links
+        where the caller was promised one. The lock is taken on the *user* row
+        because that is what the two callers have in common; there is no token
+        row yet to lock.
+        """
         raw = secrets.token_urlsafe(32)
-        # One live token per purpose: issuing a new one invalidates the old.
-        cls.objects.filter(user=user, purpose=purpose, used_at__isnull=True).update(
-            used_at=timezone.now()
-        )
-        instance = cls.objects.create(
-            user=user,
-            purpose=purpose,
-            token_hash=cls.hash_token(raw),
-            expires_at=timezone.now() + timedelta(hours=ttl_hours),
-            requested_ip=ip or None,
-        )
+        with transaction.atomic():
+            type(user).objects.select_for_update().filter(pk=user.pk).first()
+            cls.objects.filter(user=user, purpose=purpose, used_at__isnull=True).update(
+                used_at=timezone.now()
+            )
+            instance = cls.objects.create(
+                user=user,
+                purpose=purpose,
+                token_hash=cls.hash_token(raw),
+                expires_at=timezone.now() + timedelta(hours=ttl_hours),
+                requested_ip=ip or None,
+            )
         return instance, raw
 
     @property
     def is_valid(self) -> bool:
         return self.used_at is None and self.expires_at > timezone.now()
 
-    def consume(self) -> None:
-        self.used_at = timezone.now()
-        self.save(update_fields=["used_at", "updated_at"])
+    @property
+    def is_expired(self) -> bool:
+        """Distinguishable from "used" so the UI can say which it was."""
+        return self.expires_at <= timezone.now()
+
+    def consume(self) -> bool:
+        """Claim this token. Returns False if someone else already claimed it.
+
+        A conditional UPDATE rather than a read-then-save: two requests arriving
+        with the same token would both pass an `is_valid` check, and only the
+        row-level `used_at IS NULL` filter can decide between them. Exactly one
+        caller gets True, which is what makes single-use hold when a mail client
+        prefetches the link at the same moment the user clicks it.
+        """
+        now = timezone.now()
+        claimed = type(self).objects.filter(pk=self.pk, used_at__isnull=True).update(
+            used_at=now, updated_at=now
+        )
+        if claimed:
+            self.used_at = now
+        return bool(claimed)
 
 
 class LoginAttempt(TimeStampedModel):

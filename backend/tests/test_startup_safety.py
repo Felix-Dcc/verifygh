@@ -37,10 +37,17 @@ SAFE = {
     "ALLOW_MOCK_VERIFICATION_IN_PRODUCTION": "",
     "ALLOW_PAYSTACK_TEST_KEYS": "",
     "ALLOW_UNENCRYPTED_DATABASE": "",
+    # Not a real key: `re_` followed by placeholder characters, which is only
+    # the shape the guard checks for.
+    "RESEND_API_KEY": "re_" + "0" * 30,
+    "DEFAULT_FROM_EMAIL": "VerifyGH <no-reply@verifygh.com>",
+    "EMAIL_BACKEND": "",
 }
 
 #: Variables that must not leak in from the developer's shell.
 SCRUB = set(SAFE) | {"DEBUG", "MOCK_PAYMENT_SECRET", "REQUIRE_POSTGRES", "DB_POOL_MODE",
+                    "EMAIL_HOST", "EMAIL_HOST_USER", "EMAIL_HOST_PASSWORD",
+                    "REQUIRE_EMAIL_VERIFICATION_FOR_PURCHASE",
                     "DB_CONN_MAX_AGE", "DB_SSLROOTCERT", "HUBTEL_CLIENT_ID",
                     "HUBTEL_CLIENT_SECRET", "HUBTEL_MERCHANT_ACCOUNT", "HUBTEL_BASE_URL"}
 
@@ -87,6 +94,34 @@ UNSAFE = [
     ("mock webhook route", {"WEBHOOK_PROVIDERS": "mock"}, "must not include 'mock'"),
     ("mock verification", {"VERIFICATION_PROVIDER": "mock"}, "simulated numbers"),
     ("proxy count unset", {"TRUSTED_PROXY_COUNT": None}, "TRUSTED_PROXY_COUNT"),
+    # Email verification gates every purchase. A backend that delivers nothing
+    # does not switch that gate off, it makes it impossible to pass - while
+    # every send is reported as successful. Nothing looks broken, and no
+    # account can ever be verified.
+    ("no email provider", {"RESEND_API_KEY": None}, "delivers nothing"),
+    ("console email backend",
+     {"EMAIL_BACKEND": "django.core.mail.backends.console.EmailBackend"}, "delivers nothing"),
+    ("file email backend",
+     {"EMAIL_BACKEND": "django.core.mail.backends.filebased.EmailBackend"}, "delivers nothing"),
+    ("dummy email backend",
+     {"EMAIL_BACKEND": "django.core.mail.backends.dummy.EmailBackend"}, "delivers nothing"),
+    ("in-memory email backend",
+     {"EMAIL_BACKEND": "django.core.mail.backends.locmem.EmailBackend"}, "delivers nothing"),
+    ("resend key of the wrong shape",
+     {"RESEND_API_KEY": "pk_live_not_a_resend_key"}, "does not look like a Resend API key"),
+    # SMTP selected by hand, with nothing to authenticate with.
+    ("smtp without credentials",
+     {"EMAIL_BACKEND": "django.core.mail.backends.smtp.EmailBackend", "RESEND_API_KEY": None},
+     "EMAIL_HOST is required"),
+    # Reserved TLDs never resolve; real providers reject them outright. This is
+    # the class of mistake that made Paystack refuse our charges.
+    ("sender on a reserved domain",
+     {"DEFAULT_FROM_EMAIL": "VerifyGH <no-reply@verifygh.example>"}, "reserved domain"),
+    ("sender that is not an address", {"DEFAULT_FROM_EMAIL": "VerifyGH"}, "full email address"),
+    # Turning the gate off would let an unverified account spend money, which is
+    # the one thing email verification exists to prevent.
+    ("purchase gate disabled",
+     {"REQUIRE_EMAIL_VERIFICATION_FOR_PURCHASE": "false"}, "unverified accounts buy"),
     ("database without tls", {"DB_SSLMODE": "prefer"}, "DB_SSLMODE"),
     ("http frontend", {"FRONTEND_URL": "http://verifygh.example"}, "https://"),
     ("http cors origin", {"CORS_ALLOWED_ORIGINS": "http://verifygh.example"}, "https://"),

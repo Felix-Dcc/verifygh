@@ -112,6 +112,23 @@ function backendEnv(databaseUrl: VariableValue, redisUrl: VariableValue) {
     CORS_ALLOWED_ORIGINS: WEB_ORIGIN,
     CSRF_TRUSTED_ORIGINS: WEB_ORIGIN,
 
+    // Transactional email. RESEND_API_KEY is a secret and lives in the
+    // dashboard; with it set, the app configures Resend's documented SMTP
+    // endpoint itself.
+    //
+    // The sender's domain must be verified in Resend or every send is
+    // rejected outright.
+    //
+    // No domain is verified yet, so this is Resend's own test sender. It works
+    // immediately but ONLY delivers to the Resend account owner's address -
+    // enough to prove the pipeline, useless for real customers.
+    //
+    // BEFORE REAL CUSTOMERS: verify a domain in Resend (see docs/EMAIL.md) and
+    // change this to an address on it, e.g. VerifyGH <no-reply@verifygh.com>.
+    // Until then every signup except your own silently fails to arrive.
+    DEFAULT_FROM_EMAIL: "VerifyGH <onboarding@resend.dev>",
+    EMAIL_VERIFICATION_TTL_HOURS: "24",
+
     // --- set these in the Railway dashboard -----------------------------
     SECRET_KEY: preserve(),
     JWT_SIGNING_KEY: preserve(),
@@ -123,6 +140,11 @@ function backendEnv(databaseUrl: VariableValue, redisUrl: VariableValue) {
     TEXTVERIFIED_API_KEY: preserve(),
     TEXTVERIFIED_BASE_URL: preserve(),
     EXCHANGE_RATE_API_KEY: preserve(),
+    // Set this and verification emails start arriving. Without it the API
+    // refuses to boot, rather than writing them to the container log where
+    // nobody will ever read them.
+    RESEND_API_KEY: preserve(),
+    // Only for a non-Resend provider.
     EMAIL_HOST: preserve(),
     EMAIL_HOST_USER: preserve(),
     EMAIL_HOST_PASSWORD: preserve(),

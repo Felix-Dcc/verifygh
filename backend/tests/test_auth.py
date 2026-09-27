@@ -56,7 +56,7 @@ def test_registration_creates_a_user_a_wallet_and_sends_verification(api):
     assert account.is_email_verified is False
     assert account.accepted_terms_version == settings.VERIFYGH["CURRENT_TERMS_VERSION"]
     assert len(mail.outbox) == 1
-    assert "Confirm your email" in mail.outbox[0].subject
+    assert mail.outbox[0].subject == "Verify your VerifyGH email address"
 
 
 def test_password_is_hashed_not_stored(api):

@@ -53,3 +53,49 @@ def prune_login_attempts(days: int = 365) -> dict:
     deleted, _ = LoginAttempt.objects.filter(created_at__lt=cutoff).delete()
     logger.info("login_attempts_pruned", extra={"deleted": deleted, "days": days})
     return {"deleted": deleted}
+
+
+@shared_task(
+    name="apps.accounts.tasks.send_verification_email",
+    bind=True,
+    max_retries=3,
+    default_retry_delay=60,
+    # A retry storm against the mail provider helps nobody, so back off.
+    retry_backoff=True,
+    retry_jitter=True,
+)
+def send_verification_email_task(self, user_id: str, ip: str = "") -> dict:
+    """Send the verification email off the request thread.
+
+    Retried a few times because "the mail provider had a bad minute" is the
+    common case and it is invisible to the user, who is left waiting for an
+    email that will never come. After the retries are exhausted it gives up
+    quietly: the account exists and unverified, and the user can ask for
+    another link.
+    """
+    from apps.accounts.models import User
+    from apps.accounts.services import send_verification_email
+
+    user = User.objects.filter(pk=user_id).first()
+    if user is None:
+        logger.warning("verification_email_user_missing", extra={"user_id": str(user_id)})
+        return {"sent": False, "reason": "user_missing"}
+
+    if user.is_email_verified:
+        return {"sent": False, "reason": "already_verified"}
+
+    try:
+        sent = send_verification_email(user, ip=ip or None)
+    except Exception as exc:
+        logger.warning(
+            "verification_email_task_failed",
+            extra={"user_id": str(user_id), "error": exc.__class__.__name__},
+        )
+        raise self.retry(exc=exc)
+
+    if not sent:
+        # notify() records the provider failure on the Notification row rather
+        # than raising, so an undelivered message reaches us as False.
+        logger.warning("verification_email_not_delivered", extra={"user_id": str(user_id)})
+
+    return {"sent": bool(sent)}

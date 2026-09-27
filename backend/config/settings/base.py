@@ -266,7 +266,10 @@ REST_FRAMEWORK = {
         "referral_validate": "30/min",
         "register": "5/hour",
         "password_reset": "5/hour",
-        "email_verify": "10/hour",
+        "email_verify": "5/hour",
+        # Keyed on IP *and* the submitted address, so one person cannot
+        # use one address to mail-bomb another.
+        "email_verify_resend": "5/hour",
         "deposit": "10/hour",
         "order_create": "20/hour",
         "webhook": "600/min",
@@ -344,13 +347,58 @@ CACHES = {
 # Email
 # --------------------------------------------------------------------------
 
-EMAIL_BACKEND = env("EMAIL_BACKEND", "django.core.mail.backends.console.EmailBackend")
-EMAIL_HOST = env("EMAIL_HOST", "")
-EMAIL_PORT = env_int("EMAIL_PORT", 587)
-EMAIL_HOST_USER = env("EMAIL_HOST_USER", "")
-EMAIL_HOST_PASSWORD = env("EMAIL_HOST_PASSWORD", "")
-EMAIL_USE_TLS = env_bool("EMAIL_USE_TLS", True)
-DEFAULT_FROM_EMAIL = env("DEFAULT_FROM_EMAIL", "VerifyGH <no-reply@verifygh.example>")
+# Transactional email goes through Resend, over the SMTP interface Resend
+# documents for Django at https://resend.com/django. SMTP rather than their
+# HTTP SDK deliberately: Django's own backend already handles multipart
+# alternatives, connection reuse and timeouts, so there is no extra dependency
+# to keep patched and `EmailMultiAlternatives` works unchanged.
+#
+# These three are Resend's published connection details, not secrets. The API
+# key is the SMTP password and only ever comes from the environment.
+RESEND_SMTP_HOST = "smtp.resend.com"
+RESEND_SMTP_PORT = 587
+RESEND_SMTP_USERNAME = "resend"
+
+RESEND_API_KEY = env("RESEND_API_KEY", "")
+
+_email_backend = env("EMAIL_BACKEND", "")
+
+if RESEND_API_KEY and not _email_backend:
+    # Setting one variable is enough to send real mail. An explicit
+    # EMAIL_BACKEND still wins, so dev and the test suite can opt out.
+    EMAIL_BACKEND = "django.core.mail.backends.smtp.EmailBackend"
+    EMAIL_HOST = RESEND_SMTP_HOST
+    EMAIL_PORT = RESEND_SMTP_PORT
+    EMAIL_HOST_USER = RESEND_SMTP_USERNAME
+    EMAIL_HOST_PASSWORD = RESEND_API_KEY
+    EMAIL_USE_TLS = True
+else:
+    EMAIL_BACKEND = _email_backend or "django.core.mail.backends.console.EmailBackend"
+    EMAIL_HOST = env("EMAIL_HOST", "")
+    EMAIL_PORT = env_int("EMAIL_PORT", 587)
+    EMAIL_HOST_USER = env("EMAIL_HOST_USER", "")
+    EMAIL_HOST_PASSWORD = env("EMAIL_HOST_PASSWORD", "")
+    EMAIL_USE_TLS = env_bool("EMAIL_USE_TLS", True)
+
+# A mail server that accepts the connection and then stops talking would
+# otherwise hold a web worker open indefinitely.
+EMAIL_TIMEOUT = env_int("EMAIL_TIMEOUT", 10)
+
+#: Backends that accept a message and deliver it nowhere. Production refuses to
+#: boot on one of these: an email written to stdout is indistinguishable, from
+#: the application's point of view, from one that was delivered - which is
+#: exactly how "verification emails never arrive" goes unnoticed.
+NON_DELIVERING_EMAIL_BACKENDS = (
+    "django.core.mail.backends.console.EmailBackend",
+    "django.core.mail.backends.filebased.EmailBackend",
+    "django.core.mail.backends.dummy.EmailBackend",
+    "django.core.mail.backends.locmem.EmailBackend",
+)
+
+# Reserved TLDs (.example, .invalid, .test) are rejected outright by real mail
+# and payment providers, so the default has to be a plausible address.
+DEFAULT_FROM_EMAIL = env("DEFAULT_FROM_EMAIL", "VerifyGH <no-reply@verifygh.com>")
+SERVER_EMAIL = env("SERVER_EMAIL", DEFAULT_FROM_EMAIL)
 
 # --------------------------------------------------------------------------
 # VerifyGH domain configuration
@@ -381,6 +429,11 @@ VERIFYGH = {
     "REQUIRE_EMAIL_VERIFICATION_FOR_PURCHASE": env_bool(
         "REQUIRE_EMAIL_VERIFICATION_FOR_PURCHASE", True
     ),
+    # How long a verification link stays usable. Long enough to survive a slow
+    # inbox or a night's sleep, short enough that a link left sitting in an
+    # abandoned mailbox is not a standing key to the account.
+    "EMAIL_VERIFICATION_TTL_HOURS": env_int("EMAIL_VERIFICATION_TTL_HOURS", 24),
+    "PASSWORD_RESET_TTL_HOURS": env_int("PASSWORD_RESET_TTL_HOURS", 2),
     # Provider contract: only show codes if the upstream agreement permits it.
     "DISPLAY_VERIFICATION_CODES": env_bool("DISPLAY_VERIFICATION_CODES", True),
     # Order lifecycle

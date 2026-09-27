@@ -115,3 +115,23 @@ class OrderCreateThrottle(NamedScopeThrottle):
 
 class WebhookThrottle(NamedScopeThrottle):
     scope = "webhook"
+
+
+class EmailVerifyResendThrottle(NamedScopeThrottle):
+    """The unauthenticated resend endpoint.
+
+    Keyed on the client IP *and* the submitted address. Per-IP alone would let
+    one person walk a list of addresses; per-address alone would let a botnet
+    mail-bomb one inbox. Both together bound each pair.
+    """
+
+    scope = "email_verify_resend"
+
+    def get_cache_key(self, request, view):
+        address = ""
+        if isinstance(getattr(request, "data", None), dict):
+            address = str(request.data.get("email", ""))[:128].strip().lower()
+        return self.cache_format % {
+            "scope": self.scope,
+            "ident": f"{self.get_ident(request)}:{address}",
+        }

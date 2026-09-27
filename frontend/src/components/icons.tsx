@@ -208,6 +208,13 @@ export const BellIcon = (p: IconProps) => (
   </Svg>
 );
 
+export const MailIcon = (p: IconProps) => (
+  <Svg {...p}>
+    <rect x="3" y="5.5" width="18" height="13" rx="2" />
+    <path d="M3.6 6.8 12 13l8.4-6.2" />
+  </Svg>
+);
+
 export const InboxIcon = (p: IconProps) => (
   <Svg {...p}>
     <path d="M3.5 13.5h4l1.5 3h6l1.5-3h4" />

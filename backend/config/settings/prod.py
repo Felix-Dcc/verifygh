@@ -9,7 +9,18 @@ from __future__ import annotations
 from django.core.exceptions import ImproperlyConfigured
 
 from .base import *  # noqa: F401,F403
-from .base import VERIFYGH, env, env_bool, env_int, env_list
+from .base import (
+    DEFAULT_FROM_EMAIL,
+    EMAIL_BACKEND,
+    EMAIL_HOST,
+    EMAIL_HOST_PASSWORD,
+    NON_DELIVERING_EMAIL_BACKENDS,
+    VERIFYGH,
+    env,
+    env_bool,
+    env_int,
+    env_list,
+)
 
 DEBUG = False
 
@@ -94,6 +105,59 @@ AUTH_COOKIE_SECURE = True
 AUTH_COOKIE_SAMESITE = env("AUTH_COOKIE_SAMESITE", "None")
 
 CELERY_TASK_ALWAYS_EAGER = False
+
+# ---------------------------------------------------------------------------
+# Transactional email
+# ---------------------------------------------------------------------------
+# Email verification is a security control: it is what stops one person opening
+# accounts on other people's addresses, and it gates every purchase. A
+# non-delivering backend does not disable that control, it makes it
+# unsatisfiable - nobody can ever verify - while the application reports every
+# send as successful. That is worse than an outage because nothing looks wrong,
+# so it must be impossible to deploy.
+if EMAIL_BACKEND in NON_DELIVERING_EMAIL_BACKENDS:
+    _problems.append(
+        f"EMAIL_BACKEND={EMAIL_BACKEND} delivers nothing: verification emails would be "
+        "written to the container log instead of sent, and no account could ever be "
+        "verified. Set RESEND_API_KEY (see docs/EMAIL.md)."
+    )
+
+_resend_key = env("RESEND_API_KEY", "")
+if _resend_key and not _resend_key.startswith("re_"):
+    # Resend's keys are prefixed re_. A value that is not one is almost always
+    # a public key, a placeholder, or a key for a different service.
+    _problems.append("RESEND_API_KEY does not look like a Resend API key (expected re_...).")
+
+if EMAIL_BACKEND.endswith("smtp.EmailBackend"):
+    if not EMAIL_HOST:
+        _problems.append("EMAIL_HOST is required when using the SMTP email backend.")
+    if not EMAIL_HOST_PASSWORD:
+        _problems.append(
+            "No SMTP password is set: set RESEND_API_KEY, or EMAIL_HOST_PASSWORD for "
+            "another provider."
+        )
+
+# The From address has to be one a real mail server will accept and a real
+# domain the recipient can see is ours. The reserved TLDs below are guaranteed
+# never to resolve, and providers reject them outright.
+_sender = str(DEFAULT_FROM_EMAIL or "")
+if "@" not in _sender:
+    _problems.append("DEFAULT_FROM_EMAIL must be a full email address.")
+elif _sender.rsplit("@", 1)[-1].rstrip(">").strip().lower().endswith(
+    (".example", ".invalid", ".test", ".localhost", "example.com")
+):
+    _problems.append(
+        f"DEFAULT_FROM_EMAIL uses a reserved domain that cannot send or receive mail "
+        f"({_sender!r}). Use an address on a domain verified in Resend."
+    )
+
+# Turning the purchase gate off in production would let an unverified account
+# spend money, which is the specific thing email verification exists to stop.
+if not VERIFYGH["REQUIRE_EMAIL_VERIFICATION_FOR_PURCHASE"]:
+    _problems.append(
+        "REQUIRE_EMAIL_VERIFICATION_FOR_PURCHASE=false would let unverified accounts buy. "
+        "It must be true in production."
+    )
 
 # A live payment provider without a webhook secret would accept forged
 # callbacks. Never let that combination boot.
