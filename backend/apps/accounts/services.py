@@ -169,7 +169,12 @@ def resend_verification_email(email: str, request=None) -> None:
         return
 
     ip = get_client_ip(request) if request else None
-    send_verification_email(user, ip=ip)
+    # Queued, not sent inline. This endpoint is unauthenticated and its answer
+    # is deliberately the same whatever the address is, so there is nothing
+    # honest to report back anyway - and sending here would hold a web worker
+    # for the SMTP timeout on every call, which is exactly the shape of request
+    # you do not want an anonymous caller able to make.
+    dispatch_verification_email(user, ip=ip)
 
 
 def verify_email(raw_token: str) -> User:
