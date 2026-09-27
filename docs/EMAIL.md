@@ -44,13 +44,40 @@ then fills in Resend's published connection details itself:
 |---|---|
 | `EMAIL_BACKEND` | `django.core.mail.backends.smtp.EmailBackend` |
 | `EMAIL_HOST` | `smtp.resend.com` |
-| `EMAIL_PORT` | `587` |
+| `EMAIL_PORT` | `2587` (see below) |
 | `EMAIL_HOST_USER` | `resend` |
 | `EMAIL_HOST_PASSWORD` | `RESEND_API_KEY` |
 | `EMAIL_USE_TLS` | `True` |
 
 An explicit `EMAIL_BACKEND` still wins, so development keeps the console
 backend and the test suite keeps the in-memory one.
+
+### Why port 2587 and not 587
+
+Railway blocks outbound connections on the standard SMTP ports, as most PaaS
+providers do to stop their address ranges being used for spam. Measured from
+inside a running container:
+
+```
+BLOCKED smtp.resend.com 587   TimeoutError
+OPEN    smtp.resend.com 2587
+BLOCKED smtp.resend.com 465   TimeoutError
+OPEN    smtp.resend.com 2465
+OPEN    api.resend.com  443
+```
+
+Resend publishes 2587 (STARTTLS) and 2465 (implicit TLS) for exactly this
+case. Same server, same protocol, same credentials.
+
+This is worth knowing because of how it fails: a blocked port is
+indistinguishable from a slow mail server. The send does not error, it *hangs*
+until the timeout, so without `EMAIL_TIMEOUT` it would tie up a worker for as
+long as the OS allows. The symptom in the log is `email_send_failed
+error="TimeoutError"`, and the cause is a firewall, not Resend.
+
+If you ever move off Railway to a host that blocks the 2xxx ports instead, set
+`RESEND_SMTP_PORT=587`, or switch to Resend's HTTP API on 443, which no host
+blocks.
 
 ### Production will not boot without a real mailer
 

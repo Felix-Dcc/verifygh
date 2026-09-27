@@ -356,7 +356,18 @@ CACHES = {
 # These three are Resend's published connection details, not secrets. The API
 # key is the SMTP password and only ever comes from the environment.
 RESEND_SMTP_HOST = "smtp.resend.com"
-RESEND_SMTP_PORT = 587
+# 2587, not the conventional 587.
+#
+# Railway - like most PaaS providers, to stop their address ranges being used
+# for spam - blocks outbound connections on the standard SMTP ports. From a
+# Railway container, 587 and 465 both time out while 2587 and 2465 connect, and
+# a blocked port looks exactly like a mail server that is slow to answer. Resend
+# publishes 2587 (STARTTLS) and 2465 (implicit TLS) for precisely this case.
+#
+# 2587 is not a workaround: it is the same server, same protocol, same
+# credentials, and it works on hosts that allow 587 as well - so there is no
+# environment where the conventional port would be the better default.
+RESEND_SMTP_PORT = env_int("RESEND_SMTP_PORT", 2587)
 RESEND_SMTP_USERNAME = "resend"
 
 RESEND_API_KEY = env("RESEND_API_KEY", "")
