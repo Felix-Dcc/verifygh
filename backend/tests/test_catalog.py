@@ -173,9 +173,12 @@ def test_the_real_adapter_refuses_to_run_without_credentials():
     with pytest.raises(ServiceUnavailable):
         provider.get_services()
 
-    # No endpoint is invented: every path constant is left blank on purpose.
-    assert TextVerifiedProvider.BASE_URL == ""
-    assert TextVerifiedProvider.PATH_CREATE_ORDER == ""
+    # The endpoints now come from TextVerified's published OpenAPI document
+    # (see tests/test_provider_safety.py, which checks each one against it).
+    # Having the documentation is not permission to sell: without credentials
+    # the adapter still refuses every call, as asserted above.
+    assert TextVerifiedProvider.BASE_URL == "https://www.textverified.com"
+    assert TextVerifiedProvider.PATH_CREATE_ORDER == "/api/pub/v2/verifications"
 
 
 def test_the_provider_call_budget_is_enforced(settings):

@@ -4,6 +4,90 @@ How to replace the mock provider with a real, authorised upstream.
 
 ---
 
+## TextVerified
+
+The adapter is **implemented** against TextVerified's published OpenAPI v2
+specification: `https://backend.textverified.com/swagger/v2/swagger.json`,
+rendered at `https://www.textverified.com/docs/api/v2`.
+
+A copy of the documented paths and states lives at
+`backend/apps/verification/textverified_endpoints.json`, and
+`tests/test_provider_safety.py` checks every endpoint the adapter calls, and
+every provider state it maps, against that file. An invented or mistyped path
+fails the suite.
+
+### What it uses
+
+| Purpose | Endpoint |
+|---|---|
+| Authenticate | `POST /api/pub/v2/auth` (headers `X-API-USERNAME`, `X-API-KEY`) |
+| Service list | `GET /api/pub/v2/services` |
+| Price | `POST /api/pub/v2/pricing/verifications` |
+| Availability | `POST /api/pub/v2/inventory/verifications` |
+| Reserve a number | `POST /api/pub/v2/verifications` |
+| Verification details | `GET /api/pub/v2/verifications/{id}` |
+| Messages | `GET /api/pub/v2/sms` |
+| Cancel | `POST /api/pub/v2/verifications/{id}/cancel` |
+| Report (their refund path) | `POST /api/pub/v2/verifications/{id}/report` |
+| Balance | `GET /api/pub/v2/account/me` |
+
+### Decisions worth knowing
+
+**The bearer token is cached** in the shared cache until shortly before it
+expires. Re-authenticating on every call would waste the rate limit for
+nothing.
+
+**`maxPrice` is always sent.** The adapter prices the service, then reserves
+with a 5% tolerance (`PROVIDER_PRICE_TOLERANCE`). Without it, an upstream price
+move between the customer's quote and the reservation would be billed to us
+silently. If the price has moved further, the provider refuses and the order
+fails - which refunds the customer.
+
+**`Idempotency-Key` is forwarded** on reservation, so a retry after a network
+timeout cannot reserve, and bill us for, two numbers.
+
+**An unknown state is never "finished".** Anything outside the documented enum
+maps to PENDING and is settled by the expiry sweep, so a new upstream state
+cannot make an unfinished order look delivered.
+
+**A service that cannot be priced is left out of the catalogue** rather than
+listed at a guessed cost.
+
+**The catalogue is US numbers.** The v2 verification API has no country list -
+only area codes within the US - so `get_countries` reports exactly that.
+
+### Testing without spending anything
+
+TextVerified documents mock service names and fixed mock ids that create no
+real numbers and no billing events. `tests/test_textverified_live.py` uses
+them and skips unless credentials are present:
+
+```bash
+TEXTVERIFIED_API_KEY=... TEXTVERIFIED_API_USERNAME=you@example.com \
+    pytest tests/test_textverified_live.py -v
+```
+
+It covers the documented cases: `test_success201` (completes with code
+123456), `test_pending201`, `test_timeout201`, `test_no_numbers` and
+`test_insufficient_balance`, plus the fixed ids `mock_ver_success` and
+`mock_ver_cancelled`.
+
+### ⚠️ Authorisation is still outstanding
+
+TextVerified's terms prohibit sharing numbers with third parties. Reselling
+access - what this platform does - needs an explicit reseller or partner
+arrangement with them, **in writing**.
+
+Having their API documented is not the same as being permitted to resell it.
+Until that permission exists:
+
+* keep `VERIFICATION_PROVIDER` unset or pointed at a provider you are
+  authorised to resell;
+* remember that an account terminated mid-trading fails every in-flight order
+  at once. The refunds would be correct, but the supply would be gone.
+
+---
+
 ## Read this first
 
 VerifyGH resells access to someone else's service. That is only legitimate under an

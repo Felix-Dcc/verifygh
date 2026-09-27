@@ -387,6 +387,12 @@ VERIFYGH = {
     "ORDER_TTL_MINUTES": env_int("ORDER_TTL_MINUTES", 20),
     "ORDER_POLL_SECONDS": env_int("ORDER_POLL_SECONDS", 5),
     "PAYMENT_TTL_MINUTES": env_int("PAYMENT_TTL_MINUTES", 15),
+    # How many provider services to price per catalogue sync. The service list
+    # and the price are separate calls upstream, so this bounds the sync.
+    "PROVIDER_CATALOG_LIMIT": env_int("PROVIDER_CATALOG_LIMIT", 60),
+    # Sent as maxPrice when reserving: the most we accept paying above the
+    # price we just quoted, if the provider moved it in between.
+    "PROVIDER_PRICE_TOLERANCE": env("PROVIDER_PRICE_TOLERANCE", "1.05"),
     # Upstream call budget — we never hammer a provider API.
     "PROVIDER_RATE_LIMIT_PER_MINUTE": env_int("PROVIDER_RATE_LIMIT_PER_MINUTE", 120),
     "CURRENT_TERMS_VERSION": env("CURRENT_TERMS_VERSION", "2026-01-01"),

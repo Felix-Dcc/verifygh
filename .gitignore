@@ -32,3 +32,13 @@ Thumbs.db
 .idea/
 .vscode/
 *.log
+
+# Private keys must never be committed. `ssh-keygen` writes to whatever name is
+# typed at its prompt, which is how an SSH key once landed in this directory.
+cls
+cls.pub
+id_ed25519*
+id_rsa*
+*.pem
+*.key
+!.env.example

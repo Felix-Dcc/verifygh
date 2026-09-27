@@ -14,13 +14,55 @@ from apps.wallet.services import get_or_create_wallet
 pytestmark = pytest.mark.django_db
 
 
+def _published_spec() -> dict:
+    """TextVerified's own published API definition, kept in the repository.
+
+    Generated from https://backend.textverified.com/swagger/v2/swagger.json so
+    the adapter can be checked against the vendor's document rather than
+    against someone's memory of it.
+    """
+    import json
+    from pathlib import Path
+
+    path = Path(__file__).resolve().parent.parent / "apps/verification/textverified_endpoints.json"
+    return json.loads(path.read_text(encoding="utf-8"))
+
+
 def test_no_textverified_endpoint_is_invented():
-    """Every path is blank until filled in from the official documentation."""
-    paths = [value for name, value in vars(TextVerifiedProvider).items()
-             if name.startswith("PATH_") or name == "BASE_URL"]
-    assert paths, "expected endpoint constants to exist"
-    assert all(value == "" for value in paths)
-    assert TextVerifiedProvider.STATE_MAP == {}
+    """Every endpoint the adapter calls appears in the published specification.
+
+    This is the guard that replaced "all paths must be blank" once the
+    documentation was in hand. It fails on a typo, a version drift, or a path
+    someone invented because it looked plausible.
+    """
+    spec = _published_spec()
+    documented = set(spec["paths"])
+
+    used = {name: value for name, value in vars(TextVerifiedProvider).items()
+            if name.startswith("PATH_") and value}
+    assert used, "expected endpoint constants to be filled in"
+
+    for name, path in used.items():
+        # {id} is how the specification itself writes path parameters.
+        assert path in documented, f"{name}={path} is not in the published specification"
+
+    assert TextVerifiedProvider.BASE_URL in spec["servers"]
+
+
+def test_every_mapped_state_is_a_documented_state():
+    """A state we invented would silently never match, leaving orders stuck."""
+    spec = _published_spec()
+    documented = {state.lower() for state in spec["verification_states"]}
+
+    for state in TextVerifiedProvider.STATE_MAP:
+        assert state in documented, f"{state} is not a documented state"
+
+    # And every documented verification state is handled, so a real one cannot
+    # fall through to the unknown-state path unnoticed.
+    verification_states = {s for s in documented if s.startswith("verification")
+                           and s != "verification"}
+    unhandled = verification_states - set(TextVerifiedProvider.STATE_MAP)
+    assert not unhandled, f"documented states with no mapping: {sorted(unhandled)}"
 
 
 def test_a_catalog_sync_against_unconfigured_textverified_fails_cleanly(db):

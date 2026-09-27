@@ -1,0 +1,186 @@
+{
+  "_source": "https://backend.textverified.com/swagger/v2/swagger.json",
+  "_rendered_at": "https://www.textverified.com/docs/api/v2",
+  "_retrieved": "2026-09-27",
+  "_note": "Generated from TextVerified's published OpenAPI document. The adapter's endpoint constants and state map are checked against this file, so no path or state can be invented without the test failing.",
+  "openapi_version": "3.0.4",
+  "servers": [
+    "https://www.textverified.com"
+  ],
+  "paths": {
+    "/api/pub/v2/account/me": [
+      "GET"
+    ],
+    "/api/pub/v2/area-codes": [
+      "GET"
+    ],
+    "/api/pub/v2/auth": [
+      "POST"
+    ],
+    "/api/pub/v2/backorders/{id}": [
+      "GET"
+    ],
+    "/api/pub/v2/billing-cycles": [
+      "GET"
+    ],
+    "/api/pub/v2/billing-cycles/{id}": [
+      "GET",
+      "POST"
+    ],
+    "/api/pub/v2/billing-cycles/{id}/invoices": [
+      "GET"
+    ],
+    "/api/pub/v2/billing-cycles/{id}/next-invoice": [
+      "POST"
+    ],
+    "/api/pub/v2/billing-cycles/{id}/renew": [
+      "POST"
+    ],
+    "/api/pub/v2/calls": [
+      "GET"
+    ],
+    "/api/pub/v2/calls/access-token": [
+      "POST"
+    ],
+    "/api/pub/v2/inventory/rentals": [
+      "POST"
+    ],
+    "/api/pub/v2/inventory/verifications": [
+      "POST"
+    ],
+    "/api/pub/v2/legacy/reservation-id-lookup": [
+      "GET"
+    ],
+    "/api/pub/v2/pricing/rentals": [
+      "POST"
+    ],
+    "/api/pub/v2/pricing/verifications": [
+      "POST"
+    ],
+    "/api/pub/v2/reservations/rental": [
+      "POST"
+    ],
+    "/api/pub/v2/reservations/rental/nonrenewable": [
+      "GET"
+    ],
+    "/api/pub/v2/reservations/rental/nonrenewable/{id}": [
+      "GET",
+      "POST"
+    ],
+    "/api/pub/v2/reservations/rental/nonrenewable/{id}/refund": [
+      "POST"
+    ],
+    "/api/pub/v2/reservations/rental/renewable": [
+      "GET"
+    ],
+    "/api/pub/v2/reservations/rental/renewable/{id}": [
+      "GET",
+      "POST"
+    ],
+    "/api/pub/v2/reservations/rental/renewable/{id}/refund": [
+      "POST"
+    ],
+    "/api/pub/v2/reservations/rental/renewable/{id}/renew": [
+      "POST"
+    ],
+    "/api/pub/v2/reservations/rental/tags/search": [
+      "POST"
+    ],
+    "/api/pub/v2/reservations/rental/{id}/billing-cycle-upgrade": [
+      "GET",
+      "POST"
+    ],
+    "/api/pub/v2/reservations/rental/{id}/billing-cycle-upgrade-options": [
+      "GET"
+    ],
+    "/api/pub/v2/reservations/rental/{id}/billing-cycle-upgrade/{jobId}": [
+      "DELETE"
+    ],
+    "/api/pub/v2/reservations/rental/{id}/reactivate": [
+      "GET",
+      "POST"
+    ],
+    "/api/pub/v2/reservations/rental/{id}/user-notes": [
+      "GET"
+    ],
+    "/api/pub/v2/reservations/rentals/extensions": [
+      "POST"
+    ],
+    "/api/pub/v2/reservations/{id}": [
+      "GET"
+    ],
+    "/api/pub/v2/reservations/{id}/health": [
+      "GET"
+    ],
+    "/api/pub/v2/sales": [
+      "GET"
+    ],
+    "/api/pub/v2/sales/{id}": [
+      "GET"
+    ],
+    "/api/pub/v2/services": [
+      "GET"
+    ],
+    "/api/pub/v2/sms": [
+      "GET"
+    ],
+    "/api/pub/v2/sms/reply": [
+      "POST"
+    ],
+    "/api/pub/v2/sms/send": [
+      "POST"
+    ],
+    "/api/pub/v2/verifications": [
+      "GET",
+      "POST"
+    ],
+    "/api/pub/v2/verifications/{id}": [
+      "GET"
+    ],
+    "/api/pub/v2/verifications/{id}/cancel": [
+      "POST"
+    ],
+    "/api/pub/v2/verifications/{id}/reactivate": [
+      "POST"
+    ],
+    "/api/pub/v2/verifications/{id}/report": [
+      "POST"
+    ],
+    "/api/pub/v2/verifications/{id}/reuse": [
+      "POST"
+    ],
+    "/api/pub/v2/wake-requests": [
+      "POST"
+    ],
+    "/api/pub/v2/wake-requests/estimate": [
+      "POST"
+    ],
+    "/api/pub/v2/wake-requests/{id}": [
+      "GET"
+    ],
+    "/api/pub/v2/webhook-events": [
+      "GET"
+    ]
+  },
+  "verification_states": [
+    "nonrenewable",
+    "nonrenewableActive",
+    "nonrenewableExpired",
+    "nonrenewableRefunded",
+    "renewable",
+    "renewableActive",
+    "renewableExpired",
+    "renewableOverdue",
+    "renewableRefunded",
+    "rental",
+    "verification",
+    "verificationCanceled",
+    "verificationCompleted",
+    "verificationPending",
+    "verificationReactivated",
+    "verificationRefunded",
+    "verificationReported",
+    "verificationReused",
+    "verificationTimedOut"
+  ]
+}
