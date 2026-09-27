@@ -4,6 +4,116 @@ How to replace the mock provider with a real, authorised upstream.
 
 ---
 
+## OnlineSim  *(the one we can actually use)*
+
+Built from their published API documentation at
+`https://onlinesim.io/docs/api/en/index`. A copy of the documented paths,
+states, error codes and constraints lives at
+`backend/apps/verification/onlinesim_endpoints.json`, and
+`tests/test_onlinesim.py` checks the adapter against it - an invented or
+mistyped path fails the suite.
+
+### Why this one and not TextVerified
+
+TextVerified's terms prohibit sharing numbers with third parties, and their
+support confirmed there are no reseller arrangements. That ends the
+conversation: reselling access is the entire product.
+
+OnlineSim's support confirmed the opposite, in writing, on 2026-09-27:
+
+> Yes, according to the terms of use, the API may be integrated into
+> third-party software products. However, your account will be held
+> responsible for all actions taken by users who purchase numbers.
+
+**Read the second sentence as an operating requirement, not a disclaimer.**
+Every customer's conduct is contractually ours. The AUP gate, the abuse flags
+and the risk scoring are what make that survivable, and one abusive customer
+can cost us the whole supply, because the account that gets suspended is ours.
+
+Keep the chat transcript, and get it repeated by email. A support agent's word
+is evidence of intent, not a contract amendment.
+
+The operator is a real, checkable entity: ONLINE CONNECTION TECH PTE. LTD.,
+Singapore, UEN 202604203W.
+
+### What it uses
+
+| Purpose | Endpoint |
+|---|---|
+| Catalogue and prices | `GET /api/getTariffs.php` |
+| Reserve a number | `GET /api/getNum.php` |
+| Status and code | `GET /api/getState.php` |
+| Next message | `GET /api/setOperationRevise.php` |
+| Close / cancel / refund | `GET /api/setOperationOk.php` |
+| Balance | `GET /api/getBalance.php` |
+
+Not used: `/api/getfreelist` (public numbers - anyone can read the messages, so
+they are never resold) and the whole `/api/rent/*` family (long-term rental is a
+different product).
+
+### Decisions worth knowing
+
+**The API key travels in the `Authorization` header**, though the docs also
+allow `?apikey=`. Query strings reach proxy logs, error trackers and browser
+history, and this key can spend our balance.
+
+**Only the code is fetched, never the message body.** `getState` will return
+either; `message_to_code=1` makes OnlineSim extract the code, so we never hold
+the rest of somebody's SMS. Less to leak, less to retain, and no home-grown
+regex picking the wrong digits out of a sentence.
+
+**A code is proven by a message, not by a state name.** OnlineSim documents
+exactly one operation state, `TZ_NUM_WAIT`. Every other value maps to PENDING,
+so an unknown state can delay an order but can never make an unfinished one
+look delivered. Whether a code arrived is decided by whether a message is
+there.
+
+**A vanished operation is EXPIRED, never COMPLETED.** `ERROR_NO_OPERATIONS`
+means the provider is no longer holding the number, which must refund.
+
+**Countries are mapped, not guessed.** OnlineSim identifies countries by dial
+code; our `Country.code` is ISO alpha-2. `onlinesim_countries.json` holds the
+mapping, and an unmappable code is *skipped* - a wrong country means a number
+that cannot receive the customer's code. Shared codes (+1, +7, +44) are
+resolved by the country name OnlineSim sends, never by defaulting to the
+largest country.
+
+**Cancelling is not instant.** `setOperationOk` documents a protective interval
+- 120 seconds, 300 for WhatsApp - during which an operation with no SMS cannot
+be closed. `cancel_order` returns False when the provider refuses, so the UI
+must not promise an immediate cancellation.
+
+**There is no refund endpoint.** Funds for an active operation are held as a
+frozen balance and released when it is closed, so closing *is* the refund.
+
+### Two things that are not solved
+
+**The webhook is unsigned.** OnlineSim will POST incoming SMS to a URL set in
+the profile, and documents no signature, HMAC or shared secret. Anyone who
+learned the URL could post a verification code for any operation id, so
+`supports_webhooks` is `False` and the platform stays on authenticated polling.
+Do not wire the callback up as a source of truth; at most it could hint that
+polling should happen sooner.
+
+**There is no idempotency key.** `getNum` documents none. Our own
+`Order.idempotency_key` stops a client retry becoming a second purchase, so the
+customer is never double-charged, but a request that times out after OnlineSim
+has issued a number leaves it reserved and billed with no id returned to us.
+That residual cost is ours and is bounded by one activation price.
+
+### Before going live
+
+1. **Ask what the concurrency limit actually is.** Support confirmed a standard
+   limit exists and is raised case by case, but did not name it. This is the
+   number that made TextVerified unusable at 1 rising to 4, and capacity cannot
+   be planned without it.
+2. Set `ONLINESIM_API_KEY`, and `ONLINESIM_CURRENCY` to match the profile's
+   currency or the exchange rate is applied to the wrong unit.
+3. Set `VERIFICATION_PROVIDER=onlinesim`, then run a catalogue sync and check
+   the prices that land.
+
+---
+
 ## TextVerified
 
 The adapter is **implemented** against TextVerified's published OpenAPI v2

@@ -21,12 +21,14 @@ from django.core.cache import cache
 from apps.common.errors import ServiceUnavailable
 from apps.verification.base import VerificationProvider
 from apps.verification.mock import MockVerificationProvider
+from apps.verification.onlinesim import OnlineSimProvider
 from apps.verification.textverified import TextVerifiedProvider
 
 logger = logging.getLogger("verifygh.provider")
 
 _REGISTRY: dict[str, type[VerificationProvider]] = {
     MockVerificationProvider.key: MockVerificationProvider,
+    OnlineSimProvider.key: OnlineSimProvider,
     TextVerifiedProvider.key: TextVerifiedProvider,
 }
 

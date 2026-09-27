@@ -1,0 +1,202 @@
+{
+  "_comment": [
+    "Provenance for the OnlineSim adapter. Every endpoint the adapter calls, and",
+    "every provider constant it recognises, is recorded here and checked by",
+    "tests/test_onlinesim.py against apps/verification/onlinesim.py.",
+    "",
+    "The point is narrow and important: an invented or mistyped path fails the",
+    "suite instead of failing a customer's order in production. If OnlineSim",
+    "publishes something new, it gets added here first, from the documentation,",
+    "and only then used in code.",
+    "",
+    "Captured 2026-09-27 from the vendor's published API documentation at",
+    "https://onlinesim.io/docs/api/en/index, rendered from their OpenAPI",
+    "description at https://onlinesim.io/openapi_docs/Onlinesim-API-UN/."
+  ],
+  "source": "https://onlinesim.io/docs/api/en/index",
+  "captured_at": "2026-09-27",
+  "api_version": "1.1",
+  "base_url": "https://onlinesim.io",
+
+  "auth": {
+    "documented_schemes": ["apikey", "BearerAuth", "OAuth2"],
+    "adapter_uses": "BearerAuth",
+    "header": "Authorization: Bearer {apikey}",
+    "why": [
+      "The documentation also allows ?apikey= as a query parameter. The adapter",
+      "uses the header instead, because query strings are routinely written to",
+      "proxy logs, browser history and error trackers, and an API key is a",
+      "bearer credential - anyone holding it can spend our balance."
+    ],
+    "oauth_scopes": ["sms-scope", "rent-scope", "free-scope"]
+  },
+
+  "endpoints": {
+    "tariffs": {
+      "method": "GET",
+      "path": "/api/getTariffs.php",
+      "params": ["locale_price", "country", "filter_country", "filter_service",
+                 "count", "page", "lang"]
+    },
+    "order": {
+      "method": "GET",
+      "path": "/api/getNum.php",
+      "params": ["service", "country", "reject", "dev_id", "number", "lang"],
+      "required": ["service", "country"]
+    },
+    "state": {
+      "method": "GET",
+      "path": "/api/getState.php",
+      "params": ["tzid", "message_to_code", "orderby", "msg_list", "clean", "lang"]
+    },
+    "revise": {
+      "method": "GET",
+      "path": "/api/setOperationRevise.php",
+      "params": ["tzid", "lang"],
+      "required": ["tzid"]
+    },
+    "close": {
+      "method": "GET",
+      "path": "/api/setOperationOk.php",
+      "params": ["tzid", "ban", "lang"],
+      "required": ["tzid"]
+    },
+    "balance": {
+      "method": "GET",
+      "path": "/api/getBalance.php",
+      "params": ["lang"]
+    }
+  },
+
+  "documented_but_unused": {
+    "/api/getfreelist": "Free shared numbers. Never resold: they are public, so anyone can read the messages.",
+    "/api/rent/tariffsrent.php": "Long-term rental. This platform sells single activations only.",
+    "/api/rent/getrentnum.php": "Long-term rental.",
+    "/api/rent/getrentstate.php": "Long-term rental.",
+    "/api/rent/extendrentstate.php": "Long-term rental.",
+    "/api/rent/closerentnum.php": "Long-term rental."
+  },
+
+  "operation_states": {
+    "_comment": [
+      "OnlineSim publishes exactly ONE operation state in its documentation:",
+      "TZ_NUM_WAIT, in the getState example. Other states plainly exist upstream,",
+      "but guessing their names would be inventing an API.",
+      "",
+      "So the adapter maps the one documented state and treats every other value",
+      "as PENDING - never as finished. An unknown state can therefore delay an",
+      "order but can never make an unfinished one look delivered, and the expiry",
+      "sweep settles it. Whether a code has arrived is decided by the presence of",
+      "a message, which is observable, rather than by a state name we assumed."
+    ],
+    "documented": ["TZ_NUM_WAIT"],
+    "unknown_state_policy": "PENDING"
+  },
+
+  "error_codes": {
+    "_comment": "From the documented error schemas (commonErrorResponse, getStateMethodError).",
+    "documented": [
+      "ACCOUNT_BLOCKED",
+      "ERROR_NO_KEY",
+      "ERROR_NO_OPERATIONS",
+      "ERROR_NO_SERVICE",
+      "ERROR_UNDEFINED",
+      "ERROR_WRONG_KEY",
+      "NO_NUMBER",
+      "WARNING_LOW_BALANCE"
+    ]
+  },
+
+  "response_conventions": {
+    "success_flag": "response == 1 or \"1\"",
+    "error_flag": "response holds one of the documented error codes",
+    "getState_shape": "a bare JSON array of operation objects, not an object",
+    "operation_fields": ["tzid", "response", "number", "country", "service",
+                         "sum", "time", "msg", "form"],
+    "tariffs_shape": {
+      "countries": "object keyed \"_<dialcode>\", each {name, original, code, pos, other, new, enable}",
+      "services": "object keyed \"_<slug>\", each {id, count, price, service, slug}",
+      "pagination": "page, end"
+    },
+    "balance_shape": {"response": "1", "balance": "string", "zbalance": "number"}
+  },
+
+  "webhook": {
+    "direction": "OnlineSim POSTs to a URL configured in the account profile",
+    "path_documented_as": "/newSms",
+    "payload_fields": ["user_id", "country_code", "number", "sender", "message",
+                       "time_start", "time_left", "operation_id", "webhook_type", "code"],
+    "webhook_type_enum": ["receiving_sms", "rent_sms"],
+    "signature": null,
+    "_signature_comment": [
+      "No signature, HMAC or shared secret is documented for this webhook.",
+      "It therefore cannot be trusted as a source of truth: anyone who learns the",
+      "URL could post a verification code for any operation id.",
+      "",
+      "The adapter does not treat the callback as authoritative. If it is wired up",
+      "at all it may only act as a hint to poll getState sooner - the code we show",
+      "a customer is always the one we read back from the authenticated API."
+    ]
+  },
+
+  "constraints": {
+    "idempotency": {
+      "supported": false,
+      "_comment": [
+        "getNum documents no idempotency key. A request that times out after the",
+        "provider has issued a number leaves that number reserved and billed with",
+        "no id returned to us.",
+        "",
+        "Our own Order.idempotency_key stops a client retry becoming a second",
+        "purchase, so the customer is never double-charged. The residual exposure",
+        "is ours, not theirs, and it is bounded by the activation price."
+      ]
+    },
+    "close_protective_interval_seconds": {
+      "default": 120,
+      "whatsapp": 300,
+      "_comment": [
+        "Documented on setOperationOk: with no incoming SMS an operation cannot be",
+        "closed until this interval has passed. A cancel attempted sooner is",
+        "refused, so 'cancel' is not instant and the UI must not promise that it is."
+      ]
+    },
+    "close_is_final": "After closing, that number cannot be ordered or used again.",
+    "pricing_currency": "Profile currency, USD by default; locale_price selects it.",
+    "country_identifier": "International dial code (7 = Russia, 373 = Moldova), not ISO 3166."
+  },
+
+  "authorisation_status": {
+    "terms_url": "https://onlinesim.io/documentation/offer",
+    "operator": "ONLINE CONNECTION TECH PTE. LTD. (Singapore, UEN 202604203W)",
+    "terms_reviewed": "2026-09-27, version dated 2026-02-27",
+    "resale_prohibition_found": false,
+    "integration_permitted_in_writing": true,
+    "confirmation": {
+      "date": "2026-09-27",
+      "channel": "OnlineSim support live chat",
+      "agent": "Mikhail",
+      "quote": "according to the terms of use, the API may be integrated into third-party software products. However, your account will be held responsible for all actions taken by users who purchase numbers.",
+      "concurrency_quote": "There is a standard limit in place, but if you need to increase your account's limit, please contact us in this chat, and we will handle your request on an individual basis."
+    },
+    "_comment": [
+      "This is the permission TextVerified refused, and it is the single fact that",
+      "makes this provider usable: integrating the API into a third-party software",
+      "product is expressly allowed.",
+      "",
+      "It came from support chat rather than a signed agreement, so keep the",
+      "transcript and get it repeated by email before relying on it commercially.",
+      "A support agent's word is evidence of intent, not a contract amendment.",
+      "",
+      "The same reply confirms clause 5.1.3 in plain words: our account answers for",
+      "everything our customers do with the numbers. That is the whole reason the",
+      "AUP gate, the abuse flags and the risk scoring exist, and why they must not",
+      "be relaxed.",
+      "",
+      "OUTSTANDING: the concurrency ceiling. Support confirmed a standard limit",
+      "exists and can be raised case by case, but did not state the number. Until",
+      "it is known, capacity is unplanned - this is exactly the figure that made",
+      "TextVerified unusable at 1 rising to 4."
+    ]
+  }
+}

@@ -476,6 +476,15 @@ VERIFYGH = {
 }
 
 PROVIDER_CREDENTIALS = {
+    "onlinesim": {
+        "api_key": env("ONLINESIM_API_KEY", ""),
+        # Their documented host. Overridable only so a test can point elsewhere.
+        "base_url": env("ONLINESIM_BASE_URL", ""),
+        # Tariffs are returned in the profile's own currency, USD by default.
+        # Set this to whatever the OnlineSim profile is configured for, or the
+        # exchange rate will be applied to the wrong unit.
+        "currency": env("ONLINESIM_CURRENCY", "USD"),
+    },
     "textverified": {
         "api_key": env("TEXTVERIFIED_API_KEY", ""),
         "api_username": env("TEXTVERIFIED_API_USERNAME", ""),
