@@ -80,6 +80,14 @@ TARIFFS = {
                  "pos": 0, "other": False, "new": False, "enable": True},
         "_7": {"name": "Russia", "original": "russia", "code": 7,
                "pos": 1, "other": False, "new": False, "enable": True},
+        # The shapes observed live on 2026-09-28. 1000 is not a calling code,
+        # 77 splits Kazakhstan out of +7, and the UK is listed as "Britain".
+        "_1": {"name": "USA", "original": "usa", "code": 1, "enable": True},
+        "_1000": {"name": "Canada", "original": "canada", "code": 1000, "enable": True},
+        "_44": {"name": "Britain", "original": "united_kingdom", "code": 44,
+                "enable": True},
+        "_77": {"name": "Kazakhstan", "original": "kazakhstan", "code": 77,
+                "enable": True},
     },
     "services": {
         "_telegram": {"id": 1, "count": 42, "price": "0.55",
@@ -212,7 +220,7 @@ def test_countries_are_mapped_to_iso_codes(provider):
 
     countries = provider.get_countries()
 
-    assert {c.code for c in countries} == {"GH", "RU"}
+    assert {c.code for c in countries} == {"GH", "RU", "US", "CA", "GB", "KZ"}
     ghana = next(c for c in countries if c.code == "GH")
     assert ghana.dial_code == "+233"
     assert len(session.calls) == 1
@@ -309,7 +317,7 @@ def test_one_failing_country_does_not_empty_the_catalogue(provider):
     offerings = provider.get_services()
 
     assert offerings, "a failure for one country emptied the whole catalogue"
-    assert {o.country_code for o in offerings} == {"RU"}
+    assert "GH" not in {o.country_code for o in offerings}
 
 
 # ---------------------------------------------------------------------------
@@ -562,15 +570,31 @@ def test_health_check_is_false_when_the_provider_is_unreachable(provider):
 # ---------------------------------------------------------------------------
 
 
-def test_shared_dial_codes_are_resolved_by_name_not_by_size():
-    """+1 is the USA, Canada and twenty Caribbean territories. Defaulting to the
-    biggest is how a customer buys a Canadian number thinking it is American."""
-    assert _CountryCodes.resolve(1, "United States") == "US"
-    assert _CountryCodes.resolve(1, "Canada") == "CA"
-    assert _CountryCodes.resolve(7, "Russia") == "RU"
-    assert _CountryCodes.resolve(7, "Kazakhstan") == "KZ"
+def test_what_the_provider_means_by_a_code_beats_what_the_number_means():
+    """This table is OnlineSim's, not the ITU's.
+
+    Globally +1 covers the USA, Canada and twenty Caribbean territories. But
+    OnlineSim lists the USA under 1 and Canada under 1000, so for this provider
+    1 is unambiguous - and treating it as shared would have us send 1 for a
+    Canadian order and hand the customer a US number.
+    """
+    assert _CountryCodes.resolve(1) == "US"
+    assert _CountryCodes.resolve(1000) == "CA"
+    assert _CountryCodes.resolve(7) == "RU"
+    assert _CountryCodes.resolve(77) == "KZ"
+    assert _CountryCodes.resolve(44) == "GB"
+
+    # The override wins even when a name suggests otherwise: OnlineSim does not
+    # sell Canadian numbers under 1, whatever a caller passes.
+    assert _CountryCodes.resolve(1, "Canada") == "US"
+
+
+def test_codes_without_an_override_are_still_resolved_by_name():
+    """The name-based fallback still covers genuinely shared codes."""
+    assert _CountryCodes.resolve(590, "Guadeloupe") == "GP"
+    assert _CountryCodes.resolve(590, "Saint Martin") == "MF"
     # An unrecognised name on a shared code is skipped, not guessed.
-    assert _CountryCodes.resolve(1, "Somewhere Else") is None
+    assert _CountryCodes.resolve(590, "Somewhere Else") is None
 
 
 def test_unambiguous_codes_resolve_without_a_name():
@@ -597,3 +621,93 @@ def test_the_reference_file_has_no_duplicate_iso_codes():
     for dial, iso in _CountryCodes._by_dial.items():
         assert iso not in seen, f"{iso} claimed by both +{seen[iso]} and +{dial}"
         seen[iso] = dial
+
+
+# ---------------------------------------------------------------------------
+# 9. OnlineSim's country ids are not always dial codes
+# ---------------------------------------------------------------------------
+
+
+def test_synthetic_country_ids_resolve(provider):
+    """Observed live: Canada is 1000 and Kazakhstan is 77.
+
+    1000 is not a calling code at all, and 77 is OnlineSim splitting Kazakhstan
+    out of +7. Both were silently dropped from the catalogue until the override
+    table existed.
+    """
+    wire(provider, {provider.PATH_TARIFFS: FakeResponse(200, TARIFFS)})
+
+    by_iso = {c.code: c for c in provider.get_countries()}
+
+    assert "CA" in by_iso, "Canada was dropped"
+    assert "KZ" in by_iso, "Kazakhstan was dropped"
+
+
+def test_the_uk_resolves_although_it_is_named_britain(provider):
+    """Name matching alone missed this one and skipped the country."""
+    wire(provider, {provider.PATH_TARIFFS: FakeResponse(200, TARIFFS)})
+
+    assert "GB" in {c.code for c in provider.get_countries()}
+
+
+def test_ordering_a_canadian_number_sends_canadas_provider_id(provider):
+    """Sending 1 would get a US number. This is the wrong-country bug in one line."""
+    session = wire(provider, {
+        provider.PATH_TARIFFS: FakeResponse(200, TARIFFS),
+        provider.PATH_ORDER: FakeResponse(
+            200, {"response": 1, "tzid": 4242, "number": "+15550000000"}
+        ),
+    })
+
+    provider.create_order("telegram", "CA", "idem-ca")
+
+    order_call = next(c for c in session.calls if c[0] == provider.PATH_ORDER)
+    assert str(order_call[1]["country"]) == "1000"
+
+
+def test_ordering_an_american_number_sends_one(provider):
+    session = wire(provider, {
+        provider.PATH_TARIFFS: FakeResponse(200, TARIFFS),
+        provider.PATH_ORDER: FakeResponse(
+            200, {"response": 1, "tzid": 4243, "number": "+15550000001"}
+        ),
+    })
+
+    provider.create_order("telegram", "US", "idem-us")
+
+    order_call = next(c for c in session.calls if c[0] == provider.PATH_ORDER)
+    assert str(order_call[1]["country"]) == "1"
+
+
+def test_priority_countries_fill_the_bounded_catalogue_first(provider, settings):
+    """The limit decides the shop window, so the order must not be accidental."""
+    settings.VERIFYGH = {
+        **settings.VERIFYGH,
+        "PROVIDER_CATALOG_LIMIT": 2,
+        "PROVIDER_PRIORITY_COUNTRIES": ["US", "CA", "GB"],
+    }
+    wire(provider, {provider.PATH_TARIFFS: FakeResponse(200, TARIFFS)})
+
+    offerings = provider.get_services()
+
+    assert {o.country_code for o in offerings} == {"US"}, (
+        "the bounded catalogue did not start with the preferred country"
+    )
+
+
+def test_a_preferred_country_the_provider_lacks_is_reported_not_silent(provider, settings):
+    settings.VERIFYGH = {
+        **settings.VERIFYGH,
+        "PROVIDER_PRIORITY_COUNTRIES": ["ZZ"],
+    }
+    wire(provider, {provider.PATH_TARIFFS: FakeResponse(200, TARIFFS)})
+
+    # Still returns the real countries; the missing one is logged, not fatal.
+    assert provider._ordered_countries()
+
+
+def test_provider_overrides_are_consistent_in_both_directions():
+    """A one-way mapping would resolve a country and then order the wrong one."""
+    _CountryCodes._load()
+    for code, iso in _CountryCodes._by_provider.items():
+        assert _CountryCodes.resolve(code) == iso

@@ -479,6 +479,10 @@ VERIFYGH = {
     # How many provider services to price per catalogue sync. The service list
     # and the price are separate calls upstream, so this bounds the sync.
     "PROVIDER_CATALOG_LIMIT": env_int("PROVIDER_CATALOG_LIMIT", 60),
+    # Which countries fill the bounded catalogue first. Without this the order
+    # is whatever the provider happens to return, and the limit decides the
+    # shop window by accident.
+    "PROVIDER_PRIORITY_COUNTRIES": env_list("PROVIDER_PRIORITY_COUNTRIES", "US,CA,GB"),
     # Sent as maxPrice when reserving: the most we accept paying above the
     # price we just quoted, if the provider moved it in between.
     "PROVIDER_PRICE_TOLERANCE": env("PROVIDER_PRICE_TOLERANCE", "1.05"),

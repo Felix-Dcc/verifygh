@@ -21,6 +21,28 @@
     "Source: ITU-T E.164 country calling codes. Reference data, not invented."
   ],
 
+  "by_provider_code": {
+    "_comment": [
+      "What OnlineSim means by a given country id, which is NOT always a dial",
+      "code. Observed live on 2026-09-28: Canada is 1000, Kazakhstan is 77, and",
+      "the United Kingdom is listed as 'Britain' under 44.",
+      "",
+      "1000 is not a calling code at all, and 77 is OnlineSim disambiguating",
+      "Kazakhstan from Russia, which share +7. Guessing from the number alone",
+      "would have silently dropped both - and it did, until this map existed.",
+      "",
+      "These are provider-specific facts and take priority over the general dial",
+      "code table below, in both directions. Entries here are also unambiguous",
+      "for OnlineSim even where the dial code is shared globally: they list one",
+      "country under 44 and one under 1."
+    ],
+    "1": "US",
+    "7": "RU",
+    "44": "GB",
+    "77": "KZ",
+    "1000": "CA"
+  },
+
   "by_dial_code": {
     "20": "EG", "27": "ZA", "30": "GR", "31": "NL", "32": "BE", "33": "FR",
     "34": "ES", "36": "HU", "39": "IT", "40": "RO", "41": "CH", "43": "AT",

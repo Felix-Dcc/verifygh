@@ -106,6 +106,7 @@ class _CountryCodes:
     pays for a number that cannot receive their verification.
     """
 
+    _by_provider: dict[str, str] = {}
     _by_dial: dict[str, str] = {}
     _ambiguous: dict[str, dict[str, str]] = {}
     _loaded = False
@@ -119,7 +120,16 @@ class _CountryCodes:
         except (OSError, ValueError):
             logger.exception("onlinesim_country_reference_unreadable")
             data = {}
-        cls._by_dial = {str(k): str(v) for k, v in (data.get("by_dial_code") or {}).items()}
+        cls._by_provider = {
+            str(k): str(v)
+            for k, v in (data.get("by_provider_code") or {}).items()
+            if not str(k).startswith("_")
+        }
+        cls._by_dial = {
+            str(k): str(v)
+            for k, v in (data.get("by_dial_code") or {}).items()
+            if not str(k).startswith("_")
+        }
         cls._ambiguous = {
             str(code): {str(n).lower(): str(iso) for n, iso in names.items()
                         if not str(n).startswith("_")}
@@ -134,6 +144,13 @@ class _CountryCodes:
         dial = str(dial_code).strip().lstrip("+")
         if not dial:
             return None
+
+        # What OnlineSim means by this id wins over what the number would mean
+        # globally. Their 1000 is not a calling code, and their 77 splits
+        # Kazakhstan out of +7 - neither is guessable from the digits.
+        override = cls._by_provider.get(dial)
+        if override is not None:
+            return override
 
         shared = cls._ambiguous.get(dial)
         if shared is not None:
@@ -356,7 +373,7 @@ class OnlineSimProvider(VerificationProvider):
         limit = int(settings.VERIFYGH["PROVIDER_CATALOG_LIMIT"])
         offerings: list[ProviderServiceDTO] = []
 
-        for country in self.get_countries():
+        for country in self._ordered_countries():
             if len(offerings) >= limit:
                 break
             dial = country.dial_code.lstrip("+")
@@ -395,6 +412,36 @@ class OnlineSimProvider(VerificationProvider):
         logger.info("onlinesim_catalog_listed", extra={"offerings": len(offerings)})
         return offerings
 
+    def _ordered_countries(self) -> list[ProviderCountryDTO]:
+        """Countries to walk, preferred ones first.
+
+        The catalogue is bounded, so whichever countries are visited first are
+        the ones that fill it - and until now that order was whatever the
+        provider happened to return. Preferred countries are listed in
+        PROVIDER_PRIORITY_COUNTRIES and pulled to the front; the rest follow in
+        the provider's own order, so nothing is lost, only reordered.
+        """
+        preferred = [
+            str(code).strip().upper()
+            for code in settings.VERIFYGH["PROVIDER_PRIORITY_COUNTRIES"]
+            if str(code).strip()
+        ]
+        countries = self.get_countries()
+        if not preferred:
+            return countries
+
+        rank = {code: index for index, code in enumerate(preferred)}
+        ordered = sorted(countries, key=lambda c: (rank.get(c.code, len(rank)),))
+
+        missing = [code for code in preferred if code not in {c.code for c in countries}]
+        if missing:
+            # Worth saying out loud: a preferred country the provider does not
+            # offer is a silent no-op otherwise, and someone will wonder why
+            # their catalogue looks nothing like they asked for.
+            logger.warning("onlinesim_priority_country_unavailable",
+                           extra={"countries": ",".join(missing)})
+        return ordered
+
     def _currency(self) -> str:
         """Prices come back in the profile's own currency, USD unless changed."""
         return str(
@@ -411,9 +458,18 @@ class OnlineSimProvider(VerificationProvider):
         return entry
 
     def _dial_for(self, country_code: str) -> str:
-        """ISO alpha-2 -> dial code, by reversing the reference table."""
+        """ISO alpha-2 -> the country id OnlineSim expects.
+
+        Not always a dial code: asking for Canada means sending 1000, and
+        sending 1 would get a US number instead. The override table is
+        therefore consulted first here too, or we would sell somebody a
+        number from the wrong country.
+        """
         wanted = str(country_code).upper()
         _CountryCodes._load()
+        for code, iso in _CountryCodes._by_provider.items():
+            if iso == wanted:
+                return code
         for dial, iso in _CountryCodes._by_dial.items():
             if iso == wanted:
                 return dial
