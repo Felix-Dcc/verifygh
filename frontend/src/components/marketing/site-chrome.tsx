@@ -3,9 +3,10 @@
 import Link from "next/link";
 import * as React from "react";
 
+import { AccountMenu } from "@/components/account-menu";
 import { useAuth } from "@/components/auth-provider";
 import { Logo } from "@/components/brand";
-import { CloseIcon, MenuIcon } from "@/components/icons";
+import { CloseIcon, LogoutIcon, MenuIcon } from "@/components/icons";
 import { Button, cn } from "@/components/ui/primitives";
 
 const LINKS = [
@@ -17,7 +18,7 @@ const LINKS = [
 ];
 
 export function SiteHeader() {
-  const { user, ready } = useAuth();
+  const { user, ready, signOut } = useAuth();
   const [open, setOpen] = React.useState(false);
 
   // Close the mobile menu on navigation so a tap never leaves it hanging open.
@@ -51,9 +52,15 @@ export function SiteHeader() {
           {!ready ? (
             <div className="h-10 w-40" aria-hidden />
           ) : user ? (
-            <Link href="/dashboard">
-              <Button size="sm">Go to dashboard</Button>
-            </Link>
+            <>
+              <Link href="/dashboard">
+                <Button size="sm">Go to dashboard</Button>
+              </Link>
+              {/* Signing out used to be reachable only from inside the app
+                  shell, so a customer who landed here while signed in had no
+                  way out of their session at all. */}
+              <AccountMenu />
+            </>
           ) : (
             <>
               <Link href="/login">
@@ -98,9 +105,34 @@ export function SiteHeader() {
           ))}
           <div className="mt-2 flex flex-col gap-2 border-t border-line pt-3 pb-4">
             {user ? (
-              <Link href="/dashboard" onClick={() => setOpen(false)}>
-                <Button fullWidth>Go to dashboard</Button>
-              </Link>
+              <>
+                <Link href="/dashboard" onClick={() => setOpen(false)}>
+                  <Button fullWidth>Go to dashboard</Button>
+                </Link>
+                <Link href="/wallet" onClick={() => setOpen(false)}>
+                  <Button variant="secondary" fullWidth>
+                    Wallet
+                  </Button>
+                </Link>
+                <Link href="/orders" onClick={() => setOpen(false)}>
+                  <Button variant="secondary" fullWidth>
+                    Orders
+                  </Button>
+                </Link>
+                {/* Reachable without leaving the phone layout, which is where
+                    most of this traffic is. */}
+                <button
+                  type="button"
+                  onClick={() => {
+                    setOpen(false);
+                    void signOut();
+                  }}
+                  className="mt-1 flex items-center justify-center gap-2 rounded-xl border border-line-strong px-4 py-2.5 text-sm font-medium text-ink-soft transition-colors hover:bg-canvas hover:text-ink"
+                >
+                  <LogoutIcon className="h-4 w-4" />
+                  Log out
+                </button>
+              </>
             ) : (
               <>
                 <Link href="/register" onClick={() => setOpen(false)}>

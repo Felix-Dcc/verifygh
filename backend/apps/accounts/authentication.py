@@ -20,8 +20,14 @@ mechanisms cover the two different windows:
 * the **token_version** claim revokes *everything a user holds at once*,
   including access tokens already issued. Blacklisting alone would leave a
   stolen access token working for its full lifetime after a password change.
+* the **access denylist** revokes *one* access token by its `jti`, and is what
+  sign-out uses. Without it, signing out killed the refresh token but left its
+  paired access token authenticating for up to ACCESS_TOKEN_LIFETIME - a copy
+  taken from a shared computer kept working after the customer had logged out.
+  token_version would close that too, but it would also sign the customer out
+  of every other device, which is not what "Log out" means.
 
-Both are checked on every authenticated request.
+All three are checked on every authenticated request.
 """
 
 from __future__ import annotations
@@ -31,15 +37,72 @@ import logging
 import secrets
 
 from django.conf import settings
+from django.core.cache import cache
 from rest_framework_simplejwt.authentication import JWTAuthentication
 from rest_framework_simplejwt.exceptions import AuthenticationFailed, InvalidToken, TokenError
-from rest_framework_simplejwt.tokens import RefreshToken
+from rest_framework_simplejwt.settings import api_settings as jwt_settings
+from rest_framework_simplejwt.tokens import AccessToken, RefreshToken
 
 from apps.common.middleware import bind_user
 
 logger = logging.getLogger("verifygh.auth")
 
 SAFE_METHODS = {"GET", "HEAD", "OPTIONS", "TRACE"}
+
+#: Cache key for a revoked access token. Keyed on the jti, never the token
+#: itself: the cache is not a place to keep live credentials.
+_REVOKED_ACCESS_KEY = "auth:revoked_access:{jti}"
+
+
+def revoke_access_token(raw_token: str | None) -> bool:
+    """Stop one access token working, for the rest of its natural life.
+
+    Only as long as it would have lived anyway: past `exp` the token is refused
+    on its own, so remembering it any longer would just be cache garbage.
+    Returns False for a token that is missing, malformed or already expired -
+    none of which needs revoking.
+    """
+    if not raw_token:
+        return False
+    try:
+        token = AccessToken(raw_token)
+    except TokenError:
+        return False
+
+    import time
+
+    jti = token.get(jwt_settings.JTI_CLAIM)
+    exp = token.get("exp")
+    if not jti or not exp:
+        return False
+    remaining = int(exp - time.time())
+    if remaining <= 0:
+        return False
+
+    try:
+        cache.set(_REVOKED_ACCESS_KEY.format(jti=jti), 1, timeout=remaining)
+    except Exception:
+        # Losing this is a narrower window, not an open door: the refresh token
+        # is still blacklisted in the database, so no new session can be made,
+        # and this token expires on its own within ACCESS_TOKEN_LIFETIME.
+        logger.error("access_revocation_store_unavailable", exc_info=True)
+        return False
+    return True
+
+
+def _access_revoked(validated_token) -> bool:
+    jti = validated_token.get(jwt_settings.JTI_CLAIM)
+    if not jti:
+        return False
+    try:
+        return bool(cache.get(_REVOKED_ACCESS_KEY.format(jti=jti)))
+    except Exception:
+        # Fails open, loudly, for the same reason the throttles do: failing
+        # closed would turn a Redis blip into every signed-in customer being
+        # logged out at once. The token is short-lived and its refresh token is
+        # already dead, so the exposure is bounded.
+        logger.error("access_revocation_check_unavailable", exc_info=True)
+        return False
 
 
 class RevocationCheckedJWTAuthentication(JWTAuthentication):
@@ -52,6 +115,14 @@ class RevocationCheckedJWTAuthentication(JWTAuthentication):
     """
 
     def get_user(self, validated_token):
+        # Before the user lookup: a signed-out token should cost a cache read,
+        # not a database query.
+        if _access_revoked(validated_token):
+            logger.info("token_revoked_by_signout")
+            raise AuthenticationFailed(
+                "Your session has ended. Please sign in again.", code="token_revoked"
+            )
+
         user = super().get_user(validated_token)
 
         claim = settings.TOKEN_VERSION_CLAIM

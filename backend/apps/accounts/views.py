@@ -15,6 +15,7 @@ from rest_framework_simplejwt.tokens import RefreshToken
 from apps.accounts import services
 from apps.accounts.authentication import (
     blacklist_refresh_token,
+    revoke_access_token,
     clear_auth_cookies,
     detect_refresh_token_reuse,
     issue_tokens,
@@ -230,6 +231,15 @@ class LogoutView(APIView):
         # revokes the token itself, so a copy taken elsewhere is dead too.
         raw = request.COOKIES.get(settings.AUTH_COOKIE_REFRESH) or request.data.get("refresh")
         revoked = blacklist_refresh_token(raw)
+
+        # The access token too. Blacklisting the refresh token stops new
+        # sessions being made, but the access token already issued would
+        # otherwise keep authenticating for its full lifetime - so a copy lifted
+        # from a shared machine would survive the customer logging out.
+        header = request.META.get("HTTP_AUTHORIZATION", "")
+        bearer = header[7:].strip() if header.lower().startswith("bearer ") else ""
+        access = request.COOKIES.get(settings.AUTH_COOKIE_ACCESS) or bearer
+        revoke_access_token(access)
 
         response = Response({"detail": "Signed out."}, status=status.HTTP_200_OK)
         clear_auth_cookies(response)
