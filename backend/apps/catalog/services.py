@@ -61,9 +61,16 @@ COUNTRY_FLAGS = {
 def marketplace_readiness() -> dict:
     """Can the marketplace actually sell anything right now?
 
-    Three things have to be true together, and each fails differently: a
-    provider must be configured, an exchange rate must exist to price in cedis,
-    and at least one offering must be purchasable.
+    Four things have to be true together, and each fails differently: a provider
+    must be configured, an exchange rate must exist to price in cedis, at least
+    one offering must be purchasable, and that offering must actually price.
+
+    The last one was learned the hard way. Counting purchasable rows said the
+    marketplace was open while every single purchase raised NoPricingRule,
+    because no pricing rule existed - so deposits were accepted into a shop
+    where nothing could be bought. An offering nobody can be quoted a price for
+    is not stock, and readiness has to mean "a customer can complete a
+    purchase", not "rows exist".
 
     Deliberately one function rather than a query repeated wherever the question
     comes up. The landing page, the deposit guard and the admin health panel all
@@ -84,12 +91,56 @@ def marketplace_readiness() -> dict:
         country__is_enabled=True,
     ).count()
 
+    # Prove it by pricing one, rather than trusting that a rule exists and
+    # covers this offering: rules are scoped by service and country, so a rule
+    # that matches nothing is the same as no rule at all.
+    priceable = False
+    if purchasable and rate is not None:
+        priceable = _cheapest_offering_prices()
+
     return {
-        "ready": bool(provider_row and rate and purchasable),
+        "ready": bool(provider_row and rate and purchasable and priceable),
         "provider_configured": provider_row is not None,
         "exchange_rate_configured": rate is not None,
         "purchasable_offerings": purchasable,
+        "pricing_configured": priceable,
     }
+
+
+def _cheapest_offering_prices() -> bool:
+    """Can we actually quote a customer for something?
+
+    One offering, not all of them: this runs on the deposit screen and the
+    landing page, and pricing sixty rows to answer "are we open" would be
+    wasteful. If the cheapest prices, a pricing rule exists and matches.
+    """
+    from apps.pricing.engine import NoPricingRule, quote_for_offering
+
+    offering = (
+        ProviderService.objects.filter(
+            is_enabled=True,
+            is_available=True,
+            provider__is_enabled=True,
+            service__is_enabled=True,
+            country__is_enabled=True,
+        )
+        .select_related("service", "country", "provider")
+        .order_by("cost_amount")
+        .first()
+    )
+    if offering is None:
+        return False
+
+    try:
+        quote_for_offering(offering)
+    except NoPricingRule:
+        logger.warning("no_pricing_rule_matches_catalogue")
+        return False
+    except Exception:
+        # Any other pricing failure is still a customer who cannot buy.
+        logger.exception("pricing_check_failed")
+        return False
+    return True
 
 
 def ensure_provider_row(adapter_key: str) -> Provider:

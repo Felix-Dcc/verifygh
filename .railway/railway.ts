@@ -89,10 +89,6 @@ function backendEnv(databaseUrl: VariableValue, redisUrl: VariableValue) {
     LOG_FORMAT: "json",
     LOG_LEVEL: "INFO",
 
-    // Inert until an authorised provider is configured: the adapter's
-    // endpoints are blank, so nothing is listed and nothing can be sold.
-    VERIFICATION_PROVIDER: "textverified",
-
     // Referral programme. Once read, the database row is the source of truth
     // and a super admin changes the bonus in the console.
     REFERRAL_PROGRAM_ENABLED: "true",
@@ -107,6 +103,16 @@ function backendEnv(databaseUrl: VariableValue, redisUrl: VariableValue) {
     // delete the line below. Leaving it set means every "payment" is free.
     PAYMENT_PROVIDER: "paystack",
     ALLOW_PAYSTACK_TEST_KEYS: "true",
+
+    // OnlineSim confirmed in writing on 2026-09-27 that their API may be
+    // integrated into third-party software products, with our account
+    // answerable for what our customers do. TextVerified refused the same
+    // permission, so its adapter stays in the tree but unused.
+    VERIFICATION_PROVIDER: "onlinesim",
+    // Tariffs arrive in the OnlineSim profile's own currency. If the profile is
+    // not USD, change this or the exchange rate is applied to the wrong unit
+    // and every price on the site is wrong.
+    ONLINESIM_CURRENCY: "USD",
 
     FRONTEND_URL: WEB_ORIGIN,
     CORS_ALLOWED_ORIGINS: WEB_ORIGIN,
@@ -137,6 +143,10 @@ function backendEnv(databaseUrl: VariableValue, redisUrl: VariableValue) {
     // only once the API and app share a registrable domain.
     AUTH_COOKIE_DOMAIN: preserve(),
     PAYSTACK_SECRET_KEY: preserve(),
+    // Set this and the marketplace can stock itself. Without it the OnlineSim
+    // adapter is unconfigured, the catalogue stays empty, and the deposit guard
+    // keeps top-ups paused - which is the safe failure, not a broken one.
+    ONLINESIM_API_KEY: preserve(),
     TEXTVERIFIED_API_KEY: preserve(),
     TEXTVERIFIED_BASE_URL: preserve(),
     EXCHANGE_RATE_API_KEY: preserve(),

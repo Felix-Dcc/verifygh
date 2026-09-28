@@ -288,3 +288,39 @@ def test_the_readiness_check_is_defined_in_exactly_one_place():
             f"{module.__name__} re-implements the readiness query instead of "
             "calling marketplace_readiness()"
         )
+
+def test_offerings_that_cannot_be_priced_do_not_count_as_stock(catalog, depositor):
+    """Found in production: 60 purchasable offerings, every one raising
+    NoPricingRule because no pricing rule existed.
+
+    Readiness said open, deposits were accepted, and nothing could be bought -
+    the precise harm this guard exists to prevent, walking straight through it
+    because "purchasable" counted rows rather than quotable prices.
+    """
+    from apps.pricing.models import PricingRule
+
+    assert marketplace_readiness()["ready"] is True
+
+    PricingRule.objects.all().delete()
+
+    readiness = marketplace_readiness()
+    assert readiness["purchasable_offerings"] > 0, "stock is still on the shelves"
+    assert readiness["pricing_configured"] is False
+    assert readiness["ready"] is False, "open for deposits with nothing quotable"
+
+    with pytest.raises(ServiceUnavailable) as raised:
+        initiate_deposit(
+            user=depositor, amount=Decimal("20.00"), phone="+233241234599", network="MTN"
+        )
+    assert raised.value.code == "DEPOSITS_PAUSED"
+
+
+def test_a_pricing_rule_that_matches_nothing_is_no_rule_at_all(catalog, depositor):
+    """Rules are scoped by service and country, so existence is not enough."""
+    from apps.catalog.models import Service
+    from apps.pricing.models import PricingRule
+
+    orphan = Service.objects.create(slug="nothing-sold-here", name="Nothing")
+    PricingRule.objects.all().update(service=orphan)
+
+    assert marketplace_readiness()["ready"] is False
