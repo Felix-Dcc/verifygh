@@ -51,14 +51,21 @@ const ROOT_DOMAIN = "getverifygh.com";
 const API_DOMAIN = `api.${ROOT_DOMAIN}`;
 
 /**
- * The frontend's public domain.
+ * The frontend's public domain, and the bare domain beside it.
  *
- * `www`, not the apex: Namecheap's apex is occupied by a URL redirect to www,
- * and an ALIAS cannot coexist with it. The redirect does the right thing, so
- * the bare domain still reaches the site.
+ * Both serve the site. The apex was expected to redirect to www - Namecheap
+ * has a URL redirect on it - but the ALIAS record wins, so the bare domain
+ * reaches Railway directly.
+ *
+ * That matters for CORS, and it is worth stating because it caused a real
+ * outage: only www was allowlisted, so anyone arriving at the bare domain sent
+ * `Origin: https://getverifygh.com`, had every API call blocked, and saw
+ * "Could not reach VerifyGH" with nothing wrong on either host. Whichever
+ * hostname serves the app has to be an allowed origin.
  */
 const WEB_DOMAIN = `www.${ROOT_DOMAIN}`;
 const WEB_ORIGIN = `https://${WEB_DOMAIN}`;
+const APEX_ORIGIN = `https://${ROOT_DOMAIN}`;
 
 /**
  * The Railway-issued hostnames, kept alive alongside the custom ones.
@@ -146,8 +153,8 @@ function backendEnv(databaseUrl: VariableValue, redisUrl: VariableValue) {
     // Verification and password-reset links are built from this, so it must be
     // the host a customer can actually open.
     FRONTEND_URL: WEB_ORIGIN,
-    CORS_ALLOWED_ORIGINS: `${LEGACY_WEB_ORIGIN},${WEB_ORIGIN}`,
-    CSRF_TRUSTED_ORIGINS: `${LEGACY_WEB_ORIGIN},${WEB_ORIGIN}`,
+    CORS_ALLOWED_ORIGINS: `${LEGACY_WEB_ORIGIN},${WEB_ORIGIN},${APEX_ORIGIN}`,
+    CSRF_TRUSTED_ORIGINS: `${LEGACY_WEB_ORIGIN},${WEB_ORIGIN},${APEX_ORIGIN}`,
 
     // Transactional email. RESEND_API_KEY is a secret and lives in the
     // dashboard; with it set, the app configures Resend's documented SMTP
@@ -269,7 +276,8 @@ export default defineRailway(() => {
     healthcheck: "/",
     healthcheckTimeout: 120,
     networking: {
-      customDomains: { [WEB_DOMAIN]: {} },
+      // Both hostnames are attached; both therefore need to be allowed origins.
+      customDomains: { [WEB_DOMAIN]: {}, [ROOT_DOMAIN]: {} },
     },
     env: {
       // Compiled into the browser bundle at build time, so it must be the
