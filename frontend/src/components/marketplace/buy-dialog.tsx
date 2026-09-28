@@ -207,8 +207,11 @@ export function BuyDialog({
         {!insufficient && !blocker && quote ? (
           <p className="text-xs leading-relaxed text-ink-muted">
             If no verification code arrives before the number expires, the full{" "}
-            {cedis(quote.price)} is returned to your wallet automatically. You are responsible for
-            complying with the terms of the service you verify with.
+            {cedis(quote.price)} is returned to your wallet automatically. Numbers come from our
+            provider&apos;s shared pool and may have been used before, so a service can
+            occasionally treat one as already registered - if that happens, report it from your
+            order screen. You are responsible for complying with the terms of the service you
+            verify with.
           </p>
         ) : null}
       </div>

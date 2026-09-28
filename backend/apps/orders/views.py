@@ -15,7 +15,7 @@ from rest_framework.response import Response
 from apps.common.errors import NotFound
 from apps.common.idempotency import from_request
 from apps.common.permissions import IsActiveUser
-from apps.common.throttling import OrderCreateThrottle
+from apps.common.throttling import IssueReportThrottle, OrderCreateThrottle
 from apps.orders import services
 from apps.orders.models import ACTIVE_ORDER_STATUSES, TERMINAL_ORDER_STATUSES, Order, OrderStatus
 from apps.orders.serializers import (
@@ -77,6 +77,8 @@ class OrderViewSet(
         # Buying is the expensive action, so it gets its own tight bucket.
         if self.action == "create":
             return [OrderCreateThrottle()]
+        if self.action == "report":
+            return [IssueReportThrottle()]
         return super().get_throttles()
 
     def get_serializer_class(self):
@@ -208,6 +210,26 @@ class OrderViewSet(
             reason=str(request.data.get("reason", ""))[:200],
         )
         return Response(OrderDetailSerializer(order, context={"request": request}).data)
+
+    @action(detail=True, methods=["post"])
+    def report(self, request, reference=None):
+        """Report a problem with a delivered number.
+
+        Opens a case for staff; never moves money by itself. A repeat report on
+        the same order returns the existing case with 200 rather than 201.
+        """
+        from apps.numbers.serializers import CustomerIssueSerializer, ReportIssueSerializer
+        from apps.numbers.services import report_issue
+
+        serializer = ReportIssueSerializer(data=request.data)
+        serializer.is_valid(raise_exception=True)
+        issue, created = report_issue(
+            self.get_object(), user=request.user, request=request, **serializer.validated_data
+        )
+        return Response(
+            CustomerIssueSerializer(issue).data,
+            status=status.HTTP_201_CREATED if created else status.HTTP_200_OK,
+        )
 
     # -- summary ---------------------------------------------------------
 

@@ -349,6 +349,12 @@ const STATUS_TONES: Record<string, Tone> = {
   CANCELLED: "neutral",
   FAILED: "danger",
   REFUNDED: "brand",
+  // Number-issue cases
+  OPEN: "warn",
+  IN_REVIEW: "info",
+  REPLACED: "success",
+  REJECTED: "neutral",
+  RESOLVED: "neutral",
   DEPOSIT: "success",
   PURCHASE: "neutral",
   REFUND: "brand",

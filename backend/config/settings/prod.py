@@ -192,15 +192,15 @@ if _payment_provider not in IMPLEMENTED_PAYMENT_PROVIDERS:
     )
 
 # The mock verification provider hands out simulated numbers. In production
-# that means taking real cedis for nothing. Until an authorised provider is
-# configured, run with VERIFICATION_PROVIDER=textverified: its endpoints are
-# deliberately blank, so the catalogue stays empty and nothing can be bought.
+# that means taking real cedis for nothing. OnlineSim is the real provider; with
+# no ONLINESIM_API_KEY it refuses every call, so the catalogue stays empty and
+# nothing can be bought.
 if VERIFYGH["VERIFICATION_PROVIDER"] == "mock" and not env_bool(
     "ALLOW_MOCK_VERIFICATION_IN_PRODUCTION", False
 ):
     raise ImproperlyConfigured(
         "VERIFICATION_PROVIDER=mock would sell simulated numbers for real money. "
-        "Use textverified (inert until configured), or set "
+        "Use onlinesim (inert until ONLINESIM_API_KEY is set), or set "
         "ALLOW_MOCK_VERIFICATION_IN_PRODUCTION=true for a non-public staging stack."
     )
 

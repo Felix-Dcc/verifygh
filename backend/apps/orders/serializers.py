@@ -67,6 +67,10 @@ class OrderDetailSerializer(OrderListSerializer):
     seconds_remaining = serializers.SerializerMethodField()
     can_cancel = serializers.SerializerMethodField()
     can_complete = serializers.SerializerMethodField()
+    can_report = serializers.SerializerMethodField()
+    report_window_ends_at = serializers.SerializerMethodField()
+    issue = serializers.SerializerMethodField()
+    replacement_for = serializers.SerializerMethodField()
 
     class Meta(OrderListSerializer.Meta):
         fields = OrderListSerializer.Meta.fields + [
@@ -84,8 +88,32 @@ class OrderDetailSerializer(OrderListSerializer):
             "can_complete",
             "events",
             "refund",
+            "can_report",
+            "report_window_ends_at",
+            "issue",
+            "replacement_for",
         ]
         read_only_fields = fields
+
+    def get_can_report(self, obj: Order) -> bool:
+        from apps.numbers.services import can_report
+
+        return self._is_owner(obj) and can_report(obj)
+
+    def get_report_window_ends_at(self, obj: Order):
+        from apps.numbers.services import report_window_ends
+
+        return report_window_ends(obj)
+
+    def get_issue(self, obj: Order) -> dict | None:
+        from apps.numbers.serializers import CustomerIssueSerializer
+        from apps.numbers.services import issue_for
+
+        issue = issue_for(obj)
+        return CustomerIssueSerializer(issue).data if issue else None
+
+    def get_replacement_for(self, obj: Order) -> str | None:
+        return (obj.metadata or {}).get("replacement_for")
 
     def _is_owner(self, obj: Order) -> bool:
         request = self.context.get("request")

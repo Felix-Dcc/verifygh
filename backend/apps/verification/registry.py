@@ -22,14 +22,17 @@ from apps.common.errors import ServiceUnavailable
 from apps.verification.base import VerificationProvider
 from apps.verification.mock import MockVerificationProvider
 from apps.verification.onlinesim import OnlineSimProvider
-from apps.verification.textverified import TextVerifiedProvider
 
 logger = logging.getLogger("verifygh.provider")
 
+#: OnlineSim is the only supplier. TextVerified is deliberately absent: it
+#: refused resale permission, so nothing may sync its catalogue, reserve a
+#: number from it or health-check it. `apps/verification/textverified.py` stays
+#: as a documented reference, reachable only by importing it directly - which
+#: is what its endpoint-provenance tests do.
 _REGISTRY: dict[str, type[VerificationProvider]] = {
     MockVerificationProvider.key: MockVerificationProvider,
     OnlineSimProvider.key: OnlineSimProvider,
-    TextVerifiedProvider.key: TextVerifiedProvider,
 }
 
 
@@ -112,6 +115,7 @@ class RateLimitedProvider(VerificationProvider):
         self.display_name = inner.display_name
         self.permits_code_display = inner.permits_code_display
         self.supports_webhooks = inner.supports_webhooks
+        self.supports_issue_reports = inner.supports_issue_reports
         self._limiter = ProviderRateLimiter(
             inner.key, settings.VERIFYGH["PROVIDER_RATE_LIMIT_PER_MINUTE"]
         )
@@ -154,6 +158,17 @@ class RateLimitedProvider(VerificationProvider):
 
     def refund_order(self, provider_order_id: str):
         return self._call("refund_order", provider_order_id)
+
+    def report_number_issue(self, provider_order_id: str, reason: str):
+        if not self._inner.supports_issue_reports:
+            return None
+        return self._call("report_number_issue", provider_order_id, reason)
+
+    def check_number_reuse(self, provider_order_id: str, service_code: str):
+        return self._inner.check_number_reuse(provider_order_id, service_code)
+
+    def release_retry_after_seconds(self, service_code: str) -> int:
+        return self._inner.release_retry_after_seconds(service_code)
 
     def health_check(self) -> bool:
         return self._inner.health_check()

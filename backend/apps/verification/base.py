@@ -159,6 +159,34 @@ class VerificationProvider(abc.ABC):
     def refund_order(self, provider_order_id: str) -> bool:
         """Ask the provider to refund a failed reservation, where its policy allows."""
 
+    # -- number quality ----------------------------------------------------
+
+    #: Whether the provider documents a way to report a number that did not
+    #: work (for example, one a service says is already registered).
+    supports_issue_reports: bool = False
+
+    def report_number_issue(self, provider_order_id: str, reason: str) -> bool | None:
+        """Tell the provider a number was unusable. None when it has no way to hear it.
+
+        True/False is whether the provider accepted the report. Adapters
+        override this only with an endpoint their documentation actually has.
+        """
+        return None
+
+    def check_number_reuse(self, provider_order_id: str, service_code: str) -> bool | None:
+        """Whether the provider says this number was used for this service before.
+
+        None means "unknown", and it is the only honest answer today: neither
+        OnlineSim nor TextVerified documents any history or reuse lookup. It
+        stays in the interface so an adapter can answer if a provider ever
+        publishes one - and so nobody mistakes the absence for "fresh".
+        """
+        return None
+
+    def release_retry_after_seconds(self, service_code: str) -> int:
+        """How long to wait before retrying a release the provider refused."""
+        return 60
+
     # -- health ----------------------------------------------------------
 
     def health_check(self) -> bool:

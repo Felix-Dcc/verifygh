@@ -79,6 +79,7 @@ INSTALLED_APPS = [
     "apps.verification",
     "apps.payments",
     "apps.orders",
+    "apps.numbers",
     "apps.notifications",
     "apps.adminapi",
     "apps.referrals",
@@ -273,6 +274,7 @@ REST_FRAMEWORK = {
         "deposit": "10/hour",
         "otp_submit": "20/hour",
         "order_create": "20/hour",
+        "issue_report": "10/hour",
         "webhook": "600/min",
     },
     "TEST_REQUEST_DEFAULT_FORMAT": "json",
@@ -492,6 +494,21 @@ VERIFYGH = {
     # Upstream call budget — we never hammer a provider API.
     "PROVIDER_RATE_LIMIT_PER_MINUTE": env_int("PROVIDER_RATE_LIMIT_PER_MINUTE", 120),
     "CURRENT_TERMS_VERSION": env("CURRENT_TERMS_VERSION", "2026-01-01"),
+    # -- number quality (apps/numbers). The replacement/refund *policy* lives
+    # here rather than in code, so the business can change it with a variable.
+    #
+    # How long after the code arrived a customer may report a problem.
+    "NUMBER_ISSUE_REPORT_WINDOW_HOURS": env_int("NUMBER_ISSUE_REPORT_WINDOW_HOURS", 72),
+    # What staff may do about an upheld report: any of REFUND, REPLACE. Neither
+    # happens on its own - a delivered code is a delivered service under the
+    # refund policy, so every remedy is a recorded staff decision.
+    "NUMBER_ISSUE_REMEDIES": env_list("NUMBER_ISSUE_REMEDIES", "REFUND,REPLACE"),
+    # Reports by one customer in 30 days before their cases are flagged for a
+    # closer look. Flagged, never refused.
+    "NUMBER_ISSUE_REVIEW_THRESHOLD": env_int("NUMBER_ISSUE_REVIEW_THRESHOLD", 3),
+    # How many times one purchase may turn away a flagged number and draw
+    # again before giving up and refunding.
+    "NUMBER_QUALITY_MAX_REDRAWS": env_int("NUMBER_QUALITY_MAX_REDRAWS", 2),
     # -- referral programme. These seed the ReferralProgram row the first time
     # it is read; after that the database is the source of truth, so an admin
     # can change the bonus without a deploy.

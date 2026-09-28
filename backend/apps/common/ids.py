@@ -29,3 +29,7 @@ def ledger_reference() -> str:
 
 def refund_reference() -> str:
     return f"VGH-RFD-{_token(6)}"
+
+
+def issue_reference() -> str:
+    return f"VGH-ISS-{_token(6)}"

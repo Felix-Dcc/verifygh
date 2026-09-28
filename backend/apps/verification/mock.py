@@ -213,7 +213,7 @@ class MockVerificationProvider(VerificationProvider):
             "created_at": now.isoformat(),
             "assign_after": timings["assign"],
             "code_after": timings["code"],
-            "phone": _fake_number(country_code),
+            "phone": _next_forced_number() or _fake_number(country_code),
             "code": _fake_code(),
             "expires_at": (now + timedelta(minutes=20)).isoformat(),
             "cancelled": False,
@@ -316,11 +316,36 @@ class MockVerificationProvider(VerificationProvider):
             ProviderOrderState.EXPIRED,
         }
 
+    supports_issue_reports = True
+
+    def report_number_issue(self, provider_order_id: str, reason: str) -> bool | None:
+        return cache.get(_key(provider_order_id)) is not None
+
+    def release_retry_after_seconds(self, service_code: str) -> int:
+        return 1
+
     def health_check(self) -> bool:
         return True
 
 
 # -- test helpers -----------------------------------------------------------
+
+
+def force_numbers(numbers: list[str] | None) -> None:
+    """Make the next mock orders hand out these numbers, in order.
+
+    Lets a test reproduce a provider giving us a number we have seen before.
+    """
+    cache.set(f"{CACHE_PREFIX}forced_numbers", list(numbers or []), CACHE_TTL)
+
+
+def _next_forced_number() -> str | None:
+    queue = cache.get(f"{CACHE_PREFIX}forced_numbers") or []
+    if not queue:
+        return None
+    number, rest = queue[0], queue[1:]
+    cache.set(f"{CACHE_PREFIX}forced_numbers", rest, CACHE_TTL)
+    return number
 
 
 def force_scenario(name: str | None) -> None:

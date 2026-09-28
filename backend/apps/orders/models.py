@@ -268,6 +268,9 @@ class RefundReason(models.TextChoices):
     USER_CANCELLED = "USER_CANCELLED", "Cancelled before use"
     ADMIN_GOODWILL = "ADMIN_GOODWILL", "Goodwill refund"
     DUPLICATE_ORDER = "DUPLICATE_ORDER", "Duplicate order"
+    #: A code was delivered but staff upheld a report that the number could not
+    #: be used for the service - see apps/numbers.
+    NUMBER_UNUSABLE = "NUMBER_UNUSABLE", "Number unusable for the service"
 
 
 class Refund(BaseModel):

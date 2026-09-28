@@ -65,17 +65,30 @@ def test_every_mapped_state_is_a_documented_state():
     assert not unhandled, f"documented states with no mapping: {sorted(unhandled)}"
 
 
-def test_a_catalog_sync_against_unconfigured_textverified_fails_cleanly(db):
+def test_textverified_cannot_be_synced(db):
     from apps.catalog.services import sync_catalog
+    from apps.common.errors import ServiceUnavailable
 
-    summary = sync_catalog("textverified")
+    with pytest.raises(ServiceUnavailable):
+        sync_catalog("textverified")
 
-    assert summary["errors"], "an unconfigured provider must report, not pretend"
-    assert summary["offerings"] == 0
+    assert not Provider.objects.filter(adapter_key="textverified").exists()
     assert not ProviderService.objects.filter(provider__adapter_key="textverified").exists()
 
 
-def test_an_order_that_reaches_unconfigured_textverified_is_refunded(
+def test_a_catalog_sync_against_unconfigured_onlinesim_fails_cleanly(db, settings):
+    from apps.catalog.services import sync_catalog
+
+    settings.PROVIDER_CREDENTIALS = {**settings.PROVIDER_CREDENTIALS,
+                                     "onlinesim": {"api_key": "", "base_url": "",
+                                                   "currency": "USD"}}
+    summary = sync_catalog("onlinesim")
+
+    assert summary["errors"], "an unconfigured provider must report, not pretend"
+    assert summary["offerings"] == 0
+
+
+def test_an_order_that_reaches_a_removed_provider_is_refunded(
     user, auth, exchange_rate, pricing_rule, funded_wallet, django_capture_on_commit_callbacks
 ):
     """If an offering somehow exists, the customer still cannot lose money."""

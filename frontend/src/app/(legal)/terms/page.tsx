@@ -104,6 +104,12 @@ export default function TermsPage() {
           A number is for a single verification. Do not treat it as a number you control or can
           rely on afterwards.
         </li>
+        <li>
+          Numbers come from our provider&apos;s shared pool and are reissued over time. We do not
+          guarantee that a number has never been used with a particular service before, and
+          neither we nor our provider can check a number&apos;s history with another service in
+          advance.
+        </li>
       </ul>
 
       <h2>6. Refunds</h2>
@@ -122,6 +128,13 @@ export default function TermsPage() {
         <li>
           <strong>A verification code was delivered:</strong> the service was provided, so no
           automatic refund applies.
+        </li>
+        <li>
+          <strong>The number could not be used because the service treated it as already
+          registered (or rejected it):</strong> report it from your order screen within the time
+          shown there. We review every report; where we confirm the number was unusable for the
+          service you bought it for, we give you a replacement number or refund the order to your
+          wallet. A report is not an automatic refund.
         </li>
       </ul>
       <p>

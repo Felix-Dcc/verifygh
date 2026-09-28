@@ -387,9 +387,11 @@ def fulfil_order(order: Order) -> Order:
     if order.status != OrderStatus.PROCESSING:
         return order
 
-    provider = get_provider(order.provider.adapter_key)
-
     try:
+        # Inside the try: an order whose provider has since been removed from
+        # the registry must be refunded like any other provider failure, not
+        # left in PROCESSING by an exception.
+        provider = get_provider(order.provider.adapter_key)
         result = provider.create_order(
             order.provider_service_code or order.service.slug,
             order.country.code,
@@ -409,6 +411,36 @@ def fulfil_order(order: Order) -> Order:
             reason=result.failure_reason or "The provider could not supply a number.",
             provider_order_id=result.provider_order_id,
         )
+
+    # Screen out numbers customers have reported for this service. Neither
+    # provider lets us ask for "a number never used for TikTok" - OnlineSim's
+    # only exclusion is digit masks of an undocumented format - so the check is
+    # ours: turn the flagged number away, release it, and draw again.
+    from apps.numbers import services as numbers
+
+    redraws = 0
+    while result.phone_number and numbers.is_excluded(order, result.phone_number):
+        numbers.turn_away(order, provider, result)
+        if redraws >= int(settings.VERIFYGH["NUMBER_QUALITY_MAX_REDRAWS"]):
+            return fail_order(
+                order,
+                reason="We could not find a suitable number for this service right now.",
+            )
+        redraws += 1
+        try:
+            result = provider.create_order(
+                order.provider_service_code or order.service.slug,
+                order.country.code,
+                idempotency_key=f"vgh:{order.id}:redraw:{redraws}",
+            )
+        except (ProviderError, ServiceUnavailable):
+            return fail_order(order, reason="The provider could not supply a number.")
+        if result.state == ProviderOrderState.FAILED:
+            return fail_order(
+                order,
+                reason=result.failure_reason or "The provider could not supply a number.",
+                provider_order_id=result.provider_order_id,
+            )
 
     if result.state == ProviderOrderState.PENDING or not result.phone_number:
         # The provider accepted the reservation but has not allocated a number
@@ -435,6 +467,8 @@ def fulfil_order(order: Order) -> Order:
             "expires_at": expires_at,
         },
     )
+
+    numbers.note_assigned(order)
 
     from apps.notifications.services import notify
 
@@ -467,9 +501,8 @@ def poll_order(order: Order) -> Order:
     if not order.provider_order_id:
         return order
 
-    provider = get_provider(order.provider.adapter_key)
-
     try:
+        provider = get_provider(order.provider.adapter_key)
         result = provider.get_order_status(order.provider_order_id)
     except (ProviderError, ServiceUnavailable):
         logger.warning("order_poll_failed", extra={"order": order.reference})
@@ -485,6 +518,15 @@ def poll_order(order: Order) -> Order:
         return fail_order(order, reason=result.failure_reason or "The provider ended this order.")
 
     if result.phone_number and order.status == OrderStatus.PROCESSING:
+        from apps.numbers import services as numbers
+
+        if numbers.is_excluded(order, result.phone_number):
+            # Allocated late, so there is no clean way to draw again from here.
+            # Release it and refund rather than sell a flagged number.
+            numbers.turn_away(order, provider, result)
+            return fail_order(
+                order, reason="We could not find a suitable number for this service right now."
+            )
         # The number has now been allocated - catch the order up.
         order = transition(
             order,
@@ -495,6 +537,7 @@ def poll_order(order: Order) -> Order:
                 "expires_at": result.expires_at or order.expires_at,
             },
         )
+        numbers.note_assigned(order)
         if order.status == OrderStatus.NUMBER_ASSIGNED:
             order = transition(order, OrderStatus.WAITING_FOR_CODE)
     elif result.phone_number and not order.phone_number:
@@ -658,7 +701,7 @@ def split_refund(order: Order, amount) -> tuple[Decimal, Decimal]:
 
 
 def issue_refund(order: Order, *, reason: str, amount=None, actor=None, note: str = "",
-                 automatic: bool = True) -> Order:
+                 automatic: bool = True, override_delivered: bool = False) -> Order:
     """Refund an order.
 
     Refund policy, in one place:
@@ -668,14 +711,24 @@ def issue_refund(order: Order, *, reason: str, amount=None, actor=None, note: st
       * code delivered (service rendered)     -> no automatic refund
       * anything else                         -> an admin decides, with a reason
 
+    `override_delivered` is the one exception to "a delivered code is a
+    delivered service": staff upholding a customer's report that the number
+    could not be used (apps/numbers). It is never automatic - the caller must
+    also pass automatic=False and an actor - and it is audited like any refund.
+
     Every refund creates an immutable ledger entry. The OneToOne on Refund means
     a second attempt cannot create a second credit.
     """
     if order.refund_status == RefundStatus.COMPLETED:
         return order
 
+    if override_delivered and (automatic or actor is None):
+        raise ValueError("override_delivered needs a staff actor and automatic=False.")
+
     code_delivered = bool(order.verification_code or order.code_received_at)
-    if order.status == OrderStatus.COMPLETED or (automatic and code_delivered):
+    if not override_delivered and (
+        order.status == OrderStatus.COMPLETED or (automatic and code_delivered)
+    ):
         # The user received what they paid for. Checked on the code itself, not
         # only the status, so no future transition path can turn a delivered
         # service into an automatic refund. Admin refunds (automatic=False)
@@ -779,7 +832,8 @@ def issue_refund(order: Order, *, reason: str, amount=None, actor=None, note: st
     )
     record_audit(
         actor=actor, action="ORDER_REFUNDED", target=order,
-        metadata={"amount": str(refund_amount), "reason": reason, "automatic": automatic},
+        metadata={"amount": str(refund_amount), "reason": reason, "automatic": automatic,
+                  "override_delivered": override_delivered},
     )
     logger.info(
         "order_refunded",

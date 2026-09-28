@@ -8,6 +8,7 @@ import useSWR, { mutate as globalMutate } from "swr";
 import { PageHeader } from "@/components/app-shell";
 import { CheckCircleIcon, ClockIcon, CopyIcon } from "@/components/icons";
 import { OrderTimeline } from "@/components/orders/order-timeline";
+import { ReportProblem } from "@/components/orders/report-problem";
 import { ConfirmDialog } from "@/components/ui/dialog";
 import {
   Alert,
@@ -172,6 +173,16 @@ export default function OrderDetailPage() {
         </Alert>
       ) : null}
 
+      {order.replacement_for ? (
+        <Alert tone="info" title="Free replacement">
+          This number replaces one from order{" "}
+          <Link href={`/orders/${order.replacement_for}`} className="underline">
+            {order.replacement_for}
+          </Link>{" "}
+          that could not be used. There was no charge.
+        </Alert>
+      ) : null}
+
       {order.failure_reason ? (
         <Alert tone="warn" title="What happened">
           {order.failure_reason}
@@ -225,6 +236,8 @@ export default function OrderDetailPage() {
               </p>
             </Card>
           ) : null}
+
+          <ReportProblem order={order} onReported={() => mutate()} />
         </div>
 
         <div className="space-y-4 lg:col-span-2">

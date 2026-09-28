@@ -461,9 +461,25 @@ class TextVerifiedProvider(VerificationProvider):
             return False
         return True
 
+    #: `POST /verifications/{id}/report` is documented for issues "such as
+    #: 'number already in use', 'verification failed', or 'code not received'".
+    supports_issue_reports = True
+
     def refund_order(self, provider_order_id: str) -> bool:
         """Report a verification that did not work, which is their refund path."""
         self._require_configured("refunding an order")
+        return self._report(provider_order_id)
+
+    def report_number_issue(self, provider_order_id: str, reason: str) -> bool | None:
+        """The same documented report call. It takes no body, so `reason` stays ours.
+
+        It returns 400 when "the verification does not allow reporting" - after
+        their own window, for instance - which comes back here as False.
+        """
+        self._require_configured("reporting a number")
+        return self._report(provider_order_id)
+
+    def _report(self, provider_order_id: str) -> bool:
         try:
             self._request("POST", self._url(self.PATH_ORDER_REFUND, id=provider_order_id))
         except ProviderError:

@@ -32,7 +32,9 @@ SAFE = {
     "TRUSTED_PROXY_COUNT": "1",
     "PAYMENT_PROVIDER": "paystack",
     "PAYSTACK_SECRET_KEY": "sk_live_" + "0" * 40,
-    "VERIFICATION_PROVIDER": "textverified",
+    "VERIFICATION_PROVIDER": "onlinesim",
+    # Empty, so the real provider is present but refuses every call.
+    "ONLINESIM_API_KEY": "",
     "WEBHOOK_PROVIDERS": "",
     "ALLOW_MOCK_VERIFICATION_IN_PRODUCTION": "",
     "ALLOW_PAYSTACK_TEST_KEYS": "",
@@ -154,14 +156,13 @@ def test_a_dotenv_file_is_ignored_in_production(tmp_path):
     assert "Missing required production environment variables: SECRET_KEY" in result.stderr
 
 
-def test_textverified_is_inert_in_the_safe_baseline():
-    """The production default sells nothing until an authorised provider is
-    configured from official documentation."""
+def test_onlinesim_is_inert_in_the_safe_baseline():
+    """Without its API key the real provider sells nothing."""
     result = subprocess.run(
         [sys.executable, "-c",
          "import django; django.setup(); "
          "from apps.verification.registry import get_provider as g; "
-         "p = g('textverified'); print('CONFIGURED', p.health_check())"],
+         "p = g('onlinesim'); print('CONFIGURED', p.health_check())"],
         cwd=BACKEND, env={**{k: v for k, v in os.environ.items() if k not in SCRUB}, **SAFE},
         capture_output=True, text=True, timeout=120,
     )

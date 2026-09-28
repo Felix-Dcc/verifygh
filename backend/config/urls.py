@@ -11,6 +11,7 @@ from rest_framework.routers import DefaultRouter
 from apps.adminapi import views as admin_views
 from apps.catalog import views as catalog_views
 from apps.notifications import views as notification_views
+from apps.numbers import admin_api as numbers_admin
 from apps.orders import views as order_views
 from apps.payments import views as payment_views
 from apps.referrals import admin_api as referral_admin
@@ -49,6 +50,9 @@ admin_router.register("flags", admin_views.AdminFlagViewSet, basename="admin-fla
 admin_router.register(
     "referrals", referral_admin.AdminReferralViewSet, basename="admin-referral"
 )
+admin_router.register(
+    "number-issues", numbers_admin.AdminIssueViewSet, basename="admin-number-issue"
+)
 
 api_v1 = [
     path("auth/", include("apps.accounts.urls")),
@@ -70,6 +74,11 @@ api_v1 = [
         name="payment-webhook",
     ),
     path("catalog/health/", catalog_views.CatalogHealthView.as_view(), name="catalog-health"),
+    path(
+        "admin/number-issues-metrics/",
+        numbers_admin.AdminIssueMetricsView.as_view(),
+        name="admin-number-issue-metrics",
+    ),
     path("admin/overview/", admin_views.AdminOverviewView.as_view(), name="admin-overview"),
     path("admin/charts/", admin_views.AdminChartsView.as_view(), name="admin-charts"),
     path("admin/health/", admin_views.AdminSystemHealthView.as_view(), name="admin-health"),

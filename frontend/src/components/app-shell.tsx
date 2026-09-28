@@ -10,6 +10,7 @@ import { Logo, Logomark } from "@/components/brand";
 import {
   BellIcon,
   ChartIcon,
+  FlagIcon,
   GiftIcon,
   GridIcon,
   HomeIcon,
@@ -47,6 +48,7 @@ const ADMIN_NAV: NavItem[] = [
   { href: "/admin", label: "Overview", icon: ChartIcon },
   { href: "/admin/users", label: "Users", icon: UsersIcon },
   { href: "/admin/orders", label: "Orders", icon: ReceiptIcon },
+  { href: "/admin/issues", label: "Number issues", icon: FlagIcon },
   { href: "/admin/payments", label: "Payments", icon: WalletIcon },
   { href: "/admin/catalog", label: "Catalog", icon: GridIcon },
   { href: "/admin/referrals", label: "Referrals", icon: GiftIcon },

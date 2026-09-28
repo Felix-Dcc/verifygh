@@ -34,6 +34,7 @@ class AdminPermission(models.TextChoices):
     REFERRAL_VIEW = "REFERRAL_VIEW", "View referrals and referral analytics"
     REFERRAL_MANAGE = "REFERRAL_MANAGE", "Approve, reject and flag referrals"
     METRICS_VIEW = "METRICS_VIEW", "View dashboards and metrics"
+    ISSUE_MANAGE = "ISSUE_MANAGE", "Review, reject and resolve number-issue reports"
 
 
 _SUPPORT = {
@@ -54,6 +55,9 @@ _ADMIN = _SUPPORT | {
     # Approving a held referral issues promotional credit, so it stays with
     # admins. Reversing one needs WALLET_ADJUST, which is super-admin only.
     AdminPermission.REFERRAL_MANAGE,
+    # Moving a report along without money. Refunds and replacements still
+    # need ORDER_REFUND.
+    AdminPermission.ISSUE_MANAGE,
 }
 
 _SUPER_ADMIN = _ADMIN | {

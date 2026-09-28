@@ -113,6 +113,10 @@ class OrderCreateThrottle(NamedScopeThrottle):
     scope = "order_create"
 
 
+class IssueReportThrottle(NamedScopeThrottle):
+    scope = "issue_report"
+
+
 class WebhookThrottle(NamedScopeThrottle):
     scope = "webhook"
 

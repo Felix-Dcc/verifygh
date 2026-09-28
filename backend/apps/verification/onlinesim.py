@@ -647,6 +647,16 @@ class OnlineSimProvider(VerificationProvider):
         logger.info("onlinesim_order_cancelled", extra={"tzid": provider_order_id})
         return True
 
+    def release_retry_after_seconds(self, service_code: str) -> int:
+        """The documented protective interval, plus a margin.
+
+        An operation with no SMS cannot be closed for 120 seconds - 300 for
+        WhatsApp. OnlineSim documents no way to report a number or look up its
+        history, so `report_number_issue` and `check_number_reuse` keep the
+        base class's "not supported" answers.
+        """
+        return (300 if "whatsapp" in service_code.lower() else 120) + 15
+
     def refund_order(self, provider_order_id: str) -> bool:
         """OnlineSim has no separate refund endpoint.
 

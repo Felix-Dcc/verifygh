@@ -191,8 +191,9 @@ def test_sync_refreshes_cost_and_availability(catalog):
 # ---------------------------------------------------------------------------
 
 
-def test_both_adapters_are_registered():
-    assert set(available_adapters()) >= {"mock", "textverified"}
+def test_only_onlinesim_and_the_mock_are_registered():
+    # TextVerified refused resale permission; nothing may sync or order from it.
+    assert set(available_adapters()) == {"mock", "onlinesim"}
 
 
 def test_the_mock_provider_satisfies_the_full_interface():

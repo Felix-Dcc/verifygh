@@ -240,6 +240,12 @@ export type Order = OrderSummary & {
   seconds_remaining: number;
   can_cancel: boolean;
   can_complete: boolean;
+  /** Whether "Report a problem" is offered: a code arrived, within the window, no case yet. */
+  can_report: boolean;
+  report_window_ends_at: string | null;
+  issue: OrderIssue | null;
+  /** Set on a free replacement: the reference of the order it replaces. */
+  replacement_for: string | null;
   events: OrderEvent[];
   refund: {
     reference: string;
@@ -366,6 +372,129 @@ export type AdminUser = {
   open_flags: number;
   last_login: string | null;
   created_at: string;
+};
+
+export type IssueReason =
+  | "NUMBER_ALREADY_LINKED"
+  | "SMS_NOT_RECEIVED"
+  | "OTP_DID_NOT_WORK"
+  | "SERVICE_REJECTED_NUMBER"
+  | "OTHER";
+
+export type IssueStatus = "OPEN" | "IN_REVIEW" | "REFUNDED" | "REPLACED" | "REJECTED" | "RESOLVED";
+
+/** A customer's report on their own order, as the customer sees it. */
+export type OrderIssue = {
+  reference: string;
+  reason: IssueReason;
+  reason_label: string;
+  status: IssueStatus;
+  status_label: string;
+  message: string;
+  replacement_order_reference: string | null;
+  created_at: string;
+};
+
+export type AdminNumberIssue = {
+  id: string;
+  reference: string;
+  order_reference: string;
+  order_status: string;
+  customer_id: string;
+  customer_email: string;
+  provider_name: string;
+  provider_key: string;
+  service_name: string;
+  country_code: string;
+  number_masked: string;
+  reason: IssueReason;
+  reason_label: string;
+  details: string;
+  status: IssueStatus;
+  status_label: string;
+  qualifies: boolean;
+  qualification: { check: string; ok: boolean }[];
+  risk_flags: { code: string; detail: string }[];
+  needs_review: boolean;
+  resolution_note: string;
+  resolved_by_email: string | null;
+  resolved_at: string | null;
+  replacement_order_reference: string | null;
+  replacement_order_status: string | null;
+  provider_report: "NOT_SUPPORTED" | "NOT_SENT" | "ACCEPTED" | "REFUSED";
+  price: string;
+  refund: { reference: string; amount: string; reason: string; status: string } | null;
+  created_at: string;
+};
+
+export type AdminNumberIssueDetail = AdminNumberIssue & {
+  history: {
+    quality: string;
+    quality_label: string;
+    times_issued: number;
+    reports: number;
+    other_reports_by_other_customers: number;
+    first_issued_at: string | null;
+    by_service: {
+      service: string;
+      quality: string;
+      quality_label: string;
+      times_issued: number;
+      reports: number;
+    }[];
+    usages: {
+      order: string;
+      disposition: string;
+      acquired_at: string;
+      assigned_at: string | null;
+      sms_received_at: string | null;
+      same_customer: boolean;
+    }[];
+    provider_history_available: boolean;
+  } | null;
+  timeline: {
+    acquired_at: string | null;
+    assigned_at: string | null;
+    sms_received_at: string | null;
+    completed_at: string | null;
+    reported_at: string;
+    refund_status: string;
+  };
+  customer: {
+    joined: string;
+    orders: number;
+    orders_with_code: number;
+    reports: number;
+    remedies: number;
+  };
+};
+
+export type NumberIssueBreakdown = {
+  name: string;
+  delivered: number;
+  possible_reuse_reports: number;
+  reported_rate_percent: number | null;
+};
+
+export type NumberIssueMetrics = {
+  days: number;
+  numbers_purchased: number;
+  sms_received: number;
+  reports_total: number;
+  reports_by_reason: Record<IssueReason, number>;
+  possible_reuse_reports: number;
+  possible_reuse_rate_percent: number | null;
+  open_cases: number;
+  needs_review: number;
+  refunded_orders: number;
+  refunded_amount: string;
+  replacement_orders: number;
+  rejected: number;
+  numbers_turned_away: number;
+  flagged_numbers: number;
+  by_provider: NumberIssueBreakdown[];
+  by_service: NumberIssueBreakdown[];
+  note: string;
 };
 
 export type AdminOrder = {

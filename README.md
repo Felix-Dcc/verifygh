@@ -25,7 +25,7 @@ console all work with no credentials and no real money.
 |---|---|
 | Backend | Django 5 + DRF, **317 tests passing** (+5 PostgreSQL-only, run in CI), ruff clean |
 | Frontend | Next.js 14 (App Router) + TypeScript + Tailwind, 26 routes, builds clean |
-| Providers | `mock` by default; `paystack` and `textverified` adapters ready for credentials |
+| Providers | `mock` by default; `paystack` and `onlinesim` in production |
 
 **What is not done:** live provider credentials, and the open items in
 [docs/AUDIT.md](docs/AUDIT.md#open-items-before-going-live). See
@@ -95,7 +95,7 @@ backend/            Django 5 + DRF + Celery
     payments/       Payment, webhooks, PaymentProvider interface + adapters
     catalog/        Country, Service, Provider, ProviderService, sync
     pricing/        PricingRule, ExchangeRate, the quote engine
-    verification/   VerificationProvider interface + Mock/TextVerified
+    verification/   VerificationProvider interface + Mock/OnlineSim
     orders/         Order state machine, refunds, Celery tasks
     notifications/  Notification model + channel abstraction
     adminapi/       Role-gated admin endpoints
