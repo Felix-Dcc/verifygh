@@ -6,7 +6,7 @@ from datetime import timedelta
 from celery import shared_task
 from django.utils import timezone
 
-from apps.payments.models import Payment, PaymentStatus
+from apps.payments.models import AWAITING_PAYMENT_STATUSES, Payment, PaymentStatus
 from apps.payments.services import reconcile_payment
 
 logger = logging.getLogger("verifygh.payments")
@@ -21,8 +21,12 @@ def expire_stale_payments() -> dict:
     payment the provider actually collected.
     """
     now = timezone.now()
+    # Every state that has not moved money, not just the original two. When the
+    # OTP and handset-approval states were split out of PROCESSING, this filter
+    # was left behind, and payments in those states became invisible to it:
+    # never expired, and never asked about.
     stale = Payment.objects.filter(
-        status__in=[PaymentStatus.PENDING, PaymentStatus.PROCESSING],
+        status__in=AWAITING_PAYMENT_STATUSES,
         expires_at__lt=now,
     )[:200]
 
@@ -34,7 +38,7 @@ def expire_stale_payments() -> dict:
         if refreshed.status == PaymentStatus.SUCCESS:
             recovered += 1
             continue
-        if refreshed.status in (PaymentStatus.PENDING, PaymentStatus.PROCESSING):
+        if refreshed.status in AWAITING_PAYMENT_STATUSES:
             Payment.objects.filter(pk=payment.pk, credited_at__isnull=True).update(
                 status=PaymentStatus.EXPIRED,
                 failure_reason="The payment prompt expired before it was approved.",
@@ -51,8 +55,11 @@ def expire_stale_payments() -> dict:
 def reconcile_recent_payments(minutes: int = 120) -> dict:
     """Catch payments whose webhook never arrived."""
     since = timezone.now() - timedelta(minutes=minutes)
+    # This sweep is what recovers a deposit whose webhook was dropped. Leaving
+    # the OTP and handset-approval states out of it meant a customer who
+    # approved late, and whose callback never arrived, would never be credited.
     pending = Payment.objects.filter(
-        status__in=[PaymentStatus.PENDING, PaymentStatus.PROCESSING],
+        status__in=AWAITING_PAYMENT_STATUSES,
         created_at__gte=since,
     )[:200]
 

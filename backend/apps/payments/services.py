@@ -32,6 +32,7 @@ from apps.common.logging import mask_phone, redact_mapping
 from apps.common.money import quantize
 from apps.payments.base import ChargeStatus
 from apps.payments.models import (
+    AWAITING_PAYMENT_STATUSES,
     TERMINAL_PAYMENT_STATUSES,
     Payment,
     PaymentStatus,
@@ -106,7 +107,8 @@ def deposits_blocked_reason() -> str:
     )
 
 
-def initiate_deposit(*, user, amount, phone: str, network: str, request=None) -> Payment:
+def initiate_deposit(*, user, amount, phone: str, network: str, request=None,
+                     network_source: str = "", detected_network: str = "") -> Payment:
     amount = quantize(amount)
     wallet = get_or_create_wallet(user)
 
@@ -148,8 +150,15 @@ def initiate_deposit(*, user, amount, phone: str, network: str, request=None) ->
         status=PaymentStatus.PENDING,
         expires_at=timezone.now() + timedelta(minutes=ttl_minutes),
         ip_address=getattr(request, "client_ip", None) or None,
-        metadata={"user_agent": (request.META.get("HTTP_USER_AGENT", "")[:200]
-                                 if request else "")},
+        metadata={
+            "user_agent": (request.META.get("HTTP_USER_AGENT", "")[:200] if request else ""),
+            # How the network was decided, and what the prefix alone would have
+            # said. Previously the prefix silently replaced the customer's choice
+            # and left no trace of it, so a ported number that failed looked
+            # identical to one the customer had chosen correctly.
+            "network_source": network_source or "unknown",
+            "prefix_network": detected_network,
+        },
     )
 
     try:
@@ -170,6 +179,19 @@ def initiate_deposit(*, user, amount, phone: str, network: str, request=None) ->
         logger.warning("deposit_initiation_failed", extra={"reference": reference})
         raise
 
+    _note_provider_status(payment, charge, initial=True)
+    logger.info(
+        "deposit_charge_created",
+        extra={
+            "reference": reference,
+            "provider": provider.key,
+            "network": network,
+            # The suffix is enough to find the payment; the full number is not
+            # needed in a log and is not written there.
+            "phone_suffix": phone[-4:],
+            "provider_status": str((charge.raw or {}).get("status", ""))[:40],
+        },
+    )
     payment.provider_reference = charge.provider_reference
     payment.instructions = charge.instructions[:255]
     payment.status = _CHARGE_TO_PAYMENT.get(charge.status, PaymentStatus.PROCESSING)
@@ -308,6 +330,7 @@ def _apply_charge_state(payment: Payment, charge) -> Payment:
     browser, however successful it looks.
     """
     new_status = _CHARGE_TO_PAYMENT.get(charge.status, PaymentStatus.PROCESSING)
+    _note_provider_status(payment, charge)
 
     with transaction.atomic():
         locked = Payment.objects.select_for_update().get(pk=payment.pk)
@@ -341,11 +364,40 @@ def _apply_charge_state(payment: Payment, charge) -> Payment:
     return locked
 
 
+def _note_provider_status(payment: Payment, charge, *, initial: bool = False) -> None:
+    """Remember what the provider literally said, for whoever debugs this next.
+
+    Diagnostic only: nothing reads these fields to decide anything about money.
+    They exist because a report of "the code never arrived" is unanswerable
+    without them - our own status is a normalised summary, and the difference
+    between Paystack answering `send_otp` and `pay_offline` is exactly the
+    detail that summary throws away.
+    """
+    raw = str((getattr(charge, "raw", None) or {}).get("status", "") or "")[:40]
+    if not raw:
+        return
+    now = timezone.now().isoformat()
+    try:
+        with transaction.atomic():
+            locked = Payment.objects.select_for_update().only("metadata").get(pk=payment.pk)
+            meta = dict(locked.metadata or {})
+            if initial:
+                meta["provider_status_initial"] = raw
+            meta["provider_status_latest"] = raw
+            meta["provider_checked_at"] = now
+            Payment.objects.filter(pk=payment.pk).update(metadata=meta)
+    except Exception:
+        # Losing a diagnostic must never cost a payment.
+        logger.warning("provider_status_note_failed", extra={"reference": payment.reference})
+
+
 def _check_pending_deposits(user) -> None:
     """Stop a user stacking up prompts they never approve."""
+    # All the unfinished states. Counting only the original two let a customer
+    # stack up any number of payments stuck waiting for a code.
     pending = Payment.objects.filter(
         user=user,
-        status__in=[PaymentStatus.PENDING, PaymentStatus.PROCESSING],
+        status__in=AWAITING_PAYMENT_STATUSES,
         created_at__gte=timezone.now() - timedelta(minutes=15),
     ).count()
     if pending >= 3:
@@ -756,6 +808,8 @@ def reconcile_payment(payment: Payment) -> Payment:
     except Exception:
         logger.warning("payment_reconcile_failed", extra={"reference": payment.reference})
         return payment
+
+    _note_provider_status(payment, charge)
 
     if charge.status == ChargeStatus.SUCCESS:
         from apps.payments.base import WebhookEventDTO

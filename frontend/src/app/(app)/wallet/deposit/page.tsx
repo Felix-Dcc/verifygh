@@ -76,8 +76,12 @@ function DepositForm({
     return options?.networks.find((item) => item.prefixes.includes(prefix)) ?? null;
   }, [phone, options]);
 
+  // Prefill from the prefix, but only until the customer chooses. Without this
+  // guard, editing a single digit of the number would silently snap a ported
+  // number back to its original network.
+  const userPickedNetwork = React.useRef(false);
   React.useEffect(() => {
-    if (detected) setNetwork(detected.value);
+    if (detected && !userPickedNetwork.current) setNetwork(detected.value);
   }, [detected]);
 
   async function onSubmit(event: React.FormEvent) {
@@ -90,6 +94,7 @@ function DepositForm({
       const payment = await api.post<PaymentType>("/payments/deposit/", {
         amount,
         phone,
+        // Sent whenever set. The backend now honours it over the prefix.
         ...(network ? { network } : {}),
       });
       onStarted(payment);
@@ -194,15 +199,7 @@ function DepositForm({
           label="Mobile Money number"
           htmlFor="phone"
           error={fieldErrors.phone}
-          hint={
-            detected ? (
-              <span className="text-brand-700">
-                Detected: {detected.label}. The prompt goes to this number.
-              </span>
-            ) : (
-              "Any format works - 024 123 4567 or +233 24 123 4567."
-            )
-          }
+          hint="Any format works - 024 123 4567 or +233 24 123 4567."
           required
         >
           <Input
@@ -219,30 +216,50 @@ function DepositForm({
           />
         </Field>
 
-        {!detected ? (
-          <Field
-            label="Mobile Money network"
-            htmlFor="network"
-            error={fieldErrors.network}
-            hint="We could not tell from the number, so please choose."
+        {/* Always shown, and only ever prefilled from the number.
+
+            This used to appear only when the prefix was unrecognised - so an
+            026 number showed "Detected: AirtelTigo" and offered no way to say
+            otherwise. Ghana has number portability: that number may well be on
+            Telecel now. Its owner had no way to tell us, the charge went to
+            AirtelTigo Money, and the code they waited for never arrived. */}
+        <Field
+          label="Mobile Money network"
+          htmlFor="network"
+          error={fieldErrors.network}
+          hint={
+            detected && network && network !== detected.value ? (
+              <span className="text-warn-700">
+                This number started on {detected.label}. That is fine if you have since
+                moved it - we will charge the network you chose.
+              </span>
+            ) : detected ? (
+              "Filled in from your number. Change it if you have moved networks."
+            ) : (
+              "Choose the network your Mobile Money wallet is on."
+            )
+          }
+          required
+        >
+          <Select
+            id="network"
+            value={network}
+            onChange={(event) => {
+              setNetwork(event.target.value);
+              // Once they have chosen, stop the number field overriding it.
+              userPickedNetwork.current = true;
+            }}
+            invalid={Boolean(fieldErrors.network)}
             required
           >
-            <Select
-              id="network"
-              value={network}
-              onChange={(event) => setNetwork(event.target.value)}
-              invalid={Boolean(fieldErrors.network)}
-              required
-            >
-              <option value="">Select your network</option>
-              {options.networks.map((item) => (
-                <option key={item.value} value={item.value}>
-                  {item.label}
-                </option>
-              ))}
-            </Select>
-          </Field>
-        ) : null}
+            <option value="">Select your network</option>
+            {options.networks.map((item) => (
+              <option key={item.value} value={item.value}>
+                {item.label}
+              </option>
+            ))}
+          </Select>
+        </Field>
 
         <div className="rounded-xl bg-canvas p-3.5 text-sm">
           <div className="flex items-center justify-between">

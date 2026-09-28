@@ -13,8 +13,18 @@ from apps.payments.models import Payment
 class DepositSerializer(serializers.Serializer):
     """Start a MoMo deposit.
 
-    The network is optional: we can infer it from the number's prefix, which is
-    one less thing for the user to get wrong on a phone keyboard.
+    The network is optional: when it is missing we infer it from the number's
+    prefix. When the customer states one, theirs wins.
+
+    That order matters, and it used to be the other way round. Ghana has had
+    mobile number portability since 2011: a number keeps its original prefix
+    when its owner moves network. A customer on Telecel with an 026 number -
+    originally AirtelTigo - was having their explicit choice silently replaced
+    by the prefix, so the charge went to AirtelTigo Money, where they have no
+    wallet, and the one-time code they were waiting for never came.
+
+    The prefix knows which network issued a number. Only the customer knows
+    which network it is on today.
     """
 
     amount = serializers.DecimalField(max_digits=10, decimal_places=2, min_value=Decimal("1.00"))
@@ -39,10 +49,13 @@ class DepositSerializer(serializers.Serializer):
                                 "Please choose it."}
                 )
             attrs["network"] = detected
-        elif detected and detected != network:
-            # Trust the prefix over the dropdown: sending a charge to the wrong
-            # network just fails at the aggregator.
-            attrs["network"] = detected
+            attrs["network_source"] = "prefix"
+        else:
+            # The customer's choice stands, even against the prefix. Recorded
+            # when they disagree, because that pair is exactly what support
+            # needs to see when someone reports a code that never arrived.
+            attrs["network_source"] = "customer"
+            attrs["detected_network"] = detected or ""
 
         minimum = Decimal(str(settings.VERIFYGH["MIN_DEPOSIT"]))
         maximum = Decimal(str(settings.VERIFYGH["MAX_DEPOSIT"]))

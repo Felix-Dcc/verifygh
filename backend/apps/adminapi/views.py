@@ -33,6 +33,7 @@ from apps.adminapi.serializers import (
     AdminCountrySerializer,
     AdminOfferingSerializer,
     AdminOrderSerializer,
+    AdminPaymentDetailSerializer,
     AdminPaymentSerializer,
     AdminRefundSerializer,
     AdminServiceSerializer,
@@ -620,6 +621,12 @@ class AdminPaymentViewSet(AdminBase, mixins.ListModelMixin, mixins.RetrieveModel
     serializer_class = AdminPaymentSerializer
     required_permission = AdminPermission.PAYMENT_VIEW
     lookup_field = "reference"
+
+    def get_serializer_class(self):
+        # The list stays light; one payment gets the full diagnostic picture.
+        if self.action == "retrieve":
+            return AdminPaymentDetailSerializer
+        return AdminPaymentSerializer
 
     def get_queryset(self):
         queryset = Payment.objects.select_related("user")

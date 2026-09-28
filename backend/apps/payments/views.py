@@ -46,12 +46,15 @@ class PaymentViewSet(mixins.ListModelMixin, mixins.RetrieveModelMixin, viewsets.
     def deposit(self, request):
         serializer = DepositSerializer(data=request.data)
         serializer.is_valid(raise_exception=True)
+        data = serializer.validated_data
         payment = initiate_deposit(
             user=request.user,
-            amount=serializer.validated_data["amount"],
-            phone=serializer.validated_data["phone"],
-            network=serializer.validated_data["network"],
+            amount=data["amount"],
+            phone=data["phone"],
+            network=data["network"],
             request=request,
+            network_source=data.get("network_source", ""),
+            detected_network=data.get("detected_network", ""),
         )
         return Response(PaymentSerializer(payment).data, status=status.HTTP_201_CREATED)
 

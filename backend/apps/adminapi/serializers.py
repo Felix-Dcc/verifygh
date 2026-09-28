@@ -113,6 +113,73 @@ class AdminPaymentSerializer(serializers.ModelSerializer):
         read_only_fields = fields
 
 
+class AdminPaymentDetailSerializer(AdminPaymentSerializer):
+    """Everything support needs to answer "why did this deposit fail?".
+
+    Built after a Telecel report took a database session to diagnose: the
+    customer's number was ported, their network choice had been overridden, and
+    Paystack had asked for a code that never arrived. Every one of those facts
+    is on this view now.
+
+    Deliberately absent: the full phone number, the one-time code (it is never
+    stored), and any credential. `phone_suffix` is enough to confirm a caller is
+    who they say they are.
+    """
+
+    network_label = serializers.CharField(source="get_network_display", read_only=True)
+    phone_suffix = serializers.SerializerMethodField()
+    network_source = serializers.SerializerMethodField()
+    prefix_network = serializers.SerializerMethodField()
+    provider_status_initial = serializers.SerializerMethodField()
+    provider_status_latest = serializers.SerializerMethodField()
+    provider_checked_at = serializers.SerializerMethodField()
+    webhook_events = serializers.SerializerMethodField()
+
+    class Meta(AdminPaymentSerializer.Meta):
+        fields = AdminPaymentSerializer.Meta.fields + [
+            "network_label", "phone_suffix", "instructions", "otp_attempts", "expires_at",
+            "network_source", "prefix_network",
+            "provider_status_initial", "provider_status_latest", "provider_checked_at",
+            "webhook_events",
+        ]
+        read_only_fields = fields
+
+    def get_phone_suffix(self, obj) -> str:
+        return f"***{obj.phone[-4:]}" if obj.phone else ""
+
+    def _meta(self, obj, key):
+        return (obj.metadata or {}).get(key, "")
+
+    def get_network_source(self, obj) -> str:
+        return self._meta(obj, "network_source")
+
+    def get_prefix_network(self, obj) -> str:
+        return self._meta(obj, "prefix_network")
+
+    def get_provider_status_initial(self, obj) -> str:
+        return self._meta(obj, "provider_status_initial")
+
+    def get_provider_status_latest(self, obj) -> str:
+        return self._meta(obj, "provider_status_latest")
+
+    def get_provider_checked_at(self, obj) -> str:
+        return self._meta(obj, "provider_checked_at")
+
+    def get_webhook_events(self, obj) -> list[dict]:
+        # Payload and headers stay out: they are raw provider data, and the
+        # signature header is not something to put on a support screen.
+        return [
+            {
+                "event_type": event.event_type,
+                "signature_valid": event.signature_valid,
+                "processed": event.processed,
+                "processing_error": (event.processing_error or "")[:200],
+                "received_at": event.created_at,
+            }
+            for event in obj.webhook_events.order_by("created_at")
+        ]
+
+
 class AdminServiceSerializer(serializers.ModelSerializer):
     offering_count = serializers.IntegerField(read_only=True, default=0)
     available_count = serializers.IntegerField(read_only=True, default=0)
