@@ -78,8 +78,10 @@ export function FeaturedServices() {
 }
 
 function FeaturedCard({ service }: { service: Service }) {
-  const countries = service.countries.filter((country) => country.available);
-  const flags = countries.slice(0, 3);
+  // The featured endpoint sends a few available countries for the flags; the
+  // authoritative count is country_count, which covers the rest.
+  const flags = (service.countries ?? []).slice(0, 3);
+  const total = service.country_count;
 
   return (
     <Link
@@ -91,7 +93,7 @@ function FeaturedCard({ service }: { service: Service }) {
         <div className="min-w-0 flex-1">
           <p className="truncate text-sm font-semibold text-ink">{service.name}</p>
           <p className="truncate text-xs text-ink-muted">
-            {countries.length} {countries.length === 1 ? "country" : "countries"}
+            {total} {total === 1 ? "country" : "countries"}
           </p>
         </div>
       </div>

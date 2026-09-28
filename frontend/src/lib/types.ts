@@ -154,8 +154,20 @@ export type Service = {
   available: boolean;
   from_price: string | null;
   currency: string;
-  countries: CountryOption[];
+  /** How many countries offer this service. Always present. */
+  country_count: number;
+  /**
+   * Only on the detail endpoint, `/services/<slug>/`.
+   *
+   * The list deliberately omits it: across the full provider catalogue it is
+   * about 15,000 entries, and shipping them all made the marketplace a 3.4MB
+   * download on every visit.
+   */
+  countries?: CountryOption[];
 };
+
+/** A service fetched from `/services/<slug>/`, where countries are guaranteed. */
+export type ServiceDetail = Service & { countries: CountryOption[] };
 
 export type MarketplaceResponse = {
   results: Service[];

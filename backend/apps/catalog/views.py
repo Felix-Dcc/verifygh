@@ -107,6 +107,7 @@ def _build_marketplace() -> dict:
                 if available_prices
                 else None,
                 "currency": "GHS",
+                "country_count": len(countries),
                 "countries": countries,
             }
         )
@@ -127,6 +128,32 @@ def _build_marketplace() -> dict:
         "categories": categories,
         "countries": countries_payload,
     }
+
+
+def _without_countries(service: dict) -> dict:
+    """A service as the list shows it: everything except the country array.
+
+    That array is the whole weight of the response. With the full OnlineSim
+    catalogue the list carried about 15,000 country entries across 2,000
+    services - 3.4MB in one unpaginated reply, which on Ghanaian mobile data is
+    both slow and genuinely expensive, on every visit to the marketplace.
+
+    The list therefore carries `from_price` and `country_count`, which is what a
+    card actually renders, and the countries themselves come from the detail
+    endpoint when someone opens one.
+    """
+    return {key: value for key, value in service.items() if key != "countries"}
+
+
+def _with_country_preview(service: dict, limit: int = 3) -> dict:
+    """A service with just enough countries to show a few flags.
+
+    Used by the landing page, which shows up to three flags per card. Eight
+    services times three countries is nothing; eight full country arrays would
+    be the same mistake as the list, in miniature.
+    """
+    available = [entry for entry in service.get("countries", []) if entry["available"]]
+    return {**service, "countries": available[:limit]}
 
 
 class ServiceViewSet(viewsets.ViewSet):
@@ -162,6 +189,7 @@ class ServiceViewSet(viewsets.ViewSet):
                 ]
                 if matches:
                     filtered.append({**service, "countries": matches,
+                                     "country_count": len(matches),
                                      "from_price": matches[0]["price"]})
             services = filtered
 
@@ -179,7 +207,7 @@ class ServiceViewSet(viewsets.ViewSet):
 
         return Response(
             {
-                "results": services,
+                "results": [_without_countries(service) for service in services],
                 "categories": payload["categories"],
                 "countries": payload["countries"],
                 "count": len(services),
@@ -205,7 +233,7 @@ class ServiceViewSet(viewsets.ViewSet):
             payload = _build_marketplace()
             cache.set(MARKETPLACE_CACHE_KEY, payload, MARKETPLACE_CACHE_SECONDS)
         featured = [service for service in payload["services"] if service["available"]][:8]
-        return Response({"results": featured})
+        return Response({"results": [_with_country_preview(s) for s in featured]})
 
 
 class CountryViewSet(viewsets.ReadOnlyModelViewSet):

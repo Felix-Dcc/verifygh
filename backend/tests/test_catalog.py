@@ -28,26 +28,70 @@ def test_marketplace_is_browsable_without_an_account(api, catalog):
 
 
 def test_every_card_carries_a_server_computed_price(api, catalog):
+    """The list is the shop window: a price per card, no country array."""
     response = api.get("/api/v1/services/")
 
     for service in response.data["results"]:
-        for option in service["countries"]:
-            assert Decimal(option["price"]) > 0
-            assert option["currency"] == "GHS"
-            assert "available" in option
+        assert service["country_count"] >= 1
+        if service["from_price"] is not None:
+            assert Decimal(service["from_price"]) > 0
+        assert service["currency"] == "GHS"
+
+
+def test_the_list_does_not_ship_every_country(api, catalog):
+    """With the full provider catalogue this array was 15,000 entries and 3.4MB
+    in one reply - slow and genuinely expensive on Ghanaian mobile data, on
+    every visit. It belongs on the detail endpoint."""
+    response = api.get("/api/v1/services/")
+
+    assert response.data["results"], "no services to check"
+    for service in response.data["results"]:
+        assert "countries" not in service
+
+
+def test_the_detail_endpoint_carries_the_countries_and_prices(api, catalog):
+    slug = api.get("/api/v1/services/").data["results"][0]["slug"]
+
+    service = api.get(f"/api/v1/services/{slug}/").data
+
+    assert service["countries"], "detail must carry what the list omits"
+    for option in service["countries"]:
+        assert Decimal(option["price"]) > 0
+        assert option["currency"] == "GHS"
+        assert "available" in option
+    assert len(service["countries"]) == service["country_count"]
 
 
 def test_availability_is_reported_not_assumed(api, catalog):
     """Out-of-stock offerings still appear, marked unavailable, rather than
     quietly vanishing - the UI says so honestly."""
-    response = api.get("/api/v1/services/")
-    options = [
-        option
-        for service in response.data["results"]
-        for option in service["countries"]
-    ]
+    options = []
+    for summary in api.get("/api/v1/services/").data["results"]:
+        options.extend(api.get(f"/api/v1/services/{summary['slug']}/").data["countries"])
+
     assert any(option["available"] for option in options)
     assert any(not option["available"] for option in options)
+
+
+def test_filtering_by_country_reports_that_countrys_count(api, catalog):
+    """An unfiltered total next to a filtered list would just be wrong."""
+    filtered = api.get("/api/v1/services/?country=US").data["results"]
+
+    assert filtered
+    assert all(service["country_count"] == 1 for service in filtered)
+
+
+def test_the_landing_page_carries_only_a_few_flags(api, catalog):
+    """It shows up to three flags per card, so it gets three countries - not
+    the whole array, which would be the list's mistake in miniature."""
+    featured = api.get("/api/v1/services/featured/").data["results"]
+
+    assert featured
+    for service in featured:
+        assert len(service["countries"]) <= 3
+        assert all(option["available"] for option in service["countries"])
+        # The real total still comes from the count, not from the preview.
+        assert service["country_count"] >= len(service["countries"])
 
 
 def test_filtering_by_category_country_and_search(api, catalog):

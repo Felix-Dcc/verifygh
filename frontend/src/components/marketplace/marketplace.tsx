@@ -17,10 +17,17 @@ import {
   Input,
   Select,
   Skeleton,
+  Spinner,
   cn,
 } from "@/components/ui/primitives";
 import { cedis } from "@/lib/format";
-import type { CatalogHealth, CountryOption, MarketplaceResponse, Service } from "@/lib/types";
+import type {
+  CatalogHealth,
+  CountryOption,
+  MarketplaceResponse,
+  Service,
+  ServiceDetail,
+} from "@/lib/types";
 
 export function Marketplace() {
   const router = useRouter();
@@ -225,7 +232,16 @@ function ServiceCard({
   signedIn: boolean;
 }) {
   const panelId = `countries-${service.slug}`;
-  const shown = expanded ? service.countries : service.countries.slice(0, 2);
+
+  // The list endpoint deliberately omits countries - across the full provider
+  // catalogue that array is ~15,000 entries, and shipping it made the
+  // marketplace a multi-megabyte download on every visit. So a card carries a
+  // "from" price and a count, and fetches the countries the moment someone
+  // actually opens it. SWR caches per slug, so reopening is instant.
+  const { data: detail, isLoading: loadingCountries } = useSWR<ServiceDetail>(
+    expanded ? `/services/${service.slug}/` : null,
+  );
+  const countries = detail?.countries ?? [];
 
   return (
     <Card className={cn("flex flex-col overflow-hidden", !service.available && "opacity-80")}>
@@ -254,8 +270,8 @@ function ServiceCard({
                 </span>
               </>
             ) : null}
-            {service.countries.length}{" "}
-            {service.countries.length === 1 ? "country" : "countries"}
+            {service.country_count}{" "}
+            {service.country_count === 1 ? "country" : "countries"}
           </p>
 
           <div className="mt-1.5 flex flex-wrap gap-1">
@@ -273,7 +289,7 @@ function ServiceCard({
 
       <div className="mt-auto border-t border-line">
         <ul id={panelId} className="divide-y divide-line">
-          {shown.map((option) => (
+          {countries.map((option) => (
             <li key={option.code} className="flex items-center gap-3 px-4 py-3">
               <span className="text-base" aria-hidden>
                 {option.flag_emoji}
@@ -307,24 +323,29 @@ function ServiceCard({
           ))}
         </ul>
 
-        {service.countries.length > 2 ? (
-          <button
-            type="button"
-            onClick={onToggle}
-            aria-expanded={expanded}
-            aria-controls={panelId}
-            className="flex w-full items-center justify-center gap-1.5 border-t border-line py-2.5 text-sm font-medium text-brand-700 transition-colors hover:bg-canvas"
-          >
-            {expanded
-              ? "Show fewer countries"
-              : `Show ${service.countries.length - 2} more ${
-                  service.countries.length - 2 === 1 ? "country" : "countries"
-                }`}
-            <ChevronDownIcon
-              className={cn("h-4 w-4 transition-transform", expanded && "rotate-180")}
-            />
-          </button>
+        {expanded && loadingCountries ? (
+          <div className="flex items-center justify-center gap-2 py-4 text-sm text-ink-muted">
+            <Spinner className="h-4 w-4 text-brand-600" />
+            Loading countries...
+          </div>
         ) : null}
+
+        <button
+          type="button"
+          onClick={onToggle}
+          aria-expanded={expanded}
+          aria-controls={panelId}
+          className="flex w-full items-center justify-center gap-1.5 border-t border-line py-2.5 text-sm font-medium text-brand-700 transition-colors hover:bg-canvas"
+        >
+          {expanded
+            ? "Hide countries"
+            : `Choose from ${service.country_count} ${
+                service.country_count === 1 ? "country" : "countries"
+              }`}
+          <ChevronDownIcon
+            className={cn("h-4 w-4 transition-transform", expanded && "rotate-180")}
+          />
+        </button>
       </div>
     </Card>
   );
