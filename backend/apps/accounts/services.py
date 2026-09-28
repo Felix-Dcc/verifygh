@@ -339,3 +339,27 @@ def track_device(user: User, request) -> None:
     from apps.audit.services import evaluate_device_sharing
 
     evaluate_device_sharing(user=user, fingerprint_hash=fingerprint, ip=ip)
+
+
+def password_candidates(raw: str) -> list[str]:
+    """The forms of a submitted password worth checking, most exact first.
+
+    Surrounding whitespace in a password is not significant here, and this is
+    where that policy is written down, because for a long time it was only
+    half-applied. Registration, password reset and password change all stripped
+    it - DRF's CharField trims by default - while login and the current-password
+    check were declared `trim_whitespace=False` and did not. A password pasted
+    from a note or a message usually carries a trailing space or newline, so its
+    owner could create an account and then never sign in with the very password
+    they had just chosen. Resetting it repeated the same mismatch on the new
+    password, which is why a reset never helped.
+
+    The exact string is still tried first, so an account whose stored password
+    really does contain surrounding whitespace - one set from the shell or with
+    createsuperuser, which do not strip - keeps working.
+    """
+    candidates = [raw]
+    stripped = raw.strip()
+    if stripped and stripped != raw:
+        candidates.append(stripped)
+    return candidates

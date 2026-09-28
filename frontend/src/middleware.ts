@@ -64,7 +64,40 @@ function buildCsp(nonce: string): string {
   return isDev ? csp : `${csp}; upgrade-insecure-requests`;
 }
 
+/**
+ * The site's own address. Unset in development, which turns the redirect off.
+ */
+const SITE_ORIGIN = process.env.NEXT_PUBLIC_SITE_ORIGIN ?? "";
+
+/**
+ * Railway's generated hostname for this service, which predates the real
+ * domain and is still linked from old messages and bookmarks.
+ *
+ * Signing in cannot work there. The session cookies belong to the site's own
+ * domain and are SameSite=Lax, so a browser on *.up.railway.app neither keeps
+ * nor sends them: the password is accepted, and the very next request finds no
+ * session and sends the customer back to the sign-in page. From their side it
+ * is indistinguishable from a wrong password. Send them to the real domain
+ * before they get that far.
+ *
+ * Matched by suffix, not by "anything that is not the canonical host": the
+ * apex domain is served directly and works, and Railway's health check arrives
+ * on a hostname of its own that must get a 200, not a redirect.
+ */
+function legacyHostRedirect(request: NextRequest): NextResponse | null {
+  if (!SITE_ORIGIN) return null;
+  const host = (request.headers.get("host") ?? "").split(":")[0].toLowerCase();
+  if (!host.endsWith(".up.railway.app")) return null;
+
+  const target = new URL(request.nextUrl.pathname + request.nextUrl.search, SITE_ORIGIN);
+  // 308 keeps the method, and browsers remember it.
+  return NextResponse.redirect(target, 308);
+}
+
 export function middleware(request: NextRequest) {
+  const redirect = legacyHostRedirect(request);
+  if (redirect) return redirect;
+
   const nonce = Buffer.from(crypto.randomUUID()).toString("base64");
   const csp = buildCsp(nonce);
 

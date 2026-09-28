@@ -77,7 +77,7 @@ class LoginThrottle(NamedScopeThrottle):
         # spray many accounts from one IP, nor many IPs at one account.
         identifier = ""
         if isinstance(getattr(request, "data", None), dict):
-            identifier = str(request.data.get("email", ""))[:128].lower()
+            identifier = str(request.data.get("email", ""))[:128].strip().lower()
         return self.cache_format % {
             "scope": self.scope,
             "ident": f"{self.get_ident(request)}:{identifier}",

@@ -285,6 +285,9 @@ export default defineRailway(() => {
       // Nothing secret belongs in a NEXT_PUBLIC_ variable.
       NEXT_PUBLIC_API_URL: `https://${API_DOMAIN}/api/v1`,
       NEXT_PUBLIC_BRAND_NAME: "VerifyGH",
+      // Where the Railway-generated hostname redirects to; signing in cannot
+      // work on that hostname (see frontend/src/middleware.ts).
+      NEXT_PUBLIC_SITE_ORIGIN: `https://${WEB_DOMAIN}`,
     },
   });
 

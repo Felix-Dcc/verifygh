@@ -134,7 +134,15 @@ class LoginView(APIView):
             )
             raise AccountLocked()
 
-        authenticated = authenticate(request, username=email, password=password)
+        # Exact first, then without surrounding whitespace - see
+        # services.password_candidates for why the second try exists. Counted
+        # as one attempt either way, so it cannot be used to double the guesses
+        # an attacker gets before the lockout.
+        authenticated = None
+        for candidate in services.password_candidates(password):
+            authenticated = authenticate(request, username=email, password=candidate)
+            if authenticated is not None:
+                break
 
         if authenticated is None:
             if user is not None:

@@ -107,8 +107,13 @@ class ChangePasswordSerializer(serializers.Serializer):
     new_password = serializers.CharField(write_only=True, min_length=10, max_length=128)
 
     def validate_current_password(self, value: str) -> str:
+        from apps.accounts.services import password_candidates
+
         user = self.context["request"].user
-        if not user.check_password(value):
+        # The same rule as sign-in. Otherwise a password set here with a trailing
+        # space - stripped on the way in - could never be given as the current
+        # password next time.
+        if not any(user.check_password(c) for c in password_candidates(value)):
             raise serializers.ValidationError("Your current password is incorrect.")
         return value
 
