@@ -711,3 +711,51 @@ def test_provider_overrides_are_consistent_in_both_directions():
     _CountryCodes._load()
     for code, iso in _CountryCodes._by_provider.items():
         assert _CountryCodes.resolve(code) == iso
+
+
+def test_a_whole_country_is_fetched_in_one_call(provider):
+    """The documented default page size is 30 and the `end` flag is unreliable.
+
+    Measured live: one call at count=500 returns 248 services for the USA and
+    334 for the UK. Taking the default would have quietly sold 30 of them.
+    """
+    from apps.verification.onlinesim import TARIFF_PAGE_SIZE
+
+    session = wire(provider, {provider.PATH_TARIFFS: FakeResponse(200, TARIFFS)})
+
+    provider.get_countries()
+
+    assert session.calls[0][1]["count"] == TARIFF_PAGE_SIZE
+    assert TARIFF_PAGE_SIZE >= 500
+
+
+def test_a_zero_limit_lists_everything(provider, settings):
+    """Selling the whole catalogue means the cap must be switchable off."""
+    settings.VERIFYGH = {
+        **settings.VERIFYGH,
+        "PROVIDER_CATALOG_LIMIT": 0,
+        "PROVIDER_PRIORITY_COUNTRIES": ["CA", "US", "GB"],
+    }
+    wire(provider, {provider.PATH_TARIFFS: FakeResponse(200, TARIFFS)})
+
+    offerings = provider.get_services()
+
+    # Every enabled country in the fixture, not just the first few.
+    assert {o.country_code for o in offerings} == {"GH", "RU", "US", "CA", "GB", "KZ"}
+
+
+def test_preferred_countries_come_first_even_when_uncapped(provider, settings):
+    """Order still matters uncapped: it decides what a shopper sees first."""
+    settings.VERIFYGH = {
+        **settings.VERIFYGH,
+        "PROVIDER_CATALOG_LIMIT": 0,
+        "PROVIDER_PRIORITY_COUNTRIES": ["CA", "US", "GB"],
+    }
+    wire(provider, {provider.PATH_TARIFFS: FakeResponse(200, TARIFFS)})
+
+    seen = []
+    for offering in provider.get_services():
+        if offering.country_code not in seen:
+            seen.append(offering.country_code)
+
+    assert seen[:3] == ["CA", "US", "GB"]

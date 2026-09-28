@@ -75,6 +75,18 @@ logger = logging.getLogger("verifygh.provider.onlinesim")
 
 REQUEST_TIMEOUT = 20
 
+#: Services per getTariffs call.
+#:
+#: The documented default is 30, and the response's `end` flag is unreliable -
+#: it reads False even when a page holds everything. Measured live on
+#: 2026-09-28, one call at this size returns a country whole: 248 services for
+#: the USA, 334 for the UK, 88 for Canada.
+#:
+#: Asking for the lot in one request is also kinder than paginating: a full
+#: sync is then one call per country rather than eight, which keeps a catalogue
+#: refresh inside our own upstream call budget.
+TARIFF_PAGE_SIZE = 500
+
 _REFERENCE = Path(__file__).with_name("onlinesim_countries.json")
 
 
@@ -317,7 +329,7 @@ class OnlineSimProvider(VerificationProvider):
     # -- catalog ---------------------------------------------------------
 
     def _tariffs(self, country_dial: str | int | None = None, page: int = 1) -> dict:
-        params: dict = {"page": page}
+        params: dict = {"page": page, "count": TARIFF_PAGE_SIZE}
         if country_dial is not None:
             params["country"] = country_dial
         payload = self._get(self.PATH_TARIFFS, params)
@@ -371,10 +383,14 @@ class OnlineSimProvider(VerificationProvider):
         services nobody in Ghana buys.
         """
         limit = int(settings.VERIFYGH["PROVIDER_CATALOG_LIMIT"])
+        # 0 means "everything the provider offers". A cap only makes sense when
+        # a handful of countries are being sold; with the whole catalogue on
+        # offer it would decide the shop window by accident.
+        unlimited = limit <= 0
         offerings: list[ProviderServiceDTO] = []
 
         for country in self._ordered_countries():
-            if len(offerings) >= limit:
+            if not unlimited and len(offerings) >= limit:
                 break
             dial = country.dial_code.lstrip("+")
             try:
@@ -386,7 +402,7 @@ class OnlineSimProvider(VerificationProvider):
                 continue
 
             for slug, entry in self._unprefix(payload.get("services")).items():
-                if len(offerings) >= limit:
+                if not unlimited and len(offerings) >= limit:
                     break
                 price = _decimal(entry.get("price"), Decimal("-1"))
                 if price <= 0:
