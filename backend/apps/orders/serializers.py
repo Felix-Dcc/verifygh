@@ -73,10 +73,10 @@ class OrderDetailSerializer(OrderListSerializer):
     replacement_for = serializers.SerializerMethodField()
 
     class Meta(OrderListSerializer.Meta):
+        # provider_cost, provider_currency and exchange_rate stay on the order
+        # for staff, but are not sent to the customer: what we pay our supplier
+        # is ours to know.
         fields = OrderListSerializer.Meta.fields + [
-            "provider_cost",
-            "provider_currency",
-            "exchange_rate",
             "failure_reason",
             "verification_code",
             "verification_message",

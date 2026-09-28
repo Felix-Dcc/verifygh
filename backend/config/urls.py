@@ -20,6 +20,7 @@ from apps.wallet import views as wallet_views
 router = DefaultRouter()
 router.register("services", catalog_views.ServiceViewSet, basename="service")
 router.register("countries", catalog_views.CountryViewSet, basename="country")
+router.register("marketplace", catalog_views.MarketplaceViewSet, basename="marketplace")
 router.register("wallet", wallet_views.WalletViewSet, basename="wallet")
 router.register("transactions", wallet_views.TransactionViewSet, basename="transaction")
 router.register("payments", payment_views.PaymentViewSet, basename="payment")
@@ -41,6 +42,9 @@ admin_router.register(
 )
 admin_router.register(
     "exchange-rates", admin_views.AdminExchangeRateViewSet, basename="admin-exchange-rate"
+)
+admin_router.register(
+    "price-changes", admin_views.AdminPriceChangeViewSet, basename="admin-price-change"
 )
 admin_router.register("audit", admin_views.AdminAuditViewSet, basename="admin-audit")
 admin_router.register(

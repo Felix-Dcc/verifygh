@@ -2,6 +2,7 @@ from __future__ import annotations
 
 from decimal import Decimal
 
+from django.conf import settings
 from django.db import models
 from django.utils import timezone
 
@@ -15,6 +16,8 @@ class ServiceCategory(models.TextChoices):
     DEVELOPER = "DEVELOPER", "Developer"
     BUSINESS = "BUSINESS", "Business"
     FINANCE = "FINANCE", "Finance"
+    SHOPPING = "SHOPPING", "Shopping"
+    GAMING = "GAMING", "Gaming"
     OTHER = "OTHER", "Other"
 
 
@@ -60,6 +63,14 @@ class Service(BaseModel):
     # Short brand colour used by the frontend avatar when no logo is available.
     accent_color = models.CharField(max_length=7, blank=True, default="")
     description = models.CharField(max_length=200, blank=True, default="")
+    #: Other words a customer might type for this service - "gmail" for Google,
+    #: "x" for Twitter. Comma-separated; searched alongside the name and slug.
+    aliases = models.CharField(max_length=200, blank=True, default="")
+
+    #: Chosen by staff. Popular services lead the marketplace; see
+    #: apps/catalog/marketplace.popular_services for how activity adds to them.
+    is_popular = models.BooleanField(default=False, db_index=True)
+    popular_rank = models.PositiveIntegerField(default=100)
 
     is_enabled = models.BooleanField(default=True, db_index=True)
     is_maintenance = models.BooleanField(default=False)
@@ -144,6 +155,12 @@ class ProviderService(BaseModel):
     # Rough minutes a number stays reserved upstream. Drives the order TTL.
     ttl_minutes = models.PositiveIntegerField(default=20)
 
+    #: The customer price last recorded in price history. Prices are always
+    #: computed live by the pricing engine; this is only what the next change
+    #: is compared against, so every change can be written down.
+    customer_price = models.DecimalField(max_digits=12, decimal_places=2, null=True, blank=True)
+    price_updated_at = models.DateTimeField(null=True, blank=True)
+
     last_synced_at = models.DateTimeField(null=True, blank=True)
 
     class Meta:
@@ -174,3 +191,26 @@ class ProviderService(BaseModel):
     def mark_synced(self) -> None:
         self.last_synced_at = timezone.now()
         self.save(update_fields=["last_synced_at", "updated_at"])
+
+
+class PinnedService(BaseModel):
+    """A service a customer has pinned to the top of their marketplace.
+
+    Stored server-side so the same pins follow the customer to every device.
+    One row per (user, service), enforced by the database.
+    """
+
+    user = models.ForeignKey(
+        settings.AUTH_USER_MODEL, on_delete=models.CASCADE, related_name="pinned_services"
+    )
+    service = models.ForeignKey(Service, on_delete=models.CASCADE, related_name="pins")
+
+    class Meta:
+        db_table = "catalog_pinned_service"
+        ordering = ["created_at"]
+        constraints = [
+            models.UniqueConstraint(fields=["user", "service"], name="pinned_service_unique"),
+        ]
+
+    def __str__(self) -> str:
+        return f"{self.user_id} pinned {self.service_id}"

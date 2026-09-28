@@ -29,6 +29,7 @@ SERVICE_METADATA: dict[str, tuple[str, str]] = {
     "facebook": (ServiceCategory.SOCIAL, "#1877F2"),
     "tiktok": (ServiceCategory.SOCIAL, "#111111"),
     "x": (ServiceCategory.SOCIAL, "#14171A"),
+    "twitter": (ServiceCategory.SOCIAL, "#14171A"),
     "linkedin": (ServiceCategory.BUSINESS, "#0A66C2"),
     "whatsapp": (ServiceCategory.MESSAGING, "#25D366"),
     "telegram": (ServiceCategory.MESSAGING, "#229ED9"),
@@ -213,13 +214,21 @@ def sync_catalog(adapter_key: str | None = None) -> dict:
     for dto in provider_services:
         slug = dto.code.lower()
         if slug not in service_rows:
+            from apps.catalog.presentation import PRESENTATION
+
             category, accent = SERVICE_METADATA.get(slug, (ServiceCategory.OTHER, "#0F766E"))
+            name, aliases, category, rank = PRESENTATION.get(
+                slug, (dto.name, "", category, None)
+            )
             service, created = Service.objects.get_or_create(
                 slug=slug,
                 defaults={
-                    "name": dto.name,
+                    "name": name,
+                    "aliases": aliases,
                     "category": category,
                     "accent_color": accent,
+                    "is_popular": rank is not None,
+                    "popular_rank": rank or 100,
                     "supports_sms": dto.supports_sms,
                     "supports_voice": dto.supports_voice,
                 },
@@ -260,9 +269,19 @@ def sync_catalog(adapter_key: str | None = None) -> dict:
     )
 
     # The marketplace response is cached; a sync must invalidate it.
+    from apps.catalog import marketplace
     from apps.catalog.views import MARKETPLACE_CACHE_KEY
 
     cache.delete(MARKETPLACE_CACHE_KEY)
+    marketplace.invalidate()
+
+    # A provider price change is a customer price change: write it down.
+    from apps.pricing.history import refresh_offering_prices
+    from apps.pricing.models import PriceChangeSource
+
+    summary["price_changes"] = refresh_offering_prices(
+        source=PriceChangeSource.PROVIDER_COST, reason="Catalogue sync"
+    )["changed"]
 
     logger.info("catalog_synced", extra=summary)
     return summary

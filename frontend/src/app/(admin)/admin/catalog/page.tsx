@@ -3,6 +3,7 @@
 import * as React from "react";
 import useSWR, { mutate as globalMutate } from "swr";
 
+import { OfferingsPricingCard, PriceHistoryCard, PricingRulesCard } from "@/components/admin/pricing";
 import { PageHeader } from "@/components/app-shell";
 import { useAuth } from "@/components/auth-provider";
 import { ServiceAvatar } from "@/components/brand";
@@ -164,7 +165,7 @@ function ServicesTab({ canManage }: { canManage: boolean }) {
         }}
       />
 
-      <OfferingsCard />
+      <OfferingsPricingCard canManage={canManage} />
     </>
   );
 }
@@ -183,6 +184,9 @@ function ServiceEditor({
     is_enabled: true,
     is_maintenance: false,
     maintenance_note: "",
+    is_popular: false,
+    popular_rank: 100,
+    aliases: "",
     reason: "",
   });
   const [busy, setBusy] = React.useState(false);
@@ -194,6 +198,9 @@ function ServiceEditor({
       is_enabled: service.is_enabled,
       is_maintenance: service.is_maintenance,
       maintenance_note: service.maintenance_note,
+      is_popular: service.is_popular,
+      popular_rank: service.popular_rank,
+      aliases: service.aliases,
       reason: "",
     });
     setError("");
@@ -251,6 +258,42 @@ function ServiceEditor({
           </Field>
         ) : null}
 
+        <Toggle
+          id="is_popular"
+          label="Popular"
+          description="Listed under Popular in the marketplace, wherever it is in stock."
+          checked={form.is_popular}
+          onChange={(value) => setForm((current) => ({ ...current, is_popular: value }))}
+        />
+
+        {form.is_popular ? (
+          <Field label="Popular position" htmlFor="popular_rank" hint="Lower comes first.">
+            <Input
+              id="popular_rank"
+              inputMode="numeric"
+              value={String(form.popular_rank)}
+              onChange={(event) =>
+                setForm((current) => ({
+                  ...current,
+                  popular_rank: Number.parseInt(event.target.value || "0", 10) || 0,
+                }))
+              }
+            />
+          </Field>
+        ) : null}
+
+        <Field
+          label="Search aliases"
+          htmlFor="aliases"
+          hint="Other names customers type, comma-separated - e.g. gmail, youtube."
+        >
+          <Input
+            id="aliases"
+            value={form.aliases}
+            onChange={(event) => setForm((current) => ({ ...current, aliases: event.target.value }))}
+          />
+        </Field>
+
         <Field label="Reason" htmlFor="service-reason" hint="Recorded in the audit log.">
           <Textarea
             id="service-reason"
@@ -271,98 +314,6 @@ function ServiceEditor({
         </div>
       </form>
     </Dialog>
-  );
-}
-
-function OfferingsCard() {
-  const [service, setService] = React.useState("");
-  const { data } = useSWR<Paginated<AdminOffering>>([
-    "/admin/offerings/",
-    { service, page_size: 50 },
-  ]);
-  const { data: services } = useSWR<AdminService[]>("/admin/services/");
-
-  const offerings = data?.results ?? [];
-
-  return (
-    <Card className="mt-4">
-      <CardHeader
-        title="Provider cost against customer price"
-        description="Every (service, country) pair, priced by the live engine."
-        action={
-          <Select
-            aria-label="Filter by service"
-            value={service}
-            onChange={(event) => setService(event.target.value)}
-            className="h-9 w-44 text-sm"
-          >
-            <option value="">All services</option>
-            {services?.map((item) => (
-              <option key={item.slug} value={item.slug}>
-                {item.name}
-              </option>
-            ))}
-          </Select>
-        }
-      />
-      <div className="mt-2 overflow-x-auto">
-        <table className="w-full min-w-[44rem] text-left text-sm">
-          <thead className="border-y border-line bg-canvas">
-            <tr className="text-xs uppercase tracking-wide text-ink-muted">
-              <th scope="col" className="px-5 py-3 font-medium">Service</th>
-              <th scope="col" className="px-5 py-3 font-medium">Country</th>
-              <th scope="col" className="px-5 py-3 text-right font-medium">Provider cost</th>
-              <th scope="col" className="px-5 py-3 text-right font-medium">Customer price</th>
-              <th scope="col" className="px-5 py-3 text-right font-medium">Margin</th>
-              <th scope="col" className="px-5 py-3 font-medium">Stock</th>
-              <th scope="col" className="px-5 py-3 font-medium">Synced</th>
-            </tr>
-          </thead>
-          <tbody className="divide-y divide-line">
-            {offerings.map((offering) => (
-              <tr key={offering.id} className="transition-colors hover:bg-canvas">
-                <td className="whitespace-nowrap px-5 py-3 font-medium text-ink">
-                  {offering.service_name}
-                </td>
-                <td className="whitespace-nowrap px-5 py-3 text-ink-soft">
-                  {offering.country_code}
-                </td>
-                <td className="tabular whitespace-nowrap px-5 py-3 text-right text-ink-muted">
-                  ${Number.parseFloat(offering.cost_amount).toFixed(4)}
-                </td>
-                <td className="tabular whitespace-nowrap px-5 py-3 text-right font-medium text-ink">
-                  {offering.customer_price ? cedis(offering.customer_price) : "-"}
-                </td>
-                <td
-                  className={cn(
-                    "tabular whitespace-nowrap px-5 py-3 text-right",
-                    offering.margin && Number.parseFloat(offering.margin) > 0
-                      ? "text-success-700"
-                      : "text-danger-700",
-                  )}
-                >
-                  {offering.margin ? cedis(offering.margin) : "-"}
-                </td>
-                <td className="px-5 py-3">
-                  {!offering.is_enabled ? (
-                    <Badge tone="neutral">Disabled</Badge>
-                  ) : offering.is_available ? (
-                    <Badge tone="success" dot>
-                      {offering.available_count ?? "In stock"}
-                    </Badge>
-                  ) : (
-                    <Badge tone="warn">Out of stock</Badge>
-                  )}
-                </td>
-                <td className="whitespace-nowrap px-5 py-3 text-xs text-ink-muted">
-                  {offering.last_synced_at ? relativeTime(offering.last_synced_at) : "never"}
-                </td>
-              </tr>
-            ))}
-          </tbody>
-        </table>
-      </div>
-    </Card>
   );
 }
 
@@ -439,8 +390,6 @@ function CountriesTab({ canManage }: { canManage: boolean }) {
 /* ------------------------------------------------------------------ */
 
 function PricingTab({ canManage }: { canManage: boolean }) {
-  const { data: rules } = useSWR<PricingRule[]>("/admin/pricing-rules/");
-
   if (!canManage) {
     return (
       <Alert tone="info" title="Pricing is restricted">
@@ -448,79 +397,11 @@ function PricingTab({ canManage }: { canManage: boolean }) {
       </Alert>
     );
   }
-
   return (
-    <Card>
-      <CardHeader
-        title="Pricing rules"
-        description="Resolution is most-specific-first: service and country beats service, which beats the global default."
-      />
-      {!rules ? (
-        <RowSkeletons />
-      ) : (
-        <div className="mt-2 overflow-x-auto">
-          <table className="w-full min-w-[46rem] text-left text-sm">
-            <thead className="border-y border-line bg-canvas">
-              <tr className="text-xs uppercase tracking-wide text-ink-muted">
-                <th scope="col" className="px-5 py-3 font-medium">Rule</th>
-                <th scope="col" className="px-5 py-3 font-medium">Scope</th>
-                <th scope="col" className="px-5 py-3 font-medium">Markup</th>
-                <th scope="col" className="px-5 py-3 font-medium">Fees</th>
-                <th scope="col" className="px-5 py-3 font-medium">Rounding</th>
-                <th scope="col" className="px-5 py-3 font-medium">Bounds</th>
-                <th scope="col" className="px-5 py-3 font-medium">Status</th>
-              </tr>
-            </thead>
-            <tbody className="divide-y divide-line">
-              {rules.map((rule) => (
-                <tr key={rule.id} className="transition-colors hover:bg-canvas">
-                  <td className="px-5 py-3 font-medium text-ink">{rule.name}</td>
-                  <td className="px-5 py-3 text-ink-soft">
-                    {rule.service_slug || rule.country_code ? (
-                      <>
-                        {rule.service_slug ?? "any service"}
-                        {rule.country_code ? ` / ${rule.country_code}` : ""}
-                      </>
-                    ) : (
-                      <Badge tone="brand">Global default</Badge>
-                    )}
-                  </td>
-                  <td className="tabular px-5 py-3 text-ink-soft">
-                    {rule.markup_type === "FIXED"
-                      ? cedis(rule.markup_fixed)
-                      : rule.markup_type === "HYBRID"
-                        ? `${rule.markup_percent}% + ${cedis(rule.markup_fixed)}`
-                        : `${rule.markup_percent}%`}
-                  </td>
-                  <td className="tabular px-5 py-3 text-ink-muted">
-                    {rule.payment_fee_percent}% fee, {rule.risk_buffer_percent}% buffer
-                  </td>
-                  <td className="px-5 py-3 text-ink-muted">
-                    {rule.rounding.replace(/_/g, " ").toLowerCase()}
-                  </td>
-                  <td className="tabular px-5 py-3 text-ink-muted">
-                    {cedis(rule.min_price)} - {cedis(rule.max_price)}
-                  </td>
-                  <td className="px-5 py-3">
-                    {rule.is_active ? (
-                      <Badge tone="success" dot>
-                        Active
-                      </Badge>
-                    ) : (
-                      <Badge tone="neutral">Inactive</Badge>
-                    )}
-                  </td>
-                </tr>
-              ))}
-            </tbody>
-          </table>
-        </div>
-      )}
-      <p className="border-t border-line px-4 py-3 text-xs text-ink-muted sm:px-5">
-        The global default cannot be deleted. Without it nothing can be priced, and the
-        marketplace would have to stop selling rather than guess a markup.
-      </p>
-    </Card>
+    <>
+      <PricingRulesCard />
+      <PriceHistoryCard />
+    </>
   );
 }
 

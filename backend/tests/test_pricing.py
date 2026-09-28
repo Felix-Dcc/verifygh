@@ -111,8 +111,10 @@ def test_price_is_clamped_to_the_configured_floor_and_ceiling(offering, exchange
     floor_rule = make_rule(min_price=Decimal("20.00"))
     assert quote_for_offering(offering, rule=floor_rule).customer_price == Decimal("20.00")
 
-    ceiling_rule = make_rule(max_price=Decimal("10.00"), min_price=Decimal("1.00"))
-    assert quote_for_offering(offering, rule=ceiling_rule).customer_price == Decimal("10.00")
+    # Cost is GHS 12.00 and the rule would charge 14.40; a ceiling between the
+    # two clamps. (A ceiling below cost is refused - see test_marketplace.)
+    ceiling_rule = make_rule(max_price=Decimal("13.00"), min_price=Decimal("1.00"))
+    assert quote_for_offering(offering, rule=ceiling_rule).customer_price == Decimal("13.00")
 
 
 def test_margin_is_reported(offering, exchange_rate):

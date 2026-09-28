@@ -88,10 +88,15 @@ def test_a_catalog_sync_against_unconfigured_onlinesim_fails_cleanly(db, setting
     assert summary["offerings"] == 0
 
 
-def test_an_order_that_reaches_a_removed_provider_is_refunded(
+def test_an_order_that_reaches_a_removed_provider_charges_nothing(
     user, auth, exchange_rate, pricing_rule, funded_wallet, django_capture_on_commit_callbacks
 ):
-    """If an offering somehow exists, the customer still cannot lose money."""
+    """If an offering somehow exists, the customer still cannot lose money.
+
+    The live stock check asks the provider before any money moves, so a
+    provider that is no longer registered is refused up front rather than
+    charged and refunded.
+    """
     provider = Provider.objects.create(adapter_key="textverified", name="TextVerified")
     ProviderService.objects.create(
         provider=provider,
@@ -107,8 +112,8 @@ def test_an_order_that_reaches_a_removed_provider_is_refunded(
         response = client.post("/api/v1/orders/", {"service": "probe", "country": "US"},
                                format="json")
 
-    order = Order.objects.get(reference=response.data["reference"])
-    assert order.status == OrderStatus.REFUNDED
+    assert response.status_code == 503
+    assert not Order.objects.exists()
     assert get_or_create_wallet(user).balance == Decimal("100.00")
 
 

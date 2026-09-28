@@ -41,6 +41,7 @@ from apps.adminapi.serializers import (
     AuditLogSerializer,
     ExchangeRateSerializer,
     IssueRefundSerializer,
+    PriceChangeSerializer,
     PricingRuleSerializer,
     ResolveFlagSerializer,
     SuspendUserSerializer,
@@ -717,9 +718,19 @@ class AdminOfferingViewSet(AdminBase, mixins.ListModelMixin, mixins.UpdateModelM
 
     def get_queryset(self):
         queryset = ProviderService.objects.select_related("provider", "service", "country")
+        if self.request.query_params.get("marketplace") == "1":
+            # Only what customers can actually be sold (US and CA today).
+            from apps.catalog.marketplace import marketplace_country_codes
+
+            queryset = queryset.filter(country__code__in=marketplace_country_codes())
         service = self.request.query_params.get("service")
         if service:
             queryset = queryset.filter(service__slug=service)
+        search = (self.request.query_params.get("search") or "").strip()
+        if search:
+            queryset = queryset.filter(
+                Q(service__name__icontains=search) | Q(service__slug__icontains=search)
+            )
         country = self.request.query_params.get("country")
         if country:
             queryset = queryset.filter(country__code=country.upper())
@@ -752,26 +763,27 @@ class AdminPricingRuleViewSet(AdminBase, viewsets.ModelViewSet):
 
     @transaction.atomic
     def perform_create(self, serializer):
+        reason = _pricing_reason(self.request)
         rule = serializer.save()
         record_admin_action(
             admin=self.request.user, action="PRICING_RULE_CREATE", target=rule,
-            reason=str(self.request.data.get("reason", "New pricing rule"))[:500]
-            or "New pricing rule",
-            after=PricingRuleSerializer(rule).data, request=self.request,
+            reason=reason, after=PricingRuleSerializer(rule).data, request=self.request,
         )
         _invalidate_marketplace()
+        _reprice_after_commit(self.request, reason)
 
     @transaction.atomic
     def perform_update(self, serializer):
+        reason = _pricing_reason(self.request)
         before = PricingRuleSerializer(serializer.instance).data
         rule = serializer.save()
         record_admin_action(
             admin=self.request.user, action="PRICING_RULE_UPDATE", target=rule,
-            reason=str(self.request.data.get("reason", "Pricing update"))[:500]
-            or "Pricing update",
-            before=before, after=PricingRuleSerializer(rule).data, request=self.request,
+            reason=reason, before=before, after=PricingRuleSerializer(rule).data,
+            request=self.request,
         )
         _invalidate_marketplace()
+        _reprice_after_commit(self.request, reason)
 
     @transaction.atomic
     def perform_destroy(self, instance):
@@ -780,14 +792,14 @@ class AdminPricingRuleViewSet(AdminBase, viewsets.ModelViewSet):
                 "The global default pricing rule cannot be deleted - without it nothing "
                 "can be priced."
             )
+        reason = _pricing_reason(self.request)
         record_admin_action(
             admin=self.request.user, action="PRICING_RULE_DELETE", target=instance,
-            reason=str(self.request.data.get("reason", "Pricing rule removed"))[:500]
-            or "Pricing rule removed",
-            before=PricingRuleSerializer(instance).data, request=self.request,
+            reason=reason, before=PricingRuleSerializer(instance).data, request=self.request,
         )
         instance.delete()
         _invalidate_marketplace()
+        _reprice_after_commit(self.request, reason)
 
     @action(detail=False, methods=["post"])
     def preview(self, request):
@@ -809,6 +821,27 @@ class AdminPricingRuleViewSet(AdminBase, viewsets.ModelViewSet):
 
         quote = quote_for_offering(offering, rule=rule)
         return Response(quote.as_dict())
+
+
+class AdminPriceChangeViewSet(AdminBase, mixins.ListModelMixin, viewsets.GenericViewSet):
+    """Every change to a customer price: old, new, what caused it, who and why."""
+
+    serializer_class = PriceChangeSerializer
+    required_permission = AdminPermission.CATALOG_MANAGE
+
+    def get_queryset(self):
+        from apps.pricing.models import PriceChange
+
+        queryset = PriceChange.objects.select_related("changed_by")
+        params = self.request.query_params
+        if params.get("country"):
+            queryset = queryset.filter(country_code=params["country"].upper())
+        if params.get("source"):
+            queryset = queryset.filter(source=params["source"])
+        search = (params.get("search") or "").strip()
+        if search:
+            queryset = queryset.filter(service_name__icontains=search)
+        return queryset.order_by("-created_at")
 
 
 class AdminExchangeRateViewSet(AdminBase, mixins.ListModelMixin, viewsets.GenericViewSet):
@@ -835,6 +868,7 @@ class AdminExchangeRateViewSet(AdminBase, mixins.ListModelMixin, viewsets.Generi
             quote=data.get("quote_currency", "GHS"),
             source="manual",
             note=data.get("note", ""),
+            actor=request.user,
         )
         record_admin_action(
             admin=request.user, action="EXCHANGE_RATE_SET", target=rate,
@@ -967,6 +1001,26 @@ def _unprocessed_webhooks() -> int:
 def _invalidate_marketplace() -> None:
     from django.core.cache import cache
 
+    from apps.catalog import marketplace
     from apps.catalog.views import MARKETPLACE_CACHE_KEY
 
     cache.delete(MARKETPLACE_CACHE_KEY)
+    marketplace.invalidate()
+
+
+def _pricing_reason(request) -> str:
+    """Price changes are financial records: each one needs a stated reason."""
+    reason = str(request.data.get("reason", "") or "").strip()
+    if len(reason) < 5:
+        raise ValidationFailed("Give a reason for this pricing change (at least 5 characters).")
+    return reason[:500]
+
+
+def _reprice_after_commit(request, reason: str) -> None:
+    from apps.pricing.history import refresh_offering_prices
+    from apps.pricing.models import PriceChangeSource
+
+    user = request.user
+    transaction.on_commit(lambda: refresh_offering_prices(
+        source=PriceChangeSource.PRICING_RULE, reason=reason, actor=user,
+    ))

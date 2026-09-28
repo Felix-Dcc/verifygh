@@ -2,9 +2,10 @@ from __future__ import annotations
 
 from decimal import Decimal
 
+from django.conf import settings
 from django.db import models
 
-from apps.catalog.models import Country, Service
+from apps.catalog.models import Country, Provider, ProviderService, Service
 from apps.common.models import BaseModel, TimeStampedModel
 
 
@@ -77,6 +78,11 @@ class PricingRule(BaseModel):
     country = models.ForeignKey(
         Country, null=True, blank=True, on_delete=models.CASCADE, related_name="pricing_rules"
     )
+    #: Scope a rule to one supplier - the same service can cost different
+    #: amounts from different providers.
+    provider = models.ForeignKey(
+        Provider, null=True, blank=True, on_delete=models.CASCADE, related_name="pricing_rules"
+    )
 
     markup_type = models.CharField(
         max_length=12, choices=MarkupType.choices, default=MarkupType.PERCENTAGE
@@ -105,6 +111,10 @@ class PricingRule(BaseModel):
     min_price = models.DecimalField(max_digits=10, decimal_places=2, default=Decimal("2.00"))
     max_price = models.DecimalField(max_digits=10, decimal_places=2, default=Decimal("500.00"))
 
+    #: By default the engine never prices below cost (see engine.cost_floor).
+    #: A promotion that deliberately sells at a loss must say so here.
+    allow_below_cost = models.BooleanField(default=False)
+
     priority = models.PositiveIntegerField(default=100)
 
     class Meta:
@@ -123,8 +133,59 @@ class PricingRule(BaseModel):
 
     @property
     def specificity(self) -> int:
-        return (1 if self.service_id else 0) + (1 if self.country_id else 0)
+        return ((1 if self.service_id else 0) + (1 if self.country_id else 0)
+                + (1 if self.provider_id else 0))
 
     @property
     def is_global_default(self) -> bool:
-        return self.service_id is None and self.country_id is None
+        return self.service_id is None and self.country_id is None and self.provider_id is None
+
+
+class PriceChangeSource(models.TextChoices):
+    PRICING_RULE = "PRICING_RULE", "Pricing rule changed"
+    PROVIDER_COST = "PROVIDER_COST", "Provider cost changed"
+    EXCHANGE_RATE = "EXCHANGE_RATE", "Exchange rate changed"
+    INITIAL = "INITIAL", "First recorded price"
+
+
+class PriceChange(BaseModel):
+    """One change to one offering's customer price. Append-only.
+
+    Written whenever a recomputation lands on a different price than the one
+    last recorded, whatever caused it - a staff edit to a rule (with who and
+    why), a provider cost change from a sync, or a new exchange rate. Orders
+    already carry their own frozen price; this is the audit trail for the
+    price list itself.
+    """
+
+    offering = models.ForeignKey(
+        ProviderService, null=True, on_delete=models.SET_NULL, related_name="price_changes"
+    )
+    service_name = models.CharField(max_length=80)
+    country_code = models.CharField(max_length=2)
+    provider_key = models.CharField(max_length=32)
+
+    old_price = models.DecimalField(max_digits=12, decimal_places=2, null=True, blank=True)
+    new_price = models.DecimalField(max_digits=12, decimal_places=2)
+    currency = models.CharField(max_length=3, default="GHS")
+    provider_cost = models.DecimalField(max_digits=12, decimal_places=4)
+    provider_currency = models.CharField(max_length=3, default="USD")
+    exchange_rate = models.DecimalField(max_digits=16, decimal_places=6)
+    pricing_rule_name = models.CharField(max_length=80, blank=True, default="")
+
+    source = models.CharField(max_length=16, choices=PriceChangeSource.choices, db_index=True)
+    changed_by = models.ForeignKey(
+        settings.AUTH_USER_MODEL, null=True, blank=True, on_delete=models.SET_NULL,
+        related_name="price_changes",
+    )
+    reason = models.CharField(max_length=500, blank=True, default="")
+
+    class Meta:
+        db_table = "pricing_price_change"
+        ordering = ["-created_at"]
+        indexes = [models.Index(fields=["offering", "-created_at"])]
+
+    def save(self, *args, **kwargs):
+        if not self._state.adding:
+            raise ValueError("Price history is append-only.")
+        super().save(*args, **kwargs)

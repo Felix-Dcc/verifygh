@@ -29,14 +29,10 @@ def _build_marketplace() -> dict:
     Nothing here is hardcoded: services, countries, availability and cost come
     from the synced catalog, and every price goes through the pricing engine.
     """
-    offerings = list(
-        ProviderService.objects.select_related("provider", "service", "country").filter(
-            is_enabled=True,
-            provider__is_enabled=True,
-            service__is_enabled=True,
-            country__is_enabled=True,
-        )
-    )
+    from apps.catalog.marketplace import sellable_offerings
+
+    # Only the marketplace countries - the same rule the purchase enforces.
+    offerings = list(sellable_offerings().select_related("provider", "service", "country"))
 
     try:
         quotes = quote_many(offerings)
@@ -119,9 +115,9 @@ def _build_marketplace() -> dict:
         if value in used_categories
     ]
 
-    countries_payload = CountrySerializer(
-        Country.objects.filter(is_enabled=True).order_by("display_order", "name"), many=True
-    ).data
+    from apps.catalog.marketplace import marketplace_countries
+
+    countries_payload = CountrySerializer(marketplace_countries(), many=True).data
 
     return {
         "services": services_payload,
@@ -243,7 +239,17 @@ class CountryViewSet(viewsets.ReadOnlyModelViewSet):
     lookup_field = "code"
 
     def get_queryset(self):
-        return Country.objects.filter(is_enabled=True).order_by("display_order", "name")
+        from apps.catalog.marketplace import marketplace_country_codes
+
+        return Country.objects.filter(
+            is_enabled=True, code__in=marketplace_country_codes()
+        ).order_by("display_order", "name")
+
+    def list(self, request, *args, **kwargs):
+        from apps.catalog.marketplace import marketplace_countries
+
+        # In the configured order, so the first is the default everywhere.
+        return Response(CountrySerializer(marketplace_countries(), many=True).data)
 
 
 class CatalogHealthView(APIView):
@@ -259,3 +265,131 @@ class CatalogHealthView(APIView):
         from apps.catalog.services import marketplace_readiness
 
         return Response(marketplace_readiness(), status=status.HTTP_200_OK)
+
+
+class MarketplaceViewSet(viewsets.ViewSet):
+    """The SMS Verifications marketplace.
+
+    Browsing is public; pins need an account. Every price and every stock
+    figure is computed here - the client sends a country and a search term and
+    renders what comes back.
+    """
+
+    permission_classes = [AllowAny]
+    lookup_field = "slug"
+    lookup_value_regex = "[a-z0-9_.-]+"
+
+    def get_permissions(self):
+        from rest_framework.permissions import IsAuthenticated
+
+        if self.action in {"pin", "pins"}:
+            return [IsAuthenticated()]
+        return super().get_permissions()
+
+    def _country(self, request) -> str:
+        from apps.catalog.marketplace import require_marketplace_country
+
+        return require_marketplace_country(request.query_params.get("country"))
+
+    def list(self, request):
+        """Server-side search and pagination over one country's services."""
+        from apps.catalog import marketplace as mp
+
+        country = self._country(request)
+        rows = mp.search(mp.country_rows(country), request.query_params.get("search", ""),
+                         request.query_params.get("category", ""))
+        if request.query_params.get("include_unavailable") != "true":
+            rows = [row for row in rows if row["availability"] != mp.UNAVAILABLE]
+        try:
+            page = int(request.query_params.get("page", 1))
+            page_size = int(request.query_params.get("page_size", 50))
+        except ValueError:
+            page, page_size = 1, 50
+        pinned = set(mp.pinned_slugs(request.user))
+        result = mp.paginate(rows, page, page_size)
+        result["results"] = [mp.public_row(row, pinned) for row in result["results"]]
+        result["country"] = country
+        return Response(result)
+
+    @action(detail=False, methods=["get"])
+    def home(self, request):
+        """Everything above the full list: countries, pinned and popular."""
+        from apps.catalog import marketplace as mp
+
+        country = self._country(request)
+        rows = mp.country_rows(country)
+        by_slug = {row["slug"]: row for row in rows}
+        pinned = mp.pinned_slugs(request.user)
+        pinned_set = set(pinned)
+        return Response({
+            "country": country,
+            "countries": CountrySerializer(mp.marketplace_countries(), many=True).data,
+            "voice_available": any(row["supports_voice"] for row in rows),
+            "categories": mp.categories(rows),
+            # A pinned service stays visible when out of stock here - hiding it
+            # would look like the pin was lost. Pins not sold here at all are
+            # listed with unavailable_here so the client can say so.
+            "pinned": [
+                mp.public_row(by_slug[slug], pinned_set) if slug in by_slug
+                else {"slug": slug, "pinned": True, "unavailable_here": True,
+                      **_service_meta(slug)}
+                for slug in pinned
+            ],
+            "popular": [mp.public_row(by_slug[slug], pinned_set)
+                        for slug in mp.popular_slugs(country) if slug in by_slug],
+            "total": len([row for row in rows if row["availability"] != mp.UNAVAILABLE]),
+        })
+
+    def retrieve(self, request, slug=None):
+        """One service in every marketplace country - the purchase screen."""
+        from apps.catalog import marketplace as mp
+
+        service = Service.objects.filter(slug=slug, is_enabled=True).first()
+        if service is None:
+            raise NotFound("We do not offer that service.")
+        options = []
+        for country in mp.marketplace_countries():
+            row = next((r for r in mp.country_rows(country.code) if r["slug"] == slug), None)
+            options.append({
+                "code": country.code, "name": country.name, "flag_emoji": country.flag_emoji,
+                "dial_code": country.dial_code,
+                **({"offered": True, "price": row["price"], "currency": row["currency"],
+                    "availability": row["availability"],
+                    "available_count": row["available_count"]}
+                   if row else {"offered": False, "availability": mp.UNAVAILABLE}),
+            })
+        return Response({
+            "slug": service.slug, "name": service.name, "category": service.category,
+            "icon_url": service.icon_url, "accent_color": service.accent_color,
+            "description": service.description,
+            "maintenance_note": service.maintenance_note if service.is_maintenance else "",
+            "pinned": slug in set(mp.pinned_slugs(request.user)),
+            "countries": options,
+        })
+
+    @action(detail=False, methods=["get"])
+    def pins(self, request):
+        from apps.catalog.marketplace import pinned_slugs
+
+        return Response({"pinned": pinned_slugs(request.user)})
+
+    @action(detail=True, methods=["post", "delete"])
+    def pin(self, request, slug=None):
+        from apps.catalog.marketplace import pin, pinned_slugs, unpin
+
+        if request.method == "POST":
+            pin(request.user, slug)
+        else:
+            unpin(request.user, slug)
+        return Response({"pinned": pinned_slugs(request.user)})
+
+
+def _service_meta(slug: str) -> dict:
+    service = Service.objects.filter(slug=slug).only(
+        "name", "category", "icon_url", "accent_color"
+    ).first()
+    if service is None:
+        return {"name": slug}
+    return {"name": service.name, "category": service.category, "icon_url": service.icon_url,
+            "accent_color": service.accent_color, "availability": "UNAVAILABLE",
+            "available_count": None, "price": None}

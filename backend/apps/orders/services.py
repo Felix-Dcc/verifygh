@@ -208,7 +208,15 @@ def check_purchase_eligibility(user) -> None:
 
 
 def resolve_offering(service_slug: str, country_code: str) -> ProviderService:
-    """Find the best purchasable offering for a (service, country) pair."""
+    """Find the best purchasable offering for a (service, country) pair.
+
+    The country is checked against the marketplace list before anything else:
+    a request for a country we do not sell is refused even if the catalogue
+    happens to hold an offering for it.
+    """
+    from apps.catalog.marketplace import require_marketplace_country
+
+    country_code = require_marketplace_country(country_code)
     service = Service.objects.filter(slug=service_slug).first()
     if service is None:
         raise NotFound("We do not offer that service.")
@@ -248,7 +256,45 @@ def resolve_offering(service_slug: str, country_code: str) -> ProviderService:
     return offering
 
 
+def confirm_live_availability(offering: ProviderService) -> None:
+    """Ask the provider, not the last sync, whether a number can be had now.
+
+    Called before any money moves. A refusal here costs the customer nothing;
+    the same refusal after charging would cost them a refund round trip. The
+    answer also refreshes the catalogue row, so the marketplace catches up.
+    """
+    if not settings.VERIFYGH.get("CHECK_LIVE_AVAILABILITY", True):
+        return
+    provider = get_provider(offering.provider.adapter_key)
+    try:
+        live = provider.get_availability(
+            offering.provider_service_code or offering.service.slug, offering.country.code
+        )
+    except (ProviderError, ServiceUnavailable):
+        logger.warning("live_availability_check_failed", extra={"offering": str(offering.pk)})
+        raise ServiceUnavailable(
+            "Our number provider is not responding right now. Nothing was charged - "
+            "please try again in a moment.",
+            code="PROVIDER_UNAVAILABLE",
+        )
+
+    ProviderService.objects.filter(pk=offering.pk).update(
+        is_available=live.available, available_count=live.count
+    )
+    if not live.available:
+        from apps.catalog import marketplace
+
+        marketplace.invalidate()
+        raise ServiceUnavailable(
+            "No numbers are available for that service and country right now. "
+            "Nothing was charged.",
+            code="NO_AVAILABILITY",
+        )
+
+
 def quote(service_slug: str, country_code: str) -> dict:
+    from apps.catalog.marketplace import availability
+
     offering = resolve_offering(service_slug, country_code)
     priced = quote_for_offering(offering)
     return {
@@ -261,7 +307,7 @@ def quote(service_slug: str, country_code: str) -> dict:
         "supports_sms": offering.supports_sms,
         "supports_voice": offering.supports_voice,
         "ttl_minutes": offering.ttl_minutes,
-        "available_count": offering.available_count,
+        **availability(offering),
         "offering_id": str(offering.id),
     }
 
@@ -285,7 +331,11 @@ def create_order(*, user, service_slug: str, country_code: str, idempotency_key:
 
     check_purchase_eligibility(user)
 
+    # Everything the price depends on is re-derived here, never taken from the
+    # request: which offering, whether it is in stock right now, and what it
+    # costs. The client sends a service slug and a country code, nothing else.
     offering = resolve_offering(service_slug, country_code)
+    confirm_live_availability(offering)
     priced = quote_for_offering(offering)
     price = priced.customer_price
 

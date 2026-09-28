@@ -488,6 +488,22 @@ VERIFYGH = {
     # is whatever the provider happens to return, and the limit decides the
     # shop window by accident.
     "PROVIDER_PRIORITY_COUNTRIES": env_list("PROVIDER_PRIORITY_COUNTRIES", "CA,US,GB"),
+    # -- marketplace ---------------------------------------------------------
+    # The only countries a customer may browse or buy, as ISO alpha-2 codes.
+    # Enforced on the server - the marketplace, quotes and order creation all
+    # refuse anything else - and the catalogue sync only walks these, so
+    # adding a country is a variable change plus a sync, not a code change.
+    "MARKETPLACE_COUNTRIES": env_list("MARKETPLACE_COUNTRIES", "US,CA"),
+    # At or below this many numbers in stock, an offering shows as "Limited".
+    "AVAILABILITY_LIMITED_THRESHOLD": env_int("AVAILABILITY_LIMITED_THRESHOLD", 10),
+    # Above this, show "Available" rather than a count. OnlineSim reports 9999
+    # for almost everything; printing "9,999 available" would present what is
+    # very likely a ceiling as a stock level.
+    "AVAILABILITY_EXACT_COUNT_MAX": env_int("AVAILABILITY_EXACT_COUNT_MAX", 999),
+    # Ask the provider for live stock just before charging, instead of trusting
+    # the last sync. One upstream call per purchase.
+    "CHECK_LIVE_AVAILABILITY": env_bool("CHECK_LIVE_AVAILABILITY", True),
+    "POPULAR_SERVICES_LIMIT": env_int("POPULAR_SERVICES_LIMIT", 10),
     # Sent as maxPrice when reserving: the most we accept paying above the
     # price we just quoted, if the provider moved it in between.
     "PROVIDER_PRICE_TOLERANCE": env("PROVIDER_PRICE_TOLERANCE", "1.05"),

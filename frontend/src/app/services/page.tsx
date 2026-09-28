@@ -26,8 +26,8 @@ function ServicesRoute() {
   const content = (
     <>
       <PageHeader
-        title="Supported services"
-        description="Live availability and prices in cedis. Everything shown here is what our provider can supply right now."
+        title="SMS Verifications"
+        description="Buy temporary verification numbers for popular online services. Prices in cedis, paid from your wallet."
       />
       <Marketplace />
     </>

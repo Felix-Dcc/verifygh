@@ -228,9 +228,6 @@ export type OrderSummary = {
 };
 
 export type Order = OrderSummary & {
-  provider_cost: string;
-  provider_currency: string;
-  exchange_rate: string;
   failure_reason: string;
   verification_code: string;
   verification_message: string;
@@ -279,10 +276,82 @@ export type Quote = {
   supports_sms: boolean;
   supports_voice: boolean;
   ttl_minutes: number;
+  availability: Availability;
   available_count: number | null;
   offering_id: string;
   wallet_balance: string;
   sufficient_balance: boolean;
+};
+
+/* -------------------------------------------------------------------------
+ * SMS Verifications marketplace
+ * ---------------------------------------------------------------------- */
+
+export type Availability = "AVAILABLE" | "LIMITED" | "UNAVAILABLE";
+
+/** One service in one country, as the marketplace lists it. */
+export type MarketRow = {
+  slug: string;
+  name: string;
+  category: string;
+  icon_url: string;
+  accent_color: string;
+  country?: string;
+  price: string | null;
+  currency?: string;
+  supports_sms?: boolean;
+  supports_voice?: boolean;
+  maintenance_note?: string;
+  availability: Availability;
+  /** Only when the provider reported a plausible count; otherwise null. */
+  available_count: number | null;
+  pinned: boolean;
+  /** A pin for a service not sold in this country at all. */
+  unavailable_here?: boolean;
+};
+
+export type MarketCountry = {
+  code: string;
+  name: string;
+  dial_code: string;
+  flag_emoji: string;
+};
+
+export type MarketHome = {
+  country: string;
+  countries: MarketCountry[];
+  voice_available: boolean;
+  categories: { value: string; label: string }[];
+  pinned: MarketRow[];
+  popular: MarketRow[];
+  total: number;
+};
+
+export type MarketPage = {
+  results: MarketRow[];
+  count: number;
+  page: number;
+  pages: number;
+  has_next: boolean;
+  country: string;
+};
+
+export type MarketServiceDetail = {
+  slug: string;
+  name: string;
+  category: string;
+  icon_url: string;
+  accent_color: string;
+  description: string;
+  maintenance_note: string;
+  pinned: boolean;
+  countries: (MarketCountry & {
+    offered: boolean;
+    price?: string;
+    currency?: string;
+    availability: Availability;
+    available_count?: number | null;
+  })[];
 };
 
 export type Eligibility = {
@@ -566,8 +635,13 @@ export type AdminOffering = {
   provider_service_code: string;
   cost_amount: string;
   cost_currency: string;
+  /** Provider cost converted to cedis at the current rate. */
+  base_cost: string | null;
+  /** The lowest price that still covers cost and the collection fee. */
+  cost_floor: string | null;
   customer_price: string | null;
   margin: string | null;
+  pricing_rule_name: string;
   pricing_error: string;
   is_enabled: boolean;
   is_available: boolean;
@@ -576,6 +650,26 @@ export type AdminOffering = {
   supports_voice: boolean;
   ttl_minutes: number;
   last_synced_at: string | null;
+  price_updated_at: string | null;
+};
+
+export type PriceChange = {
+  id: string;
+  service_name: string;
+  country_code: string;
+  provider_key: string;
+  old_price: string | null;
+  new_price: string;
+  currency: string;
+  provider_cost: string;
+  provider_currency: string;
+  exchange_rate: string;
+  pricing_rule_name: string;
+  source: "PRICING_RULE" | "PROVIDER_COST" | "EXCHANGE_RATE" | "INITIAL";
+  source_label: string;
+  changed_by_email: string | null;
+  reason: string;
+  created_at: string;
 };
 
 export type AdminService = {
@@ -586,6 +680,9 @@ export type AdminService = {
   description: string;
   accent_color: string;
   icon_url: string;
+  aliases: string;
+  is_popular: boolean;
+  popular_rank: number;
   is_enabled: boolean;
   is_maintenance: boolean;
   maintenance_note: string;
@@ -612,8 +709,11 @@ export type PricingRule = {
   is_active: boolean;
   service: string | null;
   service_slug: string | null;
+  service_name: string | null;
   country: string | null;
   country_code: string | null;
+  provider: string | null;
+  provider_key: string | null;
   markup_type: "PERCENTAGE" | "FIXED" | "HYBRID";
   markup_percent: string;
   markup_fixed: string;
@@ -622,6 +722,7 @@ export type PricingRule = {
   rounding: string;
   min_price: string;
   max_price: string;
+  allow_below_cost: boolean;
   priority: number;
   created_at: string;
   updated_at: string;

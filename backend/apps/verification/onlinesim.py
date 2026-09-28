@@ -443,6 +443,18 @@ class OnlineSimProvider(VerificationProvider):
             if str(code).strip()
         ]
         countries = self.get_countries()
+
+        # Only walk the countries the marketplace sells. Each country is one
+        # upstream call, and pricing tens of thousands of offerings nobody can
+        # buy made every sync slow for nothing.
+        selling = {
+            str(code).strip().upper()
+            for code in settings.VERIFYGH.get("MARKETPLACE_COUNTRIES", [])
+            if str(code).strip()
+        }
+        if selling:
+            countries = [country for country in countries if country.code in selling]
+
         if not preferred:
             return countries
 

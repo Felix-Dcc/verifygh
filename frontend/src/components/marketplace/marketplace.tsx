@@ -3,73 +3,118 @@
 import { useRouter, useSearchParams } from "next/navigation";
 import * as React from "react";
 import useSWR from "swr";
+import useSWRInfinite from "swr/infinite";
 
 import { useAuth } from "@/components/auth-provider";
 import { ServiceAvatar } from "@/components/brand";
-import { ChevronDownIcon, GridIcon, SearchIcon } from "@/components/icons";
+import { PinIcon, SearchIcon } from "@/components/icons";
+import { AvailabilityLabel } from "@/components/marketplace/availability";
 import { BuyDialog } from "@/components/marketplace/buy-dialog";
-import {
-  Alert,
-  Badge,
-  Button,
-  Card,
-  EmptyState,
-  Input,
-  Select,
-  Skeleton,
-  Spinner,
-  cn,
-} from "@/components/ui/primitives";
+import { Alert, Button, Card, EmptyState, Input, Skeleton, cn } from "@/components/ui/primitives";
+import { useToast } from "@/components/ui/toast";
+import { ApiError, api } from "@/lib/api";
 import { cedis } from "@/lib/format";
-import type {
-  CatalogHealth,
-  CountryOption,
-  MarketplaceResponse,
-  Service,
-  ServiceDetail,
-} from "@/lib/types";
+import type { CatalogHealth, MarketHome, MarketPage, MarketRow } from "@/lib/types";
 
+const PAGE_SIZE = 40;
+
+/**
+ * SMS Verifications: find a service, pick a country, get a number.
+ *
+ * Built for speed on a phone: compact rows rather than cards, pinned services
+ * first, then popular ones, then everything. Search runs on the server, so it
+ * stays fast however large the catalogue grows, and every price, stock figure
+ * and "popular" label comes from the backend - there is no catalogue here.
+ */
 export function Marketplace() {
   const router = useRouter();
   const params = useSearchParams();
-  const { user, ready } = useAuth();
+  const toast = useToast();
+  const { user } = useAuth();
 
+  const [country, setCountry] = React.useState(() => (params.get("country") ?? "").toUpperCase());
   const [search, setSearch] = React.useState("");
-  const [category, setCategory] = React.useState("");
-  const [country, setCountry] = React.useState("");
-  const [availableOnly, setAvailableOnly] = React.useState(false);
-  const [expanded, setExpanded] = React.useState<string | null>(params.get("service"));
+  const [query, setQuery] = React.useState("");
+  const [buying, setBuying] = React.useState<string | null>(params.get("service"));
+  // Pins flip instantly and settle when the server answers.
+  const [pinOverrides, setPinOverrides] = React.useState<Record<string, boolean>>({});
 
-  const [buying, setBuying] = React.useState<{
-    service: Service;
-    country: CountryOption;
-  } | null>(null);
+  React.useEffect(() => {
+    const timer = window.setTimeout(() => setQuery(search.trim()), 250);
+    return () => window.clearTimeout(timer);
+  }, [search]);
 
-  const { data, isLoading, error } = useSWR<MarketplaceResponse>([
-    "/services/",
-    { category, country, available: availableOnly ? "true" : "" },
-  ]);
   const { data: health } = useSWR<CatalogHealth>("/catalog/health/");
+  const { data: home, mutate: mutateHome } = useSWR<MarketHome>([
+    "/marketplace/home/",
+    country ? { country } : {},
+  ]);
+  // The server picks the default country; adopt it so the list matches.
+  React.useEffect(() => {
+    if (!country && home?.country) setCountry(home.country);
+  }, [country, home?.country]);
 
-  // Search filters the already-loaded page client-side: instant, and it does
-  // not fire a request on every keystroke over mobile data.
-  const services = React.useMemo(() => {
-    const all = data?.results ?? [];
-    const needle = search.trim().toLowerCase();
-    if (!needle) return all;
-    return all.filter(
-      (service) =>
-        service.name.toLowerCase().includes(needle) || service.slug.includes(needle),
-    );
-  }, [data, search]);
+  const activeCountry = country || home?.country || "";
 
-  function onBuy(service: Service, option: CountryOption) {
+  const list = useSWRInfinite<MarketPage>(
+    (index, previous) => {
+      if (!activeCountry) return null;
+      if (previous && !previous.has_next) return null;
+      return [
+        "/marketplace/",
+        { country: activeCountry, search: query, page: index + 1, page_size: PAGE_SIZE },
+      ];
+    },
+    { revalidateFirstPage: false },
+  );
+  const rows = React.useMemo(
+    () => (list.data ?? []).flatMap((page) => page.results),
+    [list.data],
+  );
+  const total = list.data?.[0]?.count ?? 0;
+  const hasMore = Boolean(list.data?.[list.data.length - 1]?.has_next);
+
+  const isPinned = React.useCallback(
+    (row: MarketRow) => pinOverrides[row.slug] ?? row.pinned,
+    [pinOverrides],
+  );
+
+  async function togglePin(row: MarketRow) {
     if (!user) {
-      router.push(`/login?next=${encodeURIComponent(`/services?service=${service.slug}`)}`);
+      router.push(`/login?next=${encodeURIComponent("/services")}`);
       return;
     }
-    setBuying({ service, country: option });
+    const next = !isPinned(row);
+    setPinOverrides((current) => ({ ...current, [row.slug]: next }));
+    try {
+      if (next) await api.post(`/marketplace/${row.slug}/pin/`, {});
+      else await api.delete(`/marketplace/${row.slug}/pin/`);
+      await Promise.all([mutateHome(), list.mutate()]);
+    } catch (error) {
+      toast.error(
+        next ? "Could not pin" : "Could not unpin",
+        error instanceof ApiError ? error.message : "Please try again.",
+      );
+    } finally {
+      setPinOverrides((current) => {
+        const { [row.slug]: _settled, ...rest } = current;
+        return rest;
+      });
+    }
   }
+
+  function changeCountry(code: string) {
+    setCountry(code);
+    const next = new URLSearchParams(params.toString());
+    next.set("country", code);
+    router.replace(`/services?${next.toString()}`, { scroll: false });
+  }
+
+  const searching = query.length > 0;
+  const countryInfo = home?.countries.find((entry) => entry.code === activeCountry);
+  const countryLabel = countryInfo ? `${countryInfo.flag_emoji} ${countryInfo.name}` : "";
+  const pinned = (home?.pinned ?? []).filter((row) => isPinned(row));
+  const popular = home?.popular ?? [];
 
   return (
     <div className="space-y-4">
@@ -81,136 +126,112 @@ export function Marketplace() {
         </Alert>
       ) : null}
 
-      <Card className="p-3 sm:p-4">
-        <div className="flex flex-col gap-2.5 sm:flex-row">
-          <div className="relative flex-1">
-            <SearchIcon className="pointer-events-none absolute left-3.5 top-1/2 h-5 w-5 -translate-y-1/2 text-ink-faint" />
-            <Input
-              aria-label="Search services"
-              placeholder="Search services"
-              value={search}
-              onChange={(event) => setSearch(event.target.value)}
-              className="pl-11"
-              type="search"
-              inputMode="search"
+      <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+        <ChannelTabs voiceAvailable={Boolean(home?.voice_available)} />
+        <CountrySwitch
+          countries={home?.countries ?? []}
+          value={activeCountry}
+          onChange={changeCountry}
+        />
+      </div>
+
+      <div className="relative">
+        <SearchIcon className="pointer-events-none absolute left-3.5 top-1/2 h-5 w-5 -translate-y-1/2 text-ink-faint" />
+        <Input
+          type="search"
+          inputMode="search"
+          aria-label="Search services"
+          placeholder="Search services..."
+          value={search}
+          onChange={(event) => setSearch(event.target.value)}
+          className="h-12 pl-11 text-base"
+        />
+      </div>
+
+      {!searching && pinned.length > 0 ? (
+        <Section title="Pinned" count={pinned.length}>
+          {pinned.map((row) => (
+            <ServiceRow
+              key={`pin-${row.slug}`}
+              row={row}
+              pinned={isPinned(row)}
+              countryLabel={countryLabel}
+              onOpen={() => setBuying(row.slug)}
+              onPin={() => togglePin(row)}
             />
-          </div>
-
-          <div className="grid grid-cols-2 gap-2.5 sm:flex sm:w-auto">
-            <Select
-              aria-label="Filter by category"
-              value={category}
-              onChange={(event) => setCategory(event.target.value)}
-              className="sm:w-40"
-            >
-              <option value="">All categories</option>
-              {data?.categories?.map((item) => (
-                <option key={item.value} value={item.value}>
-                  {item.label}
-                </option>
-              ))}
-            </Select>
-
-            <Select
-              aria-label="Filter by country"
-              value={country}
-              onChange={(event) => setCountry(event.target.value)}
-              className="sm:w-40"
-            >
-              <option value="">All countries</option>
-              {data?.countries?.map((item) => (
-                <option key={item.code} value={item.code}>
-                  {item.flag_emoji} {item.name}
-                </option>
-              ))}
-            </Select>
-          </div>
-        </div>
-
-        <label className="mt-3 flex w-fit cursor-pointer items-center gap-2.5 text-sm text-ink-soft">
-          <input
-            type="checkbox"
-            checked={availableOnly}
-            onChange={(event) => setAvailableOnly(event.target.checked)}
-            className="h-4 w-4 rounded border-line-strong text-brand-600 focus:ring-brand-500/50"
-          />
-          Show available only
-        </label>
-      </Card>
-
-      {isLoading ? (
-        <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
-          {Array.from({ length: 9 }).map((_, index) => (
-            <Card key={index} className="p-4">
-              <div className="flex items-center gap-3">
-                <Skeleton className="h-11 w-11 rounded-xl" />
-                <div className="flex-1 space-y-2">
-                  <Skeleton className="h-4 w-28" />
-                  <Skeleton className="h-3 w-20" />
-                </div>
-              </div>
-              <Skeleton className="mt-4 h-9 w-full rounded-xl" />
-            </Card>
           ))}
-        </div>
-      ) : error ? (
-        <Card>
-          <EmptyState
-            icon={<GridIcon />}
-            title="We could not load the catalogue"
-            description="Check your connection and try again."
-            action={<Button onClick={() => location.reload()}>Retry</Button>}
-          />
-        </Card>
-      ) : services.length === 0 ? (
-        <Card>
+        </Section>
+      ) : null}
+
+      {!searching && popular.length > 0 ? (
+        <Section title="Popular" count={popular.length}>
+          {popular.map((row) => (
+            <ServiceRow
+              key={`pop-${row.slug}`}
+              row={row}
+              pinned={isPinned(row)}
+              countryLabel={countryLabel}
+              onOpen={() => setBuying(row.slug)}
+              onPin={() => togglePin(row)}
+            />
+          ))}
+        </Section>
+      ) : null}
+
+      <Section
+        title={searching ? "Results" : "All services"}
+        count={list.data ? total : undefined}
+      >
+        {!list.data && !list.error ? (
+          <RowSkeletons />
+        ) : list.error ? (
           <EmptyState
             icon={<SearchIcon />}
-            title="Nothing matches those filters"
-            description="Try a different service, country or category."
-            action={
-              <Button
-                variant="secondary"
-                onClick={() => {
-                  setSearch("");
-                  setCategory("");
-                  setCountry("");
-                  setAvailableOnly(false);
-                }}
-              >
-                Clear filters
-              </Button>
+            title="We could not load the services"
+            description="Check your connection and try again."
+            action={<Button onClick={() => list.mutate()}>Retry</Button>}
+          />
+        ) : rows.length === 0 ? (
+          <EmptyState
+            icon={<SearchIcon />}
+            title={searching ? `Nothing matches "${query}"` : "Nothing available here right now"}
+            description={
+              searching
+                ? "Try another name - for example Gmail, X or WhatsApp."
+                : "Try the other country, or check back shortly."
             }
           />
-        </Card>
-      ) : (
-        <>
-          <p className="text-sm text-ink-muted">
-            {services.length} {services.length === 1 ? "service" : "services"}
-            {country ? ` in ${country}` : ""}
-          </p>
-          <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
-            {services.map((service) => (
-              <ServiceCard
-                key={service.slug}
-                service={service}
-                expanded={expanded === service.slug}
-                onToggle={() =>
-                  setExpanded(expanded === service.slug ? null : service.slug)
-                }
-                onBuy={onBuy}
-                signedIn={Boolean(user) && ready}
-              />
-            ))}
-          </div>
-        </>
-      )}
+        ) : (
+          rows.map((row) => (
+            <ServiceRow
+              key={row.slug}
+              row={row}
+              pinned={isPinned(row)}
+              countryLabel={countryLabel}
+              onOpen={() => setBuying(row.slug)}
+              onPin={() => togglePin(row)}
+            />
+          ))
+        )}
+      </Section>
+
+      {hasMore ? (
+        <div className="flex justify-center">
+          <Button
+            variant="secondary"
+            loading={list.isValidating}
+            onClick={() => list.setSize(list.size + 1)}
+          >
+            Load more
+          </Button>
+        </div>
+      ) : null}
 
       <BuyDialog
         open={buying !== null}
         onClose={() => setBuying(null)}
-        service={buying?.service ?? null}
-        country={buying?.country ?? null}
+        serviceSlug={buying}
+        initialCountry={activeCountry || "US"}
       />
     </div>
   );
@@ -218,143 +239,172 @@ export function Marketplace() {
 
 /* ------------------------------------------------------------------ */
 
-function ServiceCard({
-  service,
-  expanded,
-  onToggle,
-  onBuy,
-  signedIn,
-}: {
-  service: Service;
-  expanded: boolean;
-  onToggle: () => void;
-  onBuy: (service: Service, option: CountryOption) => void;
-  signedIn: boolean;
-}) {
-  const panelId = `countries-${service.slug}`;
-
-  // The list endpoint deliberately omits countries - across the full provider
-  // catalogue that array is ~15,000 entries, and shipping it made the
-  // marketplace a multi-megabyte download on every visit. So a card carries a
-  // "from" price and a count, and fetches the countries the moment someone
-  // actually opens it. SWR caches per slug, so reopening is instant.
-  const { data: detail, isLoading: loadingCountries } = useSWR<ServiceDetail>(
-    expanded ? `/services/${service.slug}/` : null,
-  );
-  const countries = detail?.countries ?? [];
-
+function ChannelTabs({ voiceAvailable }: { voiceAvailable: boolean }) {
   return (
-    <Card className={cn("flex flex-col overflow-hidden", !service.available && "opacity-80")}>
-      <div className="flex items-start gap-3 p-4">
-        <ServiceAvatar name={service.name} accentColor={service.accent_color} />
-        <div className="min-w-0 flex-1">
-          <div className="flex items-start justify-between gap-2">
-            <h3 className="truncate text-base font-semibold text-ink">{service.name}</h3>
-            {service.is_maintenance ? (
-              <Badge tone="warn">Maintenance</Badge>
-            ) : service.available ? (
-              <Badge tone="success" dot>
-                Available
-              </Badge>
-            ) : (
-              <Badge tone="neutral">Out of stock</Badge>
-            )}
-          </div>
-
-          <p className="mt-0.5 text-xs text-ink-muted">
-            {service.from_price ? (
-              <>
-                From <span className="tabular font-medium text-ink">{cedis(service.from_price)}</span>
-                <span className="mx-1.5" aria-hidden>
-                  &middot;
-                </span>
-              </>
-            ) : null}
-            {service.country_count}{" "}
-            {service.country_count === 1 ? "country" : "countries"}
-          </p>
-
-          <div className="mt-1.5 flex flex-wrap gap-1">
-            {service.supports_sms ? <Capability label="SMS" /> : null}
-            {service.supports_voice ? <Capability label="Voice" /> : null}
-          </div>
-        </div>
-      </div>
-
-      {service.is_maintenance && service.maintenance_note ? (
-        <p className="mx-4 mb-3 rounded-lg bg-warn-50 px-3 py-2 text-xs text-warn-700">
-          {service.maintenance_note}
-        </p>
-      ) : null}
-
-      <div className="mt-auto border-t border-line">
-        <ul id={panelId} className="divide-y divide-line">
-          {countries.map((option) => (
-            <li key={option.code} className="flex items-center gap-3 px-4 py-3">
-              <span className="text-base" aria-hidden>
-                {option.flag_emoji}
-              </span>
-              <div className="min-w-0 flex-1">
-                <p className="truncate text-sm font-medium text-ink">{option.name}</p>
-                <p className="text-xs text-ink-muted">
-                  {option.available ? (
-                    option.available_count && option.available_count < 20 ? (
-                      <span className="text-warn-700">Only {option.available_count} left</span>
-                    ) : (
-                      "In stock"
-                    )
-                  ) : (
-                    "Out of stock"
-                  )}
-                </p>
-              </div>
-              <span className="tabular shrink-0 text-sm font-semibold text-ink">
-                {cedis(option.price)}
-              </span>
-              <Button
-                size="sm"
-                variant={option.available ? "subtle" : "secondary"}
-                disabled={!option.available || service.is_maintenance}
-                onClick={() => onBuy(service, option)}
-              >
-                {signedIn ? "Buy" : "Sign in"}
-              </Button>
-            </li>
-          ))}
-        </ul>
-
-        {expanded && loadingCountries ? (
-          <div className="flex items-center justify-center gap-2 py-4 text-sm text-ink-muted">
-            <Spinner className="h-4 w-4 text-brand-600" />
-            Loading countries...
-          </div>
-        ) : null}
-
-        <button
-          type="button"
-          onClick={onToggle}
-          aria-expanded={expanded}
-          aria-controls={panelId}
-          className="flex w-full items-center justify-center gap-1.5 border-t border-line py-2.5 text-sm font-medium text-brand-700 transition-colors hover:bg-canvas"
-        >
-          {expanded
-            ? "Hide countries"
-            : `Choose from ${service.country_count} ${
-                service.country_count === 1 ? "country" : "countries"
-              }`}
-          <ChevronDownIcon
-            className={cn("h-4 w-4 transition-transform", expanded && "rotate-180")}
-          />
-        </button>
-      </div>
-    </Card>
+    <div className="inline-flex w-fit rounded-xl border border-line bg-surface p-1" role="tablist">
+      <button
+        type="button"
+        role="tab"
+        aria-selected
+        className="rounded-lg bg-brand-600 px-4 py-1.5 text-sm font-medium text-white"
+      >
+        SMS
+      </button>
+      <button
+        type="button"
+        role="tab"
+        aria-selected={false}
+        disabled
+        title={voiceAvailable ? "Voice verification is coming soon" : "Coming soon"}
+        className="flex cursor-not-allowed items-center gap-1.5 rounded-lg px-4 py-1.5 text-sm font-medium text-ink-faint"
+      >
+        Voice
+        <span className="rounded-md bg-line/70 px-1.5 py-0.5 text-2xs font-medium text-ink-muted">
+          Soon
+        </span>
+      </button>
+    </div>
   );
 }
 
-function Capability({ label }: { label: string }) {
+function CountrySwitch({
+  countries,
+  value,
+  onChange,
+}: {
+  countries: MarketHome["countries"];
+  value: string;
+  onChange: (code: string) => void;
+}) {
+  if (countries.length === 0) return <Skeleton className="h-10 w-64 rounded-xl" />;
   return (
-    <span className="rounded-md bg-line/60 px-1.5 py-0.5 text-2xs font-medium text-ink-soft">
-      {label}
-    </span>
+    <div
+      className="grid w-full grid-cols-2 rounded-xl border border-line bg-surface p-1 sm:w-auto"
+      role="radiogroup"
+      aria-label="Country"
+    >
+      {countries.map((country) => (
+        <button
+          key={country.code}
+          type="button"
+          role="radio"
+          aria-checked={value === country.code}
+          onClick={() => onChange(country.code)}
+          className={cn(
+            "flex items-center justify-center gap-2 rounded-lg px-3.5 py-1.5 text-sm font-medium transition-colors",
+            value === country.code ? "bg-ink text-white" : "text-ink-soft hover:bg-canvas",
+          )}
+        >
+          <span aria-hidden>{country.flag_emoji}</span>
+          {country.name}
+        </button>
+      ))}
+    </div>
+  );
+}
+
+function Section({
+  title,
+  count,
+  children,
+}: {
+  title: string;
+  count?: number;
+  children: React.ReactNode;
+}) {
+  return (
+    <section>
+      <div className="mb-1.5 flex items-baseline justify-between px-1">
+        <h2 className="text-2xs font-semibold uppercase tracking-[0.08em] text-ink-muted">
+          {title}
+        </h2>
+        {count !== undefined ? <span className="text-2xs text-ink-faint">{count}</span> : null}
+      </div>
+      <Card className="divide-y divide-line overflow-hidden">{children}</Card>
+    </section>
+  );
+}
+
+function ServiceRow({
+  row,
+  pinned,
+  countryLabel,
+  onOpen,
+  onPin,
+}: {
+  row: MarketRow;
+  pinned: boolean;
+  countryLabel: string;
+  onOpen: () => void;
+  onPin: () => void;
+}) {
+  const unavailable = row.availability === "UNAVAILABLE" || row.unavailable_here;
+  return (
+    <div className="group flex items-center gap-1 pr-1.5 transition-colors hover:bg-canvas">
+      <button
+        type="button"
+        onClick={onOpen}
+        className="flex min-h-[3.5rem] min-w-0 flex-1 items-center gap-3 py-2 pl-3.5 text-left sm:pl-4"
+      >
+        <ServiceAvatar name={row.name} accentColor={row.accent_color} size="sm" />
+        <span className="min-w-0 flex-1">
+          <span
+            className={cn(
+              "block truncate text-sm font-medium",
+              unavailable ? "text-ink-muted" : "text-ink",
+            )}
+          >
+            {row.name}
+          </span>
+          <AvailabilityLabel
+            availability={row.unavailable_here ? "UNAVAILABLE" : row.availability}
+            count={row.available_count}
+            className="sm:hidden"
+          />
+        </span>
+        <span className="hidden w-36 shrink-0 truncate text-xs text-ink-muted lg:block">
+          {countryLabel}
+        </span>
+        <AvailabilityLabel
+          availability={row.unavailable_here ? "UNAVAILABLE" : row.availability}
+          count={row.available_count}
+          className="hidden w-32 shrink-0 sm:inline-flex"
+        />
+        <span
+          className={cn(
+            "tabular w-20 shrink-0 text-right text-sm font-semibold",
+            unavailable ? "text-ink-faint" : "text-ink",
+          )}
+        >
+          {row.price && !row.unavailable_here ? cedis(row.price) : "-"}
+        </span>
+      </button>
+      <button
+        type="button"
+        onClick={onPin}
+        aria-pressed={pinned}
+        aria-label={pinned ? `Unpin ${row.name}` : `Pin ${row.name}`}
+        className={cn(
+          "flex h-11 w-11 shrink-0 items-center justify-center rounded-lg transition-[color,transform] duration-150 active:scale-90",
+          pinned ? "text-brand-600" : "text-ink-faint hover:text-ink-soft",
+        )}
+      >
+        <PinIcon filled={pinned} className="h-[1.1rem] w-[1.1rem]" />
+      </button>
+    </div>
+  );
+}
+
+function RowSkeletons() {
+  return (
+    <>
+      {Array.from({ length: 8 }).map((_, index) => (
+        <div key={index} className="flex min-h-[3.5rem] items-center gap-3 px-4">
+          <Skeleton className="h-8 w-8 rounded-lg" />
+          <Skeleton className="h-4 flex-1" />
+          <Skeleton className="h-4 w-14" />
+        </div>
+      ))}
+    </>
   );
 }

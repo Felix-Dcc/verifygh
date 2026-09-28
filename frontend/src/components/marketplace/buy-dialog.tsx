@@ -3,218 +3,270 @@
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import * as React from "react";
-import { mutate as globalMutate } from "swr";
+import useSWR, { mutate as globalMutate } from "swr";
 
 import { useAuth } from "@/components/auth-provider";
 import { ServiceAvatar } from "@/components/brand";
+import { AvailabilityLabel } from "@/components/marketplace/availability";
 import { Dialog } from "@/components/ui/dialog";
-import { Alert, Button, Skeleton } from "@/components/ui/primitives";
+import { Alert, Button, Skeleton, cn } from "@/components/ui/primitives";
 import { useToast } from "@/components/ui/toast";
 import { ApiError, api, newIdempotencyKey } from "@/lib/api";
 import { cedis } from "@/lib/format";
-import type { CountryOption, Order, Quote, Service } from "@/lib/types";
+import type { MarketServiceDetail, Order, Quote } from "@/lib/types";
 
 /**
- * The purchase confirmation.
+ * The purchase screen: pick a country, see the price and your balance, get a
+ * number.
  *
- * The price shown here comes from the server's quote endpoint, and the order
- * endpoint prices independently again - this dialog can only ever *display* a
- * price, never set one. The insufficient-balance path is a first-class state,
- * because on a prepaid wallet it is the most common outcome, not an error.
+ * Nothing on it is decided here. The country options and their prices come
+ * from the marketplace endpoint; the price shown before confirming comes from
+ * the quote endpoint; and the order endpoint prices, checks stock and checks
+ * the balance again on its own. This dialog can display a price, never set one.
  */
 export function BuyDialog({
   open,
   onClose,
-  service,
-  country,
+  serviceSlug,
+  initialCountry,
 }: {
   open: boolean;
   onClose: () => void;
-  service: Service | null;
-  country: CountryOption | null;
+  serviceSlug: string | null;
+  initialCountry: string;
 }) {
   const router = useRouter();
   const toast = useToast();
   const { user } = useAuth();
 
+  const { data: detail } = useSWR<MarketServiceDetail>(
+    open && serviceSlug ? `/marketplace/${serviceSlug}/` : null,
+  );
+
+  const [country, setCountry] = React.useState(initialCountry);
   const [quote, setQuote] = React.useState<Quote | null>(null);
   const [quoteError, setQuoteError] = React.useState("");
   const [loadingQuote, setLoadingQuote] = React.useState(false);
   const [submitting, setSubmitting] = React.useState(false);
   const [blocker, setBlocker] = React.useState<{ code: string; message: string } | null>(null);
 
-  // A fresh idempotency key per dialog opening: a double-tap on "Confirm" must
-  // buy one number, but reopening the dialog is a genuinely new purchase.
+  // One key per opening: a double tap on "Get number" buys one number, while
+  // reopening the dialog is a genuinely new purchase.
   const idempotencyKey = React.useRef(newIdempotencyKey());
 
   React.useEffect(() => {
-    if (!open || !service || !country) return;
+    if (open) {
+      idempotencyKey.current = newIdempotencyKey();
+      setCountry(initialCountry);
+      setBlocker(null);
+    }
+  }, [open, initialCountry]);
 
-    idempotencyKey.current = newIdempotencyKey();
+  const option = detail?.countries.find((entry) => entry.code === country);
+  const purchasable = Boolean(option?.offered && option.availability !== "UNAVAILABLE");
+
+  React.useEffect(() => {
+    if (!open || !serviceSlug || !user || !purchasable) {
+      setQuote(null);
+      return;
+    }
     setQuote(null);
     setQuoteError("");
-    setBlocker(null);
     setLoadingQuote(true);
-
     let cancelled = false;
     (async () => {
       try {
-        const result = await api.get<Quote>("/orders/quote/", {
-          service: service.slug,
-          country: country.code,
-        });
+        const result = await api.get<Quote>("/orders/quote/", { service: serviceSlug, country });
         if (!cancelled) setQuote(result);
       } catch (error) {
         if (!cancelled) {
           setQuoteError(
-            error instanceof ApiError
-              ? error.message
-              : "We could not price this right now. Please try again.",
+            error instanceof ApiError ? error.message : "We could not price this right now.",
           );
         }
       } finally {
         if (!cancelled) setLoadingQuote(false);
       }
     })();
-
     return () => {
       cancelled = true;
     };
-  }, [open, service, country]);
+  }, [open, serviceSlug, country, user, purchasable]);
 
   async function confirm() {
-    if (!service || !country) return;
+    if (!serviceSlug) return;
     setSubmitting(true);
     setBlocker(null);
-
     try {
       const order = await api.post<Order>(
         "/orders/",
-        { service: service.slug, country: country.code },
+        { service: serviceSlug, country },
         { idempotencyKey: idempotencyKey.current },
       );
-      // A purchase changes the balance and the order lists - and nothing else.
       await globalMutate((key) => {
         const path = Array.isArray(key) ? String(key[0]) : String(key);
         return (
-          path.startsWith("/wallet") ||
-          path.startsWith("/orders") ||
-          path.startsWith("/transactions")
+          path.startsWith("/wallet") || path.startsWith("/orders") || path.startsWith("/transactions")
         );
       });
-      toast.success("Order placed", `${service.name} - ${order.reference}`);
+      toast.success("Number on its way", `${detail?.name ?? "Order"} - ${order.reference}`);
       onClose();
       router.push(`/orders/${order.reference}`);
     } catch (error) {
-      if (error instanceof ApiError) {
-        setBlocker({ code: error.code, message: error.message });
-      } else {
-        setBlocker({ code: "UNKNOWN", message: "Something went wrong. Please try again." });
-      }
+      setBlocker(
+        error instanceof ApiError
+          ? { code: error.code, message: error.message }
+          : { code: "UNKNOWN", message: "Something went wrong. Please try again." },
+      );
       setSubmitting(false);
     }
   }
 
-  if (!service || !country) return null;
+  if (!serviceSlug) return null;
 
-  const insufficient = blocker?.code === "INSUFFICIENT_FUNDS" || quote?.sufficient_balance === false;
+  const insufficient =
+    blocker?.code === "INSUFFICIENT_FUNDS" || quote?.sufficient_balance === false;
+  const price = quote?.price ?? option?.price;
 
   return (
     <Dialog
       open={open}
       onClose={onClose}
-      title="Confirm your purchase"
+      title={detail ? detail.name : "Loading"}
       dismissible={!submitting}
       footer={
-        <DialogFooter
-          insufficient={insufficient}
-          submitting={submitting}
-          disabled={loadingQuote || !quote || Boolean(quoteError)}
-          onCancel={onClose}
-          onConfirm={confirm}
-          blockerCode={blocker?.code}
-        />
+        !user ? (
+          <Link
+            href={`/login?next=${encodeURIComponent(`/services?service=${serviceSlug}`)}`}
+            className="block"
+          >
+            <Button fullWidth>Sign in to get a number</Button>
+          </Link>
+        ) : (
+          <DialogFooter
+            insufficient={insufficient}
+            submitting={submitting}
+            disabled={!purchasable || loadingQuote || !quote || Boolean(quoteError)}
+            onCancel={onClose}
+            onConfirm={confirm}
+            blockerCode={blocker?.code}
+          />
+        )
       }
     >
-      <div className="space-y-4">
-        <div className="flex items-center gap-3 rounded-xl border border-line bg-canvas p-3.5">
-          <ServiceAvatar name={service.name} accentColor={service.accent_color} size="lg" />
-          <div className="min-w-0">
-            <p className="text-base font-semibold text-ink">{service.name}</p>
-            <p className="text-sm text-ink-muted">
-              <span aria-hidden>{country.flag_emoji}</span> {country.name}
-              {country.supports_sms ? (
-                <span className="ml-2 rounded-md bg-line/60 px-1.5 py-0.5 text-2xs font-medium text-ink-soft">
-                  SMS
-                </span>
-              ) : null}
-              {country.supports_voice ? (
-                <span className="ml-1 rounded-md bg-line/60 px-1.5 py-0.5 text-2xs font-medium text-ink-soft">
-                  Voice
-                </span>
-              ) : null}
-            </p>
-          </div>
+      {!detail ? (
+        <div className="space-y-3">
+          <Skeleton className="h-12 w-full rounded-xl" />
+          <Skeleton className="h-24 w-full rounded-xl" />
         </div>
+      ) : (
+        <div className="space-y-4">
+          <div className="flex items-center gap-3">
+            <ServiceAvatar name={detail.name} accentColor={detail.accent_color} size="lg" />
+            <div className="min-w-0">
+              <p className="text-sm font-medium text-ink">Verification number</p>
+              <p className="text-sm text-ink-muted">One-time SMS, delivered to this screen</p>
+            </div>
+          </div>
 
-        {quoteError ? (
-          <Alert tone="danger" title="Could not price this">
-            {quoteError}
-          </Alert>
-        ) : (
-          <dl className="space-y-2.5 text-sm">
-            <Row label="Service price">
+          {detail.maintenance_note ? (
+            <Alert tone="warn" title="Temporarily unavailable">
+              {detail.maintenance_note}
+            </Alert>
+          ) : null}
+
+          <fieldset>
+            <legend className="mb-2 text-sm font-medium text-ink">Country</legend>
+            <div className="grid grid-cols-2 gap-2" role="radiogroup">
+              {detail.countries.map((entry) => {
+                const selected = entry.code === country;
+                const unavailable = !entry.offered || entry.availability === "UNAVAILABLE";
+                return (
+                  <button
+                    key={entry.code}
+                    type="button"
+                    role="radio"
+                    aria-checked={selected}
+                    onClick={() => setCountry(entry.code)}
+                    className={cn(
+                      "flex min-h-[4.25rem] flex-col items-start justify-center rounded-xl border px-3.5 py-2.5 text-left transition-colors",
+                      selected
+                        ? "border-brand-600 bg-brand-50 ring-1 ring-brand-600"
+                        : "border-line hover:border-line-strong hover:bg-canvas",
+                    )}
+                  >
+                    <span className="flex items-center gap-1.5 text-sm font-medium text-ink">
+                      <span aria-hidden>{entry.flag_emoji}</span>
+                      {entry.name}
+                    </span>
+                    <span className="mt-0.5 text-xs text-ink-muted">
+                      {unavailable
+                        ? entry.offered
+                          ? "Unavailable right now"
+                          : "Not offered"
+                        : cedis(entry.price)}
+                    </span>
+                  </button>
+                );
+              })}
+            </div>
+          </fieldset>
+
+          <dl className="space-y-2.5 rounded-xl border border-line bg-canvas p-3.5 text-sm">
+            <Row label="Availability">
+              {option ? (
+                <AvailabilityLabel
+                  availability={option.offered ? option.availability : "UNAVAILABLE"}
+                  count={option.available_count ?? null}
+                />
+              ) : (
+                <Skeleton className="h-4 w-20" />
+              )}
+            </Row>
+            <Row label="Price">
               {loadingQuote ? (
                 <Skeleton className="h-4 w-16" />
               ) : (
-                <span className="tabular font-semibold text-ink">{cedis(quote?.price)}</span>
-              )}
-            </Row>
-            <Row label="Wallet balance">
-              {loadingQuote ? (
-                <Skeleton className="h-4 w-16" />
-              ) : (
-                <span className="tabular text-ink-soft">{cedis(quote?.wallet_balance)}</span>
-              )}
-            </Row>
-            {quote && !loadingQuote ? (
-              <Row label="Balance after">
-                <span className="tabular text-ink-soft">
-                  {cedis(
-                    (
-                      Number.parseFloat(quote.wallet_balance) - Number.parseFloat(quote.price)
-                    ).toFixed(2),
-                  )}
+                <span className="tabular text-base font-semibold text-ink">
+                  {purchasable && price ? cedis(price) : "-"}
                 </span>
+              )}
+            </Row>
+            {user ? (
+              <Row label="Wallet balance">
+                {loadingQuote ? (
+                  <Skeleton className="h-4 w-16" />
+                ) : (
+                  <span className={cn("tabular", insufficient ? "text-warn-700" : "text-ink-soft")}>
+                    {quote ? cedis(quote.wallet_balance) : "-"}
+                  </span>
+                )}
               </Row>
             ) : null}
-            <Row label="Number valid for">
-              <span className="text-ink-soft">
-                {quote ? `about ${quote.ttl_minutes} minutes` : "-"}
-              </span>
-            </Row>
           </dl>
-        )}
 
-        {insufficient ? (
-          <Alert tone="warn" title="Your balance is insufficient.">
-            Add money to your wallet and the purchase will go straight through.
-          </Alert>
-        ) : blocker ? (
-          <BlockerNotice code={blocker.code} message={blocker.message} email={user?.email} />
-        ) : null}
+          {quoteError ? (
+            <Alert tone="danger" title="Could not price this">
+              {quoteError}
+            </Alert>
+          ) : null}
 
-        {!insufficient && !blocker && quote ? (
+          {insufficient ? (
+            <Alert tone="warn" title="Your balance is insufficient.">
+              Add money to your wallet with Mobile Money, then come back.
+            </Alert>
+          ) : blocker ? (
+            <BlockerNotice code={blocker.code} message={blocker.message} email={user?.email} />
+          ) : null}
+
           <p className="text-xs leading-relaxed text-ink-muted">
-            If no verification code arrives before the number expires, the full{" "}
-            {cedis(quote.price)} is returned to your wallet automatically. Numbers come from our
-            provider&apos;s shared pool and may have been used before, so a service can
-            occasionally treat one as already registered - if that happens, report it from your
-            order screen. You are responsible for complying with the terms of the service you
-            verify with.
+            The price is fixed when you tap Get number. If no code arrives before the number
+            expires, it is refunded to your wallet automatically. Numbers come from our
+            provider&apos;s shared pool and may have been used before - if a service treats one as
+            already registered, report it from your order screen.
           </p>
-        ) : null}
-      </div>
+        </div>
+      )}
     </Dialog>
   );
 }
@@ -251,7 +303,7 @@ function DialogFooter({
         </Button>
         <Link href="/wallet/deposit" className="sm:w-auto">
           <Button fullWidth className="sm:w-auto">
-            Add Money
+            Add money
           </Button>
         </Link>
       </div>
@@ -275,37 +327,17 @@ function DialogFooter({
 
   return (
     <div className="flex flex-col-reverse gap-2 sm:flex-row sm:justify-end">
-      <Button
-        variant="secondary"
-        fullWidth
-        className="sm:w-auto"
-        onClick={onCancel}
-        disabled={submitting}
-      >
+      <Button variant="secondary" fullWidth className="sm:w-auto" onClick={onCancel} disabled={submitting}>
         Cancel
       </Button>
-      <Button
-        fullWidth
-        className="sm:w-auto"
-        onClick={onConfirm}
-        loading={submitting}
-        disabled={disabled}
-      >
-        {submitting ? "Placing order" : "Confirm purchase"}
+      <Button fullWidth className="sm:w-auto" onClick={onConfirm} loading={submitting} disabled={disabled}>
+        {submitting ? "Getting number" : "Get number"}
       </Button>
     </div>
   );
 }
 
-function BlockerNotice({
-  code,
-  message,
-  email,
-}: {
-  code: string;
-  message: string;
-  email?: string;
-}) {
+function BlockerNotice({ code, message, email }: { code: string; message: string; email?: string }) {
   const guidance: Record<string, React.ReactNode> = {
     EMAIL_NOT_VERIFIED: (
       <>
@@ -325,12 +357,17 @@ function BlockerNotice({
     TOO_MANY_ACTIVE_ORDERS: <>Finish or cancel one of your open orders, then try again.</>,
     DAILY_ORDER_LIMIT: <>You have hit today&apos;s order limit. It resets in 24 hours.</>,
     DAILY_SPEND_LIMIT: <>You have hit today&apos;s spending limit. It resets in 24 hours.</>,
-    NO_AVAILABILITY: <>Try another country, or check back shortly.</>,
+    NO_AVAILABILITY: <>Try the other country, or check back shortly. Nothing was charged.</>,
+    PROVIDER_UNAVAILABLE: <>Nothing was charged. Please try again in a moment.</>,
+    PLATFORM_AT_CAPACITY: <>Nothing was charged. Please try again in a few minutes.</>,
+    PRICE_UNAVAILABLE: <>Nothing was charged. Please try again later.</>,
+    UNSUPPORTED_COUNTRY: <>Choose the United States or Canada.</>,
     ACCOUNT_SUSPENDED: <>Contact support to resolve this.</>,
   };
+  const soft = ["NO_AVAILABILITY", "PROVIDER_UNAVAILABLE", "PLATFORM_AT_CAPACITY"].includes(code);
 
   return (
-    <Alert tone={code === "NO_AVAILABILITY" ? "warn" : "danger"} title={message}>
+    <Alert tone={soft ? "warn" : "danger"} title={message}>
       {guidance[code] ?? "Please try again in a moment."}
     </Alert>
   );

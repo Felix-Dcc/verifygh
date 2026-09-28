@@ -140,11 +140,31 @@ def current_rate(base: str = "USD", quote: str = "GHS", allow_stale: bool = Fals
 
 
 def record_rate(rate: Decimal, *, base: str = "USD", quote: str = "GHS", source: str = "manual",
-                note: str = "") -> ExchangeRate:
-    """Append a new rate row. Existing rows are never edited."""
-    return ExchangeRate.objects.create(
+                note: str = "", actor=None) -> ExchangeRate:
+    """Append a new rate row. Existing rows are never edited.
+
+    A new rate moves every customer price, so once it has committed the
+    marketplace is repriced and the changes written to price history.
+    """
+    from django.db import transaction
+
+    row = ExchangeRate.objects.create(
         base_currency=base, quote_currency=quote, rate=rate, source=source, note=note
     )
+
+    def _reprice():
+        from apps.catalog import marketplace
+        from apps.pricing.history import refresh_offering_prices
+        from apps.pricing.models import PriceChangeSource
+
+        marketplace.invalidate()
+        refresh_offering_prices(
+            source=PriceChangeSource.EXCHANGE_RATE, actor=actor,
+            reason=note or f"Exchange rate set to {rate} ({source})",
+        )
+
+    transaction.on_commit(_reprice)
+    return row
 
 
 def refresh_rate(base: str = "USD", quote: str = "GHS") -> ExchangeRate | None:

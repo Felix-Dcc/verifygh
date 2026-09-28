@@ -255,6 +255,23 @@ def test_a_disabled_country_is_left_out(provider):
     assert {c.code for c in provider.get_countries()} == {"RU"}
 
 
+@pytest.fixture(autouse=True)
+def _walk_every_country(settings):
+    """These tests exercise the adapter against a fake catalogue spanning many
+    countries, so the marketplace country filter is lifted by default; the test
+    below puts it back to show it works."""
+    settings.VERIFYGH = {**settings.VERIFYGH, "MARKETPLACE_COUNTRIES": []}
+
+
+def test_only_marketplace_countries_are_walked(provider, settings):
+    settings.VERIFYGH = {**settings.VERIFYGH, "MARKETPLACE_COUNTRIES": ["US", "CA"],
+                         "PROVIDER_CATALOG_LIMIT": 0}
+    wire(provider, {provider.PATH_TARIFFS: FakeResponse(200, TARIFFS)})
+
+    offerings = provider.get_services()
+
+    assert {o.country_code for o in offerings} <= {"US", "CA"}
+
 def test_services_are_priced_and_carry_availability(provider):
     wire(provider, {provider.PATH_TARIFFS: FakeResponse(200, TARIFFS)})
 

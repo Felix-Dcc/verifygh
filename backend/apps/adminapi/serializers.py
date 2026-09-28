@@ -188,6 +188,7 @@ class AdminServiceSerializer(serializers.ModelSerializer):
         model = Service
         fields = [
             "id", "slug", "name", "category", "description", "accent_color", "icon_url",
+            "aliases", "is_popular", "popular_rank",
             "is_enabled", "is_maintenance", "maintenance_note", "supports_sms",
             "supports_voice", "display_order", "offering_count", "available_count",
         ]
@@ -211,15 +212,19 @@ class AdminOfferingSerializer(serializers.ModelSerializer):
     provider_name = serializers.CharField(source="provider.name", read_only=True)
     customer_price = serializers.SerializerMethodField()
     margin = serializers.SerializerMethodField()
+    base_cost = serializers.SerializerMethodField()
+    cost_floor = serializers.SerializerMethodField()
+    pricing_rule_name = serializers.SerializerMethodField()
     pricing_error = serializers.SerializerMethodField()
 
     class Meta:
         model = ProviderService
         fields = [
             "id", "provider_name", "service_name", "service_slug", "country_code",
-            "provider_service_code", "cost_amount", "cost_currency", "customer_price",
-            "margin", "pricing_error", "is_enabled", "is_available", "available_count",
-            "supports_sms", "supports_voice", "ttl_minutes", "last_synced_at",
+            "provider_service_code", "cost_amount", "cost_currency", "base_cost", "cost_floor",
+            "customer_price", "margin", "pricing_rule_name", "pricing_error", "is_enabled",
+            "is_available", "available_count", "supports_sms", "supports_voice",
+            "ttl_minutes", "last_synced_at", "price_updated_at",
         ]
         # Only is_enabled is an admin decision. Everything else describes what
         # the provider sells and comes from catalog sync; letting an admin
@@ -253,23 +258,41 @@ class AdminOfferingSerializer(serializers.ModelSerializer):
         quote = self._quote(obj)
         return str(quote.margin) if quote else None
 
+    def get_base_cost(self, obj) -> str | None:
+        """Provider cost converted to cedis at the current rate."""
+        quote = self._quote(obj)
+        return str(quote.base_cost) if quote else None
+
+    def get_cost_floor(self, obj) -> str | None:
+        quote = self._quote(obj)
+        return quote.applied.get("cost_floor") if quote else None
+
+    def get_pricing_rule_name(self, obj) -> str:
+        quote = self._quote(obj)
+        return quote.pricing_rule_name if quote else ""
+
     def get_pricing_error(self, obj) -> str:
         return "" if self._quote(obj) else "Could not price this offering."
 
 
 class PricingRuleSerializer(serializers.ModelSerializer):
     service_slug = serializers.CharField(source="service.slug", read_only=True, default=None)
+    service_name = serializers.CharField(source="service.name", read_only=True, default=None)
     country_code = serializers.CharField(source="country.code", read_only=True, default=None)
+    provider_key = serializers.CharField(source="provider.adapter_key", read_only=True,
+                                         default=None)
 
     class Meta:
         model = PricingRule
         fields = [
-            "id", "name", "is_active", "service", "service_slug", "country", "country_code",
-            "markup_type", "markup_percent", "markup_fixed", "payment_fee_percent",
-            "risk_buffer_percent", "rounding", "min_price", "max_price", "priority",
-            "created_at", "updated_at",
+            "id", "name", "is_active", "service", "service_slug", "service_name", "country",
+            "country_code", "provider", "provider_key", "markup_type", "markup_percent",
+            "markup_fixed", "payment_fee_percent", "risk_buffer_percent", "rounding",
+            "min_price", "max_price", "allow_below_cost", "priority", "created_at",
+            "updated_at",
         ]
-        read_only_fields = ["id", "service_slug", "country_code", "created_at", "updated_at"]
+        read_only_fields = ["id", "service_slug", "service_name", "country_code",
+                            "provider_key", "created_at", "updated_at"]
 
     def validate(self, attrs):
         minimum = attrs.get("min_price", getattr(self.instance, "min_price", None))
@@ -319,3 +342,19 @@ class SuspiciousActivitySerializer(serializers.ModelSerializer):
 
 class ResolveFlagSerializer(serializers.Serializer):
     note = serializers.CharField(max_length=500, min_length=3)
+
+
+class PriceChangeSerializer(serializers.ModelSerializer):
+    changed_by_email = serializers.EmailField(source="changed_by.email", default=None,
+                                              read_only=True)
+    source_label = serializers.CharField(source="get_source_display", read_only=True)
+
+    class Meta:
+        from apps.pricing.models import PriceChange
+
+        model = PriceChange
+        fields = ["id", "service_name", "country_code", "provider_key", "old_price",
+                  "new_price", "currency", "provider_cost", "provider_currency",
+                  "exchange_rate", "pricing_rule_name", "source", "source_label",
+                  "changed_by_email", "reason", "created_at"]
+        read_only_fields = fields

@@ -260,3 +260,20 @@ export const ChevronDownIcon = (p: IconProps) => (
     <path d="M6 9.5l6 6 6-6" />
   </Svg>
 );
+
+/** A push pin. `filled` for a pinned service. */
+export const PinIcon = ({ className, filled }: IconProps & { filled?: boolean }) => (
+  <svg
+    viewBox="0 0 24 24"
+    fill={filled ? "currentColor" : "none"}
+    stroke="currentColor"
+    strokeWidth="1.7"
+    strokeLinecap="round"
+    strokeLinejoin="round"
+    className={className ?? "h-5 w-5"}
+    aria-hidden="true"
+  >
+    <path d="M9 3.5h6l-1 5.5 3.5 3v1.5h-11V12L10 9z" />
+    <path d="M12 13.5V21" fill="none" />
+  </svg>
+);
