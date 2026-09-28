@@ -51,17 +51,42 @@ NETWORK_CODES = {
     MomoNetwork.AT: "atl",
 }
 
+#: Paystack's `data.status`, mapped to what the customer must actually do.
+#:
+#: The two that matter for Ghana mobile money are `pay_offline` and `send_otp`,
+#: and they are opposites. `pay_offline` means wait - the handset is being
+#: prompted. `send_otp` means act - Paystack has texted a code and will sit
+#: there until we POST it back.
+#:
+#: Both used to map to PROCESSING, so both rendered the same "approve on your
+#: phone, waiting for confirmation" screen. A customer in the send_otp branch
+#: received a code, had nowhere to enter it, and watched the charge expire.
+#: That is the bug this table fixes.
 STATUS_MAP = {
     "success": ChargeStatus.SUCCESS,
     "failed": ChargeStatus.FAILED,
     "abandoned": ChargeStatus.CANCELLED,
     "reversed": ChargeStatus.FAILED,
+    "timeout": ChargeStatus.EXPIRED,
     "pending": ChargeStatus.PENDING,
     "ongoing": ChargeStatus.PROCESSING,
-    "pay_offline": ChargeStatus.PROCESSING,
-    "send_otp": ChargeStatus.PROCESSING,
     "processing": ChargeStatus.PROCESSING,
+    "queued": ChargeStatus.PROCESSING,
+    # Documented for Ghana MoMo: "the customer is also prompted to authorise
+    # the transaction on their phones... within 180 seconds".
+    "pay_offline": ChargeStatus.PHONE_AUTH_REQUIRED,
+    # Documented on the Charge API: completed with POST /charge/submit_otp.
+    "send_otp": ChargeStatus.OTP_REQUIRED,
 }
+
+#: Card-only authorisation steps. They should never appear on a mobile_money
+#: charge, and we cannot complete any of them, so they are treated as failures
+#: rather than left to time out in front of the customer.
+UNSUPPORTED_ACTIONS = {"send_pin", "send_phone", "send_birthday", "send_address", "open_url"}
+
+#: Paystack's documented ceiling for a Ghana mobile money authorisation. After
+#: this the network fails the transaction, whatever our own expiry says.
+MOBILE_MONEY_WINDOW_SECONDS = 180
 
 
 def _fallback_email() -> str:
@@ -178,28 +203,81 @@ class PaystackProvider(PaymentProvider):
         payload = self._request("POST", "/charge", json=body)
         data = payload.get("data", {})
         raw_status = str(data.get("status", "pending")).lower()
+        return self._charge_from(data, raw_status, reference,
+                                 amount=amount, currency=currency)
 
+    def _charge_from(self, data: dict, raw_status: str, reference: str, *,
+                     amount: Decimal | None = None, currency: str = "GHS") -> ChargeDTO:
+        """One place that turns a Paystack `data` block into a ChargeDTO."""
+        if raw_status in UNSUPPORTED_ACTIONS:
+            # Nothing we can do drives these forward, so say so now rather than
+            # showing a spinner until the window closes.
+            logger.error("paystack_unsupported_action",
+                         extra={"reference": reference, "action": raw_status})
+            return ChargeDTO(
+                provider_reference=str(data.get("reference") or reference),
+                status=ChargeStatus.FAILED,
+                amount=amount,
+                currency=currency,
+                failure_reason="This payment needs a step we cannot complete. "
+                               "Please try again.",
+                raw={"status": raw_status},
+            )
+
+        status = STATUS_MAP.get(raw_status)
+        if status is None:
+            # Unknown states are never success and never terminal: PENDING lets
+            # verification and the expiry sweep settle it.
+            logger.warning("paystack_unknown_status",
+                           extra={"reference": reference, "provider_status": raw_status[:40]})
+            status = ChargeStatus.PENDING
+
+        terminal_failure = status in (
+            ChargeStatus.FAILED, ChargeStatus.CANCELLED, ChargeStatus.EXPIRED
+        )
         return ChargeDTO(
             provider_reference=str(data.get("reference") or reference),
-            status=STATUS_MAP.get(raw_status, ChargeStatus.PROCESSING),
+            status=status,
             amount=amount,
             currency=currency,
-            instructions=str(data.get("display_text", ""))
-            or "Approve the Mobile Money prompt on your phone to complete the payment.",
+            # Paystack's own wording for the step the customer is on. Preferred
+            # over anything we invent, because it matches the SMS they just got.
+            instructions=str(data.get("display_text", "") or "")[:255],
+            failure_reason=(
+                str(data.get("gateway_response", "") or "")[:200]
+                if terminal_failure
+                else ""
+            ),
             raw={"status": raw_status},
         )
+
+    def submit_otp(self, *, reference: str, otp: str) -> ChargeDTO:
+        """Complete a charge that stopped at `send_otp`.
+
+        Documented as POST /charge/submit_otp with {otp, reference}. The code
+        itself is never logged - it is a bearer credential for one payment, and
+        a log line is the wrong place for it.
+        """
+        logger.info("paystack_submitting_otp", extra={"reference": reference})
+        payload = self._request(
+            "POST", "/charge/submit_otp", json={"otp": otp, "reference": reference}
+        )
+        data = payload.get("data", {})
+        raw_status = str(data.get("status", "")).lower()
+        logger.info("paystack_otp_submitted",
+                    extra={"reference": reference, "provider_status": raw_status[:40]})
+        return self._charge_from(data, raw_status, reference,
+                                 amount=from_subunit(data.get("amount", 0)) or None,
+                                 currency=str(data.get("currency", "GHS")))
 
     def fetch_charge(self, reference: str) -> ChargeDTO:
         payload = self._request("GET", f"/transaction/verify/{reference}")
         data = payload.get("data", {})
         raw_status = str(data.get("status", "")).lower()
-        return ChargeDTO(
-            provider_reference=str(data.get("reference") or reference),
-            status=STATUS_MAP.get(raw_status, ChargeStatus.PENDING),
+        return self._charge_from(
+            data, raw_status, reference,
             amount=from_subunit(data.get("amount", 0)),
             currency=str(data.get("currency", "GHS")),
-            failure_reason=str(data.get("gateway_response", ""))[:200],
-            raw={"status": raw_status},
         )
 
     # -- webhooks --------------------------------------------------------

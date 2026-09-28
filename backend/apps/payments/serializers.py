@@ -94,3 +94,14 @@ class MomoNetworkSerializer(serializers.Serializer):
     value = serializers.CharField()
     label = serializers.CharField()
     prefixes = serializers.ListField(child=serializers.CharField())
+
+
+class SubmitOtpSerializer(serializers.Serializer):
+    """The one-time code a customer read off their phone.
+
+    Deliberately permissive about shape - spaces and dashes get pasted in - and
+    strict about length, which the service checks again after stripping. Marked
+    write_only so it cannot be echoed back in a response by accident.
+    """
+
+    otp = serializers.CharField(max_length=16, trim_whitespace=True, write_only=True)

@@ -12,10 +12,27 @@ from apps.common.models import BaseModel, ImmutableModel
 class PaymentStatus(models.TextChoices):
     PENDING = "PENDING", "Pending"
     PROCESSING = "PROCESSING", "Processing"
+    # Two states the customer has to be told apart, because one needs them to
+    # type and the other needs them to wait. Showing "waiting for confirmation"
+    # to somebody holding an unused SMS code is how a payment dies silently.
+    OTP_REQUIRED = "OTP_REQUIRED", "Waiting for the one-time code"
+    PHONE_AUTH = "PHONE_AUTH", "Waiting for approval on the handset"
     SUCCESS = "SUCCESS", "Successful"
     FAILED = "FAILED", "Failed"
     CANCELLED = "CANCELLED", "Cancelled"
     EXPIRED = "EXPIRED", "Expired"
+
+
+#: Statuses where the customer still has something to do, or we are still
+#: waiting on the network. None of them has moved money.
+AWAITING_PAYMENT_STATUSES = frozenset(
+    {
+        PaymentStatus.PENDING,
+        PaymentStatus.PROCESSING,
+        PaymentStatus.OTP_REQUIRED,
+        PaymentStatus.PHONE_AUTH,
+    }
+)
 
 
 TERMINAL_PAYMENT_STATUSES = frozenset(
@@ -65,7 +82,12 @@ class Payment(BaseModel):
         max_length=12, choices=PaymentStatus.choices, default=PaymentStatus.PENDING, db_index=True
     )
     failure_reason = models.CharField(max_length=255, blank=True, default="")
+    #: The provider's own wording for the step the customer is on. Preferred
+    #: over anything we write, because it matches the SMS they just received.
     instructions = models.CharField(max_length=255, blank=True, default="")
+    #: One-time codes submitted for this payment. Bounded so a stolen reference
+    #: cannot be used to guess a six-digit code; the code itself is never stored.
+    otp_attempts = models.PositiveSmallIntegerField(default=0)
 
     credited_at = models.DateTimeField(
         null=True, blank=True, help_text="When the wallet was credited for this payment."
@@ -90,10 +112,11 @@ class Payment(BaseModel):
             models.CheckConstraint(
                 check=models.Q(amount__gt=Decimal("0.00")), name="payment_amount_positive"
             ),
+            # Derived from the enum rather than repeated by hand. The hardcoded
+            # copy went stale the first time a status was added, and the
+            # database - correctly - refused every row using the new one.
             models.CheckConstraint(
-                check=models.Q(status__in=[
-                    "PENDING", "PROCESSING", "SUCCESS", "FAILED", "CANCELLED", "EXPIRED",
-                ]),
+                check=models.Q(status__in=PaymentStatus.values),
                 name="payment_status_valid",
             ),
             # The credit and the SUCCESS status are written in one UPDATE; a row

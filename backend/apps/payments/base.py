@@ -20,6 +20,15 @@ from enum import Enum
 class ChargeStatus(str, Enum):
     PENDING = "PENDING"
     PROCESSING = "PROCESSING"
+    #: The provider is waiting for a one-time code that WE must submit on the
+    #: customer's behalf. Distinct from PROCESSING because it is not a waiting
+    #: state at all - nothing happens until we send the code, and collapsing the
+    #: two is how a customer ends up staring at "waiting for confirmation" while
+    #: holding an SMS code with nowhere to type it.
+    OTP_REQUIRED = "OTP_REQUIRED"
+    #: The customer must approve on their handset. We genuinely do wait here,
+    #: and there is nothing for them to type into our UI.
+    PHONE_AUTH_REQUIRED = "PHONE_AUTH_REQUIRED"
     SUCCESS = "SUCCESS"
     FAILED = "FAILED"
     CANCELLED = "CANCELLED"
@@ -72,6 +81,17 @@ class PaymentProvider(abc.ABC):
 
     def __init__(self, config: dict | None = None):
         self.config = config or {}
+
+    def submit_otp(self, *, reference: str, otp: str) -> "ChargeDTO":
+        """Send a one-time code the customer gave us to the provider.
+
+        Only meaningful for providers whose flow can stop at OTP_REQUIRED. The
+        default refuses, so a provider that never asks for one cannot be handed
+        a code by mistake.
+        """
+        from apps.common.errors import ProviderError
+
+        raise ProviderError("This payment method does not use a one-time code.")
 
     @abc.abstractmethod
     def initiate_charge(

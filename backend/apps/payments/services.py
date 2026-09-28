@@ -20,7 +20,9 @@ from django.utils import timezone
 from apps.audit.models import SuspicionLevel, SuspiciousActivity
 from apps.audit.services import flag, record_audit
 from apps.common.errors import (
+    InvalidStateTransition,
     LimitExceeded,
+    NotFound,
     ProviderError,
     ServiceUnavailable,
     ValidationFailed,
@@ -43,11 +45,20 @@ logger = logging.getLogger("verifygh.payments")
 _CHARGE_TO_PAYMENT = {
     ChargeStatus.PENDING: PaymentStatus.PENDING,
     ChargeStatus.PROCESSING: PaymentStatus.PROCESSING,
+    ChargeStatus.OTP_REQUIRED: PaymentStatus.OTP_REQUIRED,
+    ChargeStatus.PHONE_AUTH_REQUIRED: PaymentStatus.PHONE_AUTH,
     ChargeStatus.SUCCESS: PaymentStatus.SUCCESS,
     ChargeStatus.FAILED: PaymentStatus.FAILED,
     ChargeStatus.CANCELLED: PaymentStatus.CANCELLED,
     ChargeStatus.EXPIRED: PaymentStatus.EXPIRED,
 }
+
+#: How many one-time codes may be tried for one payment.
+#:
+#: A six-digit code is a million guesses in theory and far fewer in practice, so
+#: the reference alone must not be a brute-force oracle. Three is enough for a
+#: mistyped code and nowhere near enough to search.
+MAX_OTP_ATTEMPTS = 3
 
 #: Stored for verified callbacks we could not parse. Kept visible as
 #: unprocessed, but never auto-replayed - parsing it again would fail again.
@@ -180,6 +191,154 @@ def initiate_deposit(*, user, amount, phone: str, network: str, request=None) ->
         extra={"reference": reference, "amount": str(amount), "provider": provider.key},
     )
     return payment
+
+
+def submit_deposit_otp(*, user, reference: str, otp: str) -> Payment:
+    """Hand a customer's one-time code to the provider.
+
+    The code is a bearer credential for one payment, so this is written as a
+    gate rather than a pass-through. Every check below is load-bearing:
+
+    * the payment is locked before it is read, so two submissions cannot both
+      see OTP_REQUIRED and both spend an attempt;
+    * it must belong to the caller - a reference is guessable enough that
+      ownership cannot be assumed from knowing one;
+    * it must still be awaiting a code, so a settled payment cannot be nudged;
+    * it must not have expired, because the provider has already closed it;
+    * attempts are counted and capped, so the reference is not a brute-force
+      oracle against a six-digit code.
+
+    The code itself is never stored and never logged.
+    """
+    digits = "".join(ch for ch in str(otp or "") if ch.isdigit())
+    if not 4 <= len(digits) <= 8:
+        raise ValidationFailed(
+            "Enter the code exactly as it appears in the message.",
+            code="INVALID_OTP_FORMAT",
+        )
+
+    with transaction.atomic():
+        payment = (
+            Payment.objects.select_for_update()
+            .filter(reference=reference)
+            .first()
+        )
+        if payment is None or payment.user_id != user.id:
+            # One message for "no such payment" and "not yours": telling them
+            # apart would confirm that a reference exists.
+            raise NotFound("We could not find that payment.")
+
+        if payment.status == PaymentStatus.SUCCESS:
+            # Already done. Return it rather than erroring - the customer
+            # pressing submit twice should not look like a failure.
+            return payment
+
+        if payment.status != PaymentStatus.OTP_REQUIRED:
+            raise InvalidStateTransition(
+                "This payment is not waiting for a code.",
+                code="OTP_NOT_EXPECTED",
+            )
+
+        # Recorded, not raised, from inside the transaction: raising here would
+        # roll back the very status change we want to keep, and the payment
+        # would sit at OTP_REQUIRED forever while telling the customer it had
+        # expired.
+        expired = bool(payment.expires_at and payment.expires_at <= timezone.now())
+
+        if expired:
+            payment_pk = payment.pk
+        elif payment.otp_attempts >= MAX_OTP_ATTEMPTS:
+            raise LimitExceeded(
+                "Too many incorrect codes. Please start a new payment.",
+                code="OTP_ATTEMPTS_EXCEEDED",
+            )
+        else:
+            # Counted before the call, not after: a submission that times out
+            # upstream still consumed an attempt, and crediting the attempt only
+            # on a clean response would leave the cap bypassable by hanging up.
+            payment.otp_attempts += 1
+            payment.save(update_fields=["otp_attempts", "updated_at"])
+            attempt = payment.otp_attempts
+            provider_reference = payment.provider_reference or payment.reference
+
+    if expired:
+        # Its own transaction, so the settlement survives the exception.
+        now = timezone.now()
+        Payment.objects.filter(pk=payment_pk, status=PaymentStatus.OTP_REQUIRED).update(
+            status=PaymentStatus.EXPIRED,
+            failure_reason="The payment window closed before it was completed.",
+            completed_at=now,
+            updated_at=now,
+        )
+        logger.info("deposit_otp_expired", extra={"reference": reference})
+        raise InvalidStateTransition(
+            "This payment has expired. Please start a new one.",
+            code="PAYMENT_EXPIRED",
+        )
+
+    provider = get_payment_provider(payment.provider)
+    logger.info(
+        "deposit_otp_submitting",
+        extra={"reference": payment.reference, "attempt": attempt},
+    )
+
+    try:
+        charge = provider.submit_otp(reference=provider_reference, otp=digits)
+    except ProviderError:
+        logger.warning("deposit_otp_rejected", extra={"reference": payment.reference})
+        remaining = max(MAX_OTP_ATTEMPTS - attempt, 0)
+        raise ValidationFailed(
+            "That code was not accepted. Please check the message and try again."
+            if remaining
+            else "That code was not accepted, and no attempts remain. "
+                 "Please start a new payment.",
+            code="OTP_REJECTED",
+            details={"attempts_remaining": remaining},
+        ) from None
+
+    return _apply_charge_state(payment, charge)
+
+
+def _apply_charge_state(payment: Payment, charge) -> Payment:
+    """Move a payment to the state the provider just reported.
+
+    Deliberately cannot credit a wallet. Money is only ever moved by
+    `_credit_payment`, from a verified webhook or our own outbound
+    verification - never from a response to an action the customer took in the
+    browser, however successful it looks.
+    """
+    new_status = _CHARGE_TO_PAYMENT.get(charge.status, PaymentStatus.PROCESSING)
+
+    with transaction.atomic():
+        locked = Payment.objects.select_for_update().get(pk=payment.pk)
+        if locked.status == PaymentStatus.SUCCESS:
+            # A webhook beat us to it, which is the authoritative path.
+            return locked
+
+        fields = ["status", "updated_at"]
+        locked.status = new_status
+        if charge.instructions:
+            locked.instructions = charge.instructions[:255]
+            fields.append("instructions")
+        if charge.failure_reason:
+            locked.failure_reason = charge.failure_reason[:255]
+            fields.append("failure_reason")
+        if new_status in TERMINAL_PAYMENT_STATUSES and new_status != PaymentStatus.SUCCESS:
+            locked.completed_at = timezone.now()
+            fields.append("completed_at")
+        locked.save(update_fields=fields)
+
+    if new_status == PaymentStatus.SUCCESS:
+        # The provider says it is paid. Confirm it against the authoritative
+        # verify endpoint, which is also what credits the wallet, rather than
+        # trusting this response.
+        locked = reconcile_payment(locked)
+
+    logger.info(
+        "deposit_state_applied",
+        extra={"reference": locked.reference, "status": locked.status},
+    )
+    return locked
 
 
 def _check_pending_deposits(user) -> None:

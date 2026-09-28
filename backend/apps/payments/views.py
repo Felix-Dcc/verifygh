@@ -14,15 +14,20 @@ from apps.accounts.constants import NETWORK_PREFIXES, MomoNetwork
 from apps.common.errors import NotFound
 from apps.common.middleware import get_client_ip
 from apps.common.permissions import IsActiveUser
-from apps.common.throttling import DepositThrottle, WebhookThrottle
+from apps.common.throttling import DepositThrottle, OtpSubmitThrottle, WebhookThrottle
 from apps.payments.models import Payment
 from apps.payments.registry import get_payment_provider, webhook_providers
-from apps.payments.serializers import DepositSerializer, PaymentSerializer
+from apps.payments.serializers import (
+    DepositSerializer,
+    PaymentSerializer,
+    SubmitOtpSerializer,
+)
 from apps.payments.services import (
     deposits_blocked_reason,
     initiate_deposit,
     process_webhook,
     reconcile_payment,
+    submit_deposit_otp,
 )
 
 logger = logging.getLogger("verifygh.payments")
@@ -49,6 +54,24 @@ class PaymentViewSet(mixins.ListModelMixin, mixins.RetrieveModelMixin, viewsets.
             request=request,
         )
         return Response(PaymentSerializer(payment).data, status=status.HTTP_201_CREATED)
+
+    @action(detail=True, methods=["post"], url_path="otp",
+            throttle_classes=[OtpSubmitThrottle])
+    def submit_otp(self, request, reference=None):
+        """Hand the provider a one-time code the customer just received.
+
+        The code never touches the browser's storage and is never returned in
+        the response. Ownership, state, expiry and attempt count are all checked
+        in the service, under a row lock - none of it is decided here.
+        """
+        serializer = SubmitOtpSerializer(data=request.data)
+        serializer.is_valid(raise_exception=True)
+        payment = submit_deposit_otp(
+            user=request.user,
+            reference=reference,
+            otp=serializer.validated_data["otp"],
+        )
+        return Response(PaymentSerializer(payment).data)
 
     @action(detail=True, methods=["post"])
     def refresh(self, request, reference=None):

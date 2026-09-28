@@ -271,6 +271,7 @@ REST_FRAMEWORK = {
         # use one address to mail-bomb another.
         "email_verify_resend": "5/hour",
         "deposit": "10/hour",
+        "otp_submit": "20/hour",
         "order_create": "20/hour",
         "webhook": "600/min",
     },

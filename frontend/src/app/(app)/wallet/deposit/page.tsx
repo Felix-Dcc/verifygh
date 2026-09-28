@@ -20,6 +20,7 @@ import {
   cn,
 } from "@/components/ui/primitives";
 import { useToast } from "@/components/ui/toast";
+import { OtpStep } from "@/components/wallet/otp-step";
 import { ApiError, api } from "@/lib/api";
 import { cedis, localPhone } from "@/lib/format";
 import type { PaymentOptions, Payment as PaymentType, Wallet } from "@/lib/types";
@@ -304,8 +305,13 @@ function AwaitingApproval({
   const { data: current, mutate } = useSWR<PaymentType>(
     timedOut ? null : `/payments/${payment.reference}/`,
     {
-      refreshInterval: (latest) =>
-        latest && terminal.includes(latest.status) ? 0 : 4000,
+      refreshInterval: (latest) => {
+        if (!latest) return 4000;
+        if (terminal.includes(latest.status)) return 0;
+        // Nothing to wait for while the customer is typing a code.
+        if (latest.status === "OTP_REQUIRED") return 0;
+        return 4000;
+      },
       fallbackData: payment,
     },
   );
@@ -398,6 +404,23 @@ function AwaitingApproval({
     );
   }
 
+  if (status === "OTP_REQUIRED") {
+    return (
+      <OtpStep
+        payment={current ?? payment}
+        onSubmitted={(next) => {
+          // Trust the backend's view of the payment, not the fact that the
+          // request returned 200. Submitting a code is not the same as being
+          // paid: the provider may still want a handset approval, and only a
+          // verified callback ever credits the wallet.
+          mutate(next, { revalidate: false });
+          startedAt.current = Date.now();
+          setTimedOut(false);
+        }}
+      />
+    );
+  }
+
   return (
     <Card className="p-6 sm:p-8">
       <div className="flex flex-col items-center text-center">
@@ -408,12 +431,27 @@ function AwaitingApproval({
           </span>
         </div>
 
-        <h2 className="mt-5 text-xl font-semibold text-ink">Approve on your phone</h2>
+        <h2 className="mt-5 text-xl font-semibold text-ink">
+          {status === "PHONE_AUTH" ? "Approve on your phone" : "Starting your payment"}
+        </h2>
         <p className="mt-2 max-w-sm text-sm text-ink-muted">
-          We sent a prompt for{" "}
-          <span className="tabular font-semibold text-ink">{cedis(payment.amount)}</span> to{" "}
-          <span className="tabular font-medium text-ink">{payment.phone_display}</span> on{" "}
-          {payment.network_label}. Enter your PIN on your handset to approve it.
+          {status === "PHONE_AUTH" ? (
+            <>
+              We sent a prompt for{" "}
+              <span className="tabular font-semibold text-ink">{cedis(payment.amount)}</span> to{" "}
+              <span className="tabular font-medium text-ink">{payment.phone_display}</span> on{" "}
+              {payment.network_label}. Enter your Mobile Money PIN on your handset to approve
+              it.
+            </>
+          ) : (
+            <>
+              We are setting up a payment of{" "}
+              <span className="tabular font-semibold text-ink">{cedis(payment.amount)}</span>{" "}
+              from{" "}
+              <span className="tabular font-medium text-ink">{payment.phone_display}</span>.
+              This usually takes a few seconds.
+            </>
+          )}
         </p>
 
         {payment.instructions ? (

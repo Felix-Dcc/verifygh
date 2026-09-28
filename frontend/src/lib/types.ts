@@ -74,9 +74,20 @@ export type Transaction = {
   created_at: string;
 };
 
+/**
+ * `OTP_REQUIRED` and `PHONE_AUTH` are opposites and must never be merged.
+ *
+ * OTP_REQUIRED - the provider texted a code and is waiting for us to submit
+ * it. The customer has something to type into VerifyGH.
+ *
+ * PHONE_AUTH - the handset has been prompted. The customer has nothing to type
+ * here, and must never be asked for their Mobile Money PIN by us.
+ */
 export type PaymentStatus =
   | "PENDING"
   | "PROCESSING"
+  | "OTP_REQUIRED"
+  | "PHONE_AUTH"
   | "SUCCESS"
   | "FAILED"
   | "CANCELLED"

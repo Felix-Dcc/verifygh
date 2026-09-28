@@ -135,3 +135,14 @@ class EmailVerifyResendThrottle(NamedScopeThrottle):
             "scope": self.scope,
             "ident": f"{self.get_ident(request)}:{address}",
         }
+
+
+class OtpSubmitThrottle(NamedScopeThrottle):
+    """Submissions of a one-time payment code.
+
+    The service caps attempts per payment, which is the control that matters.
+    This is the cheaper outer bound: it stops someone opening payment after
+    payment purely to get three fresh guesses at each.
+    """
+
+    scope = "otp_submit"
