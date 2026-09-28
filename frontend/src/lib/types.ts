@@ -474,6 +474,7 @@ export type AdminNumberIssue = {
   provider_name: string;
   provider_key: string;
   service_name: string;
+  service_icon: string;
   country_code: string;
   number_masked: string;
   reason: IssueReason;
@@ -572,6 +573,7 @@ export type AdminOrder = {
   user_id: string;
   user_email: string;
   service_name: string;
+  service_icon: string;
   country_code: string;
   provider_name: string;
   provider_order_id: string;
@@ -631,6 +633,7 @@ export type AdminOffering = {
   provider_name: string;
   service_name: string;
   service_slug: string;
+  service_icon: string;
   country_code: string;
   provider_service_code: string;
   cost_amount: string;
@@ -680,6 +683,8 @@ export type AdminService = {
   description: string;
   accent_color: string;
   icon_url: string;
+  has_uploaded_logo: boolean;
+  bundled_icon_url: string;
   aliases: string;
   is_popular: boolean;
   popular_rank: number;
@@ -691,6 +696,8 @@ export type AdminService = {
   display_order: number;
   offering_count: number;
   available_count: number;
+  /** Offerings in the marketplace countries: 0 means not sold to customers. */
+  marketplace_offerings: number;
 };
 
 export type AdminCountry = {

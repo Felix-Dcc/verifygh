@@ -6,11 +6,11 @@ import useSWR from "swr";
 import useSWRInfinite from "swr/infinite";
 
 import { useAuth } from "@/components/auth-provider";
-import { ServiceAvatar } from "@/components/brand";
 import { PinIcon, SearchIcon } from "@/components/icons";
 import { AvailabilityLabel } from "@/components/marketplace/availability";
 import { BuyDialog } from "@/components/marketplace/buy-dialog";
 import { Alert, Button, Card, EmptyState, Input, Skeleton, cn } from "@/components/ui/primitives";
+import { ServiceLogo } from "@/components/service-logo";
 import { useToast } from "@/components/ui/toast";
 import { ApiError, api } from "@/lib/api";
 import { cedis } from "@/lib/format";
@@ -346,7 +346,7 @@ function ServiceRow({
         onClick={onOpen}
         className="flex min-h-[3.5rem] min-w-0 flex-1 items-center gap-3 py-2 pl-3.5 text-left sm:pl-4"
       >
-        <ServiceAvatar name={row.name} accentColor={row.accent_color} size="sm" />
+        <ServiceLogo name={row.name} src={row.icon_url} slug={row.slug} size="sm" />
         <span className="min-w-0 flex-1">
           <span
             className={cn(

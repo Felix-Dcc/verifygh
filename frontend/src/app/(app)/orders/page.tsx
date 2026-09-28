@@ -5,6 +5,7 @@ import * as React from "react";
 import useSWR from "swr";
 
 import { PageHeader } from "@/components/app-shell";
+import { ServiceLogo } from "@/components/service-logo";
 import { ReceiptIcon, SearchIcon } from "@/components/icons";
 import { OrderStatusRow } from "@/components/orders/order-row";
 import {
@@ -161,8 +162,14 @@ export default function OrdersPage() {
                       <td className="px-5 py-3.5">
                         <Link
                           href={`/orders/${order.reference}`}
-                          className="font-medium text-ink hover:underline"
+                          className="inline-flex items-center gap-2.5 font-medium text-ink hover:underline"
                         >
+                          <ServiceLogo
+                            name={order.service_name}
+                            src={order.service_icon}
+                            slug={order.service_slug}
+                            size="sm"
+                          />
                           {order.service_name}
                         </Link>
                         <span className="ml-2 text-ink-muted" aria-label={order.country_name}>

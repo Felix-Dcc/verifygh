@@ -6,8 +6,8 @@ import useSWR, { mutate as globalMutate } from "swr";
 import { OfferingsPricingCard, PriceHistoryCard, PricingRulesCard } from "@/components/admin/pricing";
 import { PageHeader } from "@/components/app-shell";
 import { useAuth } from "@/components/auth-provider";
-import { ServiceAvatar } from "@/components/brand";
 import { RefreshIcon } from "@/components/icons";
+import { ServiceLogo } from "@/components/service-logo";
 import { Dialog } from "@/components/ui/dialog";
 import {
   Alert,
@@ -74,6 +74,12 @@ function ServicesTab({ canManage }: { canManage: boolean }) {
   const { data: services, mutate } = useSWR<AdminService[]>("/admin/services/");
   const [editing, setEditing] = React.useState<AdminService | null>(null);
   const [syncing, setSyncing] = React.useState(false);
+  const [scope, setScope] = React.useState<"sold" | "missing" | "all">("sold");
+
+  const sold = (services ?? []).filter((service) => service.marketplace_offerings > 0);
+  const missing = sold.filter((service) => !service.icon_url);
+  const shown =
+    scope === "all" ? services ?? [] : scope === "missing" ? missing : sold;
 
   async function sync() {
     setSyncing(true);
@@ -115,13 +121,24 @@ function ServicesTab({ canManage }: { canManage: boolean }) {
             ) : undefined
           }
         />
+        <div className="flex flex-wrap items-center gap-2 px-4 pt-3 sm:px-5">
+          <SegmentedControl
+            options={[
+              { value: "sold" as const, label: `Sold in US/CA (${sold.length})` },
+              { value: "missing" as const, label: `Missing logo (${missing.length})` },
+              { value: "all" as const, label: "Whole provider catalogue" },
+            ]}
+            value={scope}
+            onChange={setScope}
+          />
+        </div>
         {!services ? (
           <RowSkeletons />
         ) : (
           <ul className="mt-2 divide-y divide-line">
-            {services.map((service) => (
+            {shown.map((service) => (
               <li key={service.id} className="flex items-center gap-3 px-4 py-3.5 sm:px-5">
-                <ServiceAvatar name={service.name} accentColor={service.accent_color} />
+                <ServiceLogo name={service.name} src={service.icon_url} slug={service.slug} />
                 <div className="min-w-0 flex-1">
                   <p className="truncate text-sm font-medium text-ink">{service.name}</p>
                   <p className="text-xs text-ink-muted">
@@ -208,6 +225,28 @@ function ServiceEditor({
 
   if (!service) return null;
 
+  async function uploadLogo(file: File) {
+    const body = new FormData();
+    body.append("file", file);
+    body.append("reason", form.reason || "Service logo uploaded");
+    await runLogo(() => api.post(`/admin/services/${service!.slug}/logo/`, body), "Logo uploaded");
+  }
+
+  async function runLogo(action: () => Promise<unknown>, message: string) {
+    setBusy(true);
+    setError("");
+    try {
+      await action();
+      toast.success(message);
+      await onSaved();
+      onClose();
+    } catch (caught) {
+      setError(caught instanceof ApiError ? caught.message : "Something went wrong.");
+    } finally {
+      setBusy(false);
+    }
+  }
+
   async function save(event: React.FormEvent) {
     event.preventDefault();
     setBusy(true);
@@ -228,6 +267,91 @@ function ServiceEditor({
     <Dialog open onClose={onClose} title={service.name} description="Marketplace visibility" dismissible={!busy}>
       <form onSubmit={save} className="space-y-4">
         {error ? <Alert tone="danger">{error}</Alert> : null}
+
+        <div className="rounded-xl border border-line p-3.5">
+          <p className="mb-2.5 text-sm font-medium text-ink">Logo</p>
+          <div className="flex items-center gap-4">
+            <ServiceLogo name={service.name} src={service.icon_url} slug={service.slug} size="xl" />
+            <div className="min-w-0 flex-1 space-y-1 text-xs text-ink-muted">
+              <p>
+                {service.has_uploaded_logo
+                  ? "Uploaded logo."
+                  : service.icon_url
+                    ? "Bundled logo (Simple Icons, CC0)."
+                    : "No logo - customers see the generic icon."}
+              </p>
+              <p>SVG or PNG (at least 96 x 96), up to 200 KB. SVG is sharpest.</p>
+            </div>
+          </div>
+          <div className="mt-3 flex flex-wrap gap-2">
+            <label className="inline-flex cursor-pointer">
+              <input
+                type="file"
+                accept="image/svg+xml,image/png,.svg,.png"
+                className="sr-only"
+                disabled={busy}
+                onChange={(event) => {
+                  const file = event.target.files?.[0];
+                  if (file) uploadLogo(file);
+                  event.target.value = "";
+                }}
+              />
+              <span className="inline-flex h-9 items-center rounded-xl border border-line bg-surface px-3.5 text-sm font-medium text-ink hover:bg-canvas">
+                {service.has_uploaded_logo || service.icon_url ? "Replace logo" : "Upload logo"}
+              </span>
+            </label>
+            {service.has_uploaded_logo ? (
+              <Button
+                size="sm"
+                variant="secondary"
+                disabled={busy}
+                onClick={() =>
+                  runLogo(() => api.delete(`/admin/services/${service.slug}/logo/`), "Uploaded logo removed")
+                }
+              >
+                Remove upload
+              </Button>
+            ) : null}
+            {!service.has_uploaded_logo && service.bundled_icon_url && !service.icon_url ? (
+              <Button
+                size="sm"
+                variant="secondary"
+                disabled={busy}
+                onClick={() =>
+                  runLogo(
+                    () =>
+                      api.patch(`/admin/services/${service.slug}/`, {
+                        icon_url: service.bundled_icon_url,
+                        reason: "Restored the bundled logo",
+                      }),
+                    "Bundled logo restored",
+                  )
+                }
+              >
+                Use bundled logo
+              </Button>
+            ) : null}
+            {service.icon_url && !service.has_uploaded_logo ? (
+              <Button
+                size="sm"
+                variant="secondary"
+                disabled={busy}
+                onClick={() =>
+                  runLogo(
+                    () =>
+                      api.patch(`/admin/services/${service.slug}/`, {
+                        icon_url: "",
+                        reason: "Logo hidden from the admin console",
+                      }),
+                    "Logo hidden",
+                  )
+                }
+              >
+                Hide logo
+              </Button>
+            ) : null}
+          </div>
+        </div>
 
         <Toggle
           id="is_enabled"

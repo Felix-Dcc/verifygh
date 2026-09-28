@@ -20,14 +20,38 @@ const BRAND = process.env.NEXT_PUBLIC_BRAND_NAME ?? "VerifyGH";
  */
 export const dynamic = "force-dynamic";
 
+const SITE_URL = process.env.NEXT_PUBLIC_SITE_ORIGIN || "https://www.getverifygh.com";
+const DESCRIPTION = "Buy verification numbers with convenient Ghanaian payments.";
+
+/**
+ * Titles read "VerifyGH — Wallet" and so on: each route's layout supplies the
+ * part after the dash. The favicon, Apple icon and link-preview images are
+ * Next.js file conventions in this folder (favicon.ico, icon.svg,
+ * apple-icon.png, opengraph-image.png, twitter-image.png) and manifest.ts, so
+ * Next emits their <link>/<meta> tags itself - none are declared twice here.
+ */
 export const metadata: Metadata = {
+  metadataBase: new URL(SITE_URL),
   title: {
-    default: `${BRAND} - Verification made simple.`,
-    template: `%s | ${BRAND}`,
+    default: `${BRAND} \u2014 SMS Verification`,
+    template: `${BRAND} \u2014 %s`,
   },
-  description:
-    "Access supported phone verification services and pay conveniently with Ghana Mobile Money. No card, no crypto.",
+  description: DESCRIPTION,
   applicationName: BRAND,
+  openGraph: {
+    type: "website",
+    siteName: BRAND,
+    title: `${BRAND} \u2014 SMS Verification`,
+    description: DESCRIPTION,
+    url: "/",
+    locale: "en_GH",
+  },
+  twitter: {
+    card: "summary_large_image",
+    title: `${BRAND} \u2014 SMS Verification`,
+    description: DESCRIPTION,
+  },
+  appleWebApp: { title: BRAND, capable: true, statusBarStyle: "default" },
   keywords: ["Mobile Money", "Ghana", "MTN MoMo", "Telecel Cash", "verification", "GHS"],
   robots: { index: true, follow: true },
   formatDetection: { telephone: false },

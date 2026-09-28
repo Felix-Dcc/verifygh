@@ -14,6 +14,9 @@ inert.
 
 from __future__ import annotations
 
+import json
+from pathlib import Path
+
 from apps.catalog.models import ServiceCategory as C
 
 #: slug -> (display name, aliases, category, popular rank or None)
@@ -23,6 +26,8 @@ PRESENTATION: dict[str, tuple[str, str, str, int | None]] = {
     "telegram": ("Telegram", "", C.MESSAGING, 3),
     "google": ("Google / Gmail", "gmail, youtube", C.EMAIL, 4),
     "facebook": ("Facebook", "fb, meta", C.SOCIAL, 5),
+    # OnlineSim's code for Facebook is a number.
+    "3223": ("Facebook", "fb, meta", C.SOCIAL, 5),
     "instagram": ("Instagram", "ig, insta", C.SOCIAL, 6),
     "discord": ("Discord", "", C.MESSAGING, 7),
     "signal": ("Signal", "", C.MESSAGING, 8),
@@ -41,3 +46,15 @@ PRESENTATION: dict[str, tuple[str, str, str, int | None]] = {
     "uber": ("Uber", "", C.OTHER, None),
     "paypal": ("PayPal", "", C.FINANCE, None),
 }
+
+
+_ICON_FILE = Path(__file__).with_name("service_icons.json")
+_icons: dict[str, str] | None = None
+
+
+def bundled_icon_url(slug: str) -> str:
+    """The bundled logo for a service, or "" when none is bundled."""
+    global _icons
+    if _icons is None:
+        _icons = json.loads(_ICON_FILE.read_text(encoding="utf-8"))["icons"]
+    return f"/service-icons/{slug}.svg" if slug in _icons else ""

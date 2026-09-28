@@ -55,6 +55,7 @@ class AdminIssueSerializer(serializers.ModelSerializer):
     provider_name = serializers.CharField(source="order.provider.name", read_only=True)
     provider_key = serializers.CharField(source="order.provider.adapter_key", read_only=True)
     service_name = serializers.CharField(source="order.service.name", read_only=True)
+    service_icon = serializers.CharField(source="order.service.icon_url", read_only=True)
     country_code = serializers.CharField(source="order.country.code", read_only=True)
     number_masked = serializers.SerializerMethodField()
     reason_label = serializers.CharField(source="get_reason_display", read_only=True)
@@ -75,7 +76,8 @@ class AdminIssueSerializer(serializers.ModelSerializer):
         model = VerificationIssue
         fields = [
             "id", "reference", "order_reference", "order_status", "customer_id",
-            "customer_email", "provider_name", "provider_key", "service_name", "country_code",
+            "customer_email", "provider_name", "provider_key", "service_name", "service_icon",
+            "country_code",
             "number_masked", "reason", "reason_label", "details", "status", "status_label",
             "qualifies", "qualification", "risk_flags", "needs_review", "resolution_note",
             "resolved_by_email", "resolved_at", "replacement_order_reference",

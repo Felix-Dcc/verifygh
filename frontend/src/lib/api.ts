@@ -109,7 +109,9 @@ export async function request<T = unknown>(
   const method = (options.method ?? "GET").toUpperCase();
   const headers: Record<string, string> = { Accept: "application/json" };
 
-  if (options.body !== undefined) headers["Content-Type"] = "application/json";
+  // FormData (a file upload) sets its own multipart boundary; everything else is JSON.
+  const isForm = typeof FormData !== "undefined" && options.body instanceof FormData;
+  if (options.body !== undefined && !isForm) headers["Content-Type"] = "application/json";
   if (UNSAFE_METHODS.has(method)) {
     const csrf = readCookie(CSRF_COOKIE);
     if (csrf) headers["X-CSRF-Token"] = csrf;
@@ -123,7 +125,12 @@ export async function request<T = unknown>(
       headers,
       credentials: "include",
       signal: options.signal,
-      body: options.body === undefined ? undefined : JSON.stringify(options.body),
+      body:
+        options.body === undefined
+          ? undefined
+          : isForm
+            ? (options.body as FormData)
+            : JSON.stringify(options.body),
       cache: "no-store",
     });
   } catch (error) {

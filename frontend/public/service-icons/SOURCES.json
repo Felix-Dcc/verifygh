@@ -1,0 +1,696 @@
+{
+  "generated_by": "frontend/scripts/generate-service-icons.mjs",
+  "library": "simple-icons@16.33.0",
+  "library_license": "CC0-1.0",
+  "note": "Trademarks belong to their owners. Marks are used only to identify the service a number is for.",
+  "icons": {
+    "3223": {
+      "title": "Facebook",
+      "simple_icons_slug": "facebook",
+      "brand_hex": "0866FF",
+      "source": "https://about.meta.com/brand/resources/facebook/logo",
+      "license": "CC0-1.0 (Simple Icons)",
+      "guidelines": "https://about.meta.com/brand/resources/facebook/logo"
+    },
+    "adidas": {
+      "title": "Adidas",
+      "simple_icons_slug": "adidas",
+      "brand_hex": "000000",
+      "source": "https://www.adidas.com",
+      "license": "CC0-1.0 (Simple Icons)",
+      "guidelines": null
+    },
+    "airbnb": {
+      "title": "Airbnb",
+      "simple_icons_slug": "airbnb",
+      "brand_hex": "FF5A5F",
+      "source": "https://www.airbnb.com",
+      "license": "CC0-1.0 (Simple Icons)",
+      "guidelines": null
+    },
+    "alibaba": {
+      "title": "Alibaba.com",
+      "simple_icons_slug": "alibabadotcom",
+      "brand_hex": "FF6A00",
+      "source": "https://www.alibabagroup.com/en/ir/reports",
+      "license": "CC0-1.0 (Simple Icons)",
+      "guidelines": null
+    },
+    "aliexpress": {
+      "title": "AliExpress",
+      "simple_icons_slug": "aliexpress",
+      "brand_hex": "FF4747",
+      "source": "https://www.alibabagroup.com/en/ir/reports",
+      "license": "CC0-1.0 (Simple Icons)",
+      "guidelines": null
+    },
+    "apple": {
+      "title": "Apple",
+      "simple_icons_slug": "apple",
+      "brand_hex": "000000",
+      "source": "https://www.apple.com",
+      "license": "CC0-1.0 (Simple Icons)",
+      "guidelines": null
+    },
+    "badoo": {
+      "title": "Badoo",
+      "simple_icons_slug": "badoo",
+      "brand_hex": "783BF9",
+      "source": "https://badoo.com",
+      "license": "CC0-1.0 (Simple Icons)",
+      "guidelines": null
+    },
+    "baidu": {
+      "title": "Baidu",
+      "simple_icons_slug": "baidu",
+      "brand_hex": "2932E1",
+      "source": "https://www.baidu.com",
+      "license": "CC0-1.0 (Simple Icons)",
+      "guidelines": null
+    },
+    "battle_net": {
+      "title": "Battle.net",
+      "simple_icons_slug": "battledotnet",
+      "brand_hex": "4381C3",
+      "source": "https://battle.net",
+      "license": "CC0-1.0 (Simple Icons)",
+      "guidelines": null
+    },
+    "binance": {
+      "title": "Binance",
+      "simple_icons_slug": "binance",
+      "brand_hex": "F0B90B",
+      "source": "https://binance.com",
+      "license": "CC0-1.0 (Simple Icons)",
+      "guidelines": null
+    },
+    "blockchain": {
+      "title": "Blockchain.com",
+      "simple_icons_slug": "blockchaindotcom",
+      "brand_hex": "121D33",
+      "source": "https://www.blockchain.com/en/press",
+      "license": "CC0-1.0 (Simple Icons)",
+      "guidelines": "https://www.blockchain.com/en/press"
+    },
+    "brex": {
+      "title": "Brex",
+      "simple_icons_slug": "brex",
+      "brand_hex": "212121",
+      "source": "https://www.brex.com/journal/press",
+      "license": "CC0-1.0 (Simple Icons)",
+      "guidelines": null
+    },
+    "burgerking": {
+      "title": "Burger King",
+      "simple_icons_slug": "burgerking",
+      "brand_hex": "D62300",
+      "source": "https://www.bk.com",
+      "license": "CC0-1.0 (Simple Icons)",
+      "guidelines": "https://www.bk.com/trademarks"
+    },
+    "claude": {
+      "title": "Claude",
+      "simple_icons_slug": "claude",
+      "brand_hex": "D97757",
+      "source": "https://claude.ai",
+      "license": "CC0-1.0 (Simple Icons)",
+      "guidelines": null
+    },
+    "coinbase": {
+      "title": "Coinbase",
+      "simple_icons_slug": "coinbase",
+      "brand_hex": "0052FF",
+      "source": "https://www.coinbase.com/press",
+      "license": "CC0-1.0 (Simple Icons)",
+      "guidelines": null
+    },
+    "deliveroo": {
+      "title": "Deliveroo",
+      "simple_icons_slug": "deliveroo",
+      "brand_hex": "00CCBC",
+      "source": "https://deliveroo.com",
+      "license": "CC0-1.0 (Simple Icons)",
+      "guidelines": null
+    },
+    "dhl": {
+      "title": "DHL",
+      "simple_icons_slug": "dhl",
+      "brand_hex": "FFCC00",
+      "source": "https://www.dpdhl-brands.com/dhl/en/guides/design-basics/logo-and-claim.html",
+      "license": "CC0-1.0 (Simple Icons)",
+      "guidelines": "https://www.dpdhl-brands.com/dhl/en/guides/design-basics/logo-and-claim.html"
+    },
+    "discord": {
+      "title": "Discord",
+      "simple_icons_slug": "discord",
+      "brand_hex": "5865F2",
+      "source": "https://discord.com/branding",
+      "license": "CC0-1.0 (Simple Icons)",
+      "guidelines": "https://discord.com/branding"
+    },
+    "doordash": {
+      "title": "DoorDash",
+      "simple_icons_slug": "doordash",
+      "brand_hex": "FF3008",
+      "source": "https://www.doordash.com/about/",
+      "license": "CC0-1.0 (Simple Icons)",
+      "guidelines": null
+    },
+    "ebay": {
+      "title": "eBay",
+      "simple_icons_slug": "ebay",
+      "brand_hex": "E53238",
+      "source": "https://go.developer.ebay.com/logos",
+      "license": "CC0-1.0 (Simple Icons)",
+      "guidelines": null
+    },
+    "facebook": {
+      "title": "Facebook",
+      "simple_icons_slug": "facebook",
+      "brand_hex": "0866FF",
+      "source": "https://about.meta.com/brand/resources/facebook/logo",
+      "license": "CC0-1.0 (Simple Icons)",
+      "guidelines": "https://about.meta.com/brand/resources/facebook/logo"
+    },
+    "faceit": {
+      "title": "FACEIT",
+      "simple_icons_slug": "faceit",
+      "brand_hex": "FF5500",
+      "source": "https://corporate.faceit.com/branding/",
+      "license": "CC0-1.0 (Simple Icons)",
+      "guidelines": null
+    },
+    "fedex": {
+      "title": "FedEx",
+      "simple_icons_slug": "fedex",
+      "brand_hex": "4D148C",
+      "source": "https://newsroom.fedex.com",
+      "license": "CC0-1.0 (Simple Icons)",
+      "guidelines": null
+    },
+    "foodpanda": {
+      "title": "foodpanda",
+      "simple_icons_slug": "foodpanda",
+      "brand_hex": "D70F64",
+      "source": "https://www.foodpanda.com",
+      "license": "CC0-1.0 (Simple Icons)",
+      "guidelines": null
+    },
+    "freelancer": {
+      "title": "Freelancer",
+      "simple_icons_slug": "freelancer",
+      "brand_hex": "29B2FE",
+      "source": "https://www.freelancer.com",
+      "license": "CC0-1.0 (Simple Icons)",
+      "guidelines": null
+    },
+    "g2a": {
+      "title": "G2A",
+      "simple_icons_slug": "g2a",
+      "brand_hex": "F05F00",
+      "source": "https://www.g2a.co/documents/",
+      "license": "CC0-1.0 (Simple Icons)",
+      "guidelines": "https://www.g2a.co/documents/"
+    },
+    "github": {
+      "title": "GitHub",
+      "simple_icons_slug": "github",
+      "brand_hex": "181717",
+      "source": "https://github.com/logos",
+      "license": "CC0-1.0 (Simple Icons)",
+      "guidelines": "https://github.com/logos"
+    },
+    "gitlab": {
+      "title": "GitLab",
+      "simple_icons_slug": "gitlab",
+      "brand_hex": "FC6D26",
+      "source": "https://about.gitlab.com/press/press-kit/",
+      "license": "CC0-1.0 (Simple Icons)",
+      "guidelines": "https://about.gitlab.com/handbook/marketing/corporate-marketing/brand-activation/trademark-guidelines/"
+    },
+    "globus": {
+      "title": "Globus",
+      "simple_icons_slug": "globus",
+      "brand_hex": "CA6201",
+      "source": "https://www.globus.de",
+      "license": "CC0-1.0 (Simple Icons)",
+      "guidelines": null
+    },
+    "glovo": {
+      "title": "Glovo",
+      "simple_icons_slug": "glovo",
+      "brand_hex": "F2CC38",
+      "source": "https://about.glovoapp.com/press",
+      "license": "CC0-1.0 (Simple Icons)",
+      "guidelines": null
+    },
+    "google": {
+      "title": "Google",
+      "simple_icons_slug": "google",
+      "brand_hex": "4285F4",
+      "source": "https://partnermarketinghub.withgoogle.com",
+      "license": "CC0-1.0 (Simple Icons)",
+      "guidelines": "https://about.google/brand-resource-center/brand-elements/"
+    },
+    "groupme": {
+      "title": "GroupMe",
+      "simple_icons_slug": "groupme",
+      "brand_hex": "00AFF0",
+      "source": "https://groupme.com",
+      "license": "CC0-1.0 (Simple Icons)",
+      "guidelines": null
+    },
+    "huawei": {
+      "title": "Huawei",
+      "simple_icons_slug": "huawei",
+      "brand_hex": "FF0000",
+      "source": "https://e.huawei.com/ph/material/partner/0a72728b864949c48b22106454352483",
+      "license": "CC0-1.0 (Simple Icons)",
+      "guidelines": "https://e.huawei.com/ph/material/partner/0a72728b864949c48b22106454352483"
+    },
+    "icq": {
+      "title": "ICQ",
+      "simple_icons_slug": "icq",
+      "brand_hex": "24FF00",
+      "source": "https://commons.wikimedia.org/wiki/File:ICQNewlogo.svg",
+      "license": "CC0-1.0 (Simple Icons)",
+      "guidelines": null
+    },
+    "instagram": {
+      "title": "Instagram",
+      "simple_icons_slug": "instagram",
+      "brand_hex": "FF0069",
+      "source": "https://about.meta.com/brand/resources/instagram",
+      "license": "CC0-1.0 (Simple Icons)",
+      "guidelines": "https://about.meta.com/brand/resources/instagram"
+    },
+    "kakaotalk": {
+      "title": "KakaoTalk",
+      "simple_icons_slug": "kakaotalk",
+      "brand_hex": "FFCD00",
+      "source": "https://commons.wikimedia.org/wiki/File:KakaoTalk_logo.svg",
+      "license": "CC0-1.0 (Simple Icons)",
+      "guidelines": null
+    },
+    "keybase": {
+      "title": "Keybase",
+      "simple_icons_slug": "keybase",
+      "brand_hex": "33A0FF",
+      "source": "https://github.com/keybase/client/tree/a144e0ce38ee9e495cc5acbcd4ef859f5534d820/media/logos",
+      "license": "CC0-1.0 (Simple Icons)",
+      "guidelines": null
+    },
+    "kimi": {
+      "title": "Kimi",
+      "simple_icons_slug": "kimi",
+      "brand_hex": "000000",
+      "source": "https://moonshotai.github.io/Branding-Guide",
+      "license": "CC0-1.0 (Simple Icons)",
+      "guidelines": "https://moonshotai.github.io/Branding-Guide"
+    },
+    "kucoinplay": {
+      "title": "KuCoin",
+      "simple_icons_slug": "kucoin",
+      "brand_hex": "01BC8D",
+      "source": "https://www.kucoin.com/news/en-kucoin-media-kit",
+      "license": "CC0-1.0 (Simple Icons)",
+      "guidelines": null
+    },
+    "linemessenger": {
+      "title": "LINE",
+      "simple_icons_slug": "line",
+      "brand_hex": "00C300",
+      "source": "https://line.me/en/logo",
+      "license": "CC0-1.0 (Simple Icons)",
+      "guidelines": "https://line.me/en/logo"
+    },
+    "lyft": {
+      "title": "Lyft",
+      "simple_icons_slug": "lyft",
+      "brand_hex": "FF00BF",
+      "source": "https://www.lyft.com/press",
+      "license": "CC0-1.0 (Simple Icons)",
+      "guidelines": null
+    },
+    "mail": {
+      "title": "mail.com",
+      "simple_icons_slug": "maildotcom",
+      "brand_hex": "004788",
+      "source": "https://www.mail.com",
+      "license": "CC0-1.0 (Simple Icons)",
+      "guidelines": "https://www.mail.com/company/terms/"
+    },
+    "mega": {
+      "title": "MEGA",
+      "simple_icons_slug": "mega",
+      "brand_hex": "D9272E",
+      "source": "https://mega.io/media",
+      "license": "CC0-1.0 (Simple Icons)",
+      "guidelines": null
+    },
+    "naver": {
+      "title": "Naver",
+      "simple_icons_slug": "naver",
+      "brand_hex": "03C75A",
+      "source": "https://developers.naver.com/docs/login/bi/bi.md",
+      "license": "CC0-1.0 (Simple Icons)",
+      "guidelines": "https://developers.naver.com/docs/login/bi/bi.md"
+    },
+    "netflix": {
+      "title": "Netflix",
+      "simple_icons_slug": "netflix",
+      "brand_hex": "E50914",
+      "source": "https://brand.netflix.com/en/assets/logos",
+      "license": "CC0-1.0 (Simple Icons)",
+      "guidelines": "https://brand.netflix.com/en/assets/logos"
+    },
+    "nike": {
+      "title": "Nike",
+      "simple_icons_slug": "nike",
+      "brand_hex": "111111",
+      "source": "https://www.nike.com",
+      "license": "CC0-1.0 (Simple Icons)",
+      "guidelines": null
+    },
+    "nvidia": {
+      "title": "NVIDIA",
+      "simple_icons_slug": "nvidia",
+      "brand_hex": "76B900",
+      "source": "https://www.nvidia.com/en-us",
+      "license": "CC0-1.0 (Simple Icons)",
+      "guidelines": null
+    },
+    "odklru": {
+      "title": "Odnoklassniki",
+      "simple_icons_slug": "odnoklassniki",
+      "brand_hex": "EE8208",
+      "source": "https://insideok.ru/brandbook",
+      "license": "CC0-1.0 (Simple Icons)",
+      "guidelines": null
+    },
+    "ovhtelecom": {
+      "title": "OVH",
+      "simple_icons_slug": "ovh",
+      "brand_hex": "123F6D",
+      "source": "https://www.ovh.com/ca/en/newsroom/",
+      "license": "CC0-1.0 (Simple Icons)",
+      "guidelines": null
+    },
+    "perplexity": {
+      "title": "Perplexity",
+      "simple_icons_slug": "perplexity",
+      "brand_hex": "1FB8CD",
+      "source": "https://www.perplexity.ai",
+      "license": "CC0-1.0 (Simple Icons)",
+      "guidelines": null
+    },
+    "porkbun": {
+      "title": "Porkbun",
+      "simple_icons_slug": "porkbun",
+      "brand_hex": "EF7878",
+      "source": "https://porkbun.design",
+      "license": "CC0-1.0 (Simple Icons)",
+      "guidelines": "https://porkbun.design/guidelines.html"
+    },
+    "proton": {
+      "title": "Proton",
+      "simple_icons_slug": "proton",
+      "brand_hex": "6D4AFF",
+      "source": "https://proton.me/media/kit",
+      "license": "CC0-1.0 (Simple Icons)",
+      "guidelines": null
+    },
+    "qq": {
+      "title": "QQ",
+      "simple_icons_slug": "qq",
+      "brand_hex": "1EBAFC",
+      "source": "https://en.wikipedia.org/wiki/File:Tencent_QQ.svg",
+      "license": "CC0-1.0 (Simple Icons)",
+      "guidelines": "https://qq.design/brand/BrandDesign/Logo"
+    },
+    "redbubble": {
+      "title": "Redbubble",
+      "simple_icons_slug": "redbubble",
+      "brand_hex": "E41321",
+      "source": "https://www.redbubble.com",
+      "license": "CC0-1.0 (Simple Icons)",
+      "guidelines": null
+    },
+    "reddit": {
+      "title": "Reddit",
+      "simple_icons_slug": "reddit",
+      "brand_hex": "FF4500",
+      "source": "https://www.redditinc.com/brand",
+      "license": "CC0-1.0 (Simple Icons)",
+      "guidelines": "https://www.redditinc.com/brand"
+    },
+    "roblox": {
+      "title": "Roblox",
+      "simple_icons_slug": "roblox",
+      "brand_hex": "000000",
+      "source": "https://www.roblox.com",
+      "license": "CC0-1.0 (Simple Icons)",
+      "guidelines": "https://en.help.roblox.com/hc/en-us/articles/115001708126-Roblox-Name-and-Logo-Community-Usage-Guidelines"
+    },
+    "shell": {
+      "title": "Shell",
+      "simple_icons_slug": "shell",
+      "brand_hex": "FFD500",
+      "source": "https://en.wikipedia.org/wiki/File:Shell_logo.svg",
+      "license": "CC0-1.0 (Simple Icons)",
+      "guidelines": null
+    },
+    "shopee": {
+      "title": "Shopee",
+      "simple_icons_slug": "shopee",
+      "brand_hex": "EE4D2D",
+      "source": "https://shopee.com",
+      "license": "CC0-1.0 (Simple Icons)",
+      "guidelines": null
+    },
+    "signal": {
+      "title": "Signal",
+      "simple_icons_slug": "signal",
+      "brand_hex": "3B45FD",
+      "source": "https://signal.org/brand",
+      "license": "CC0-1.0 (Simple Icons)",
+      "guidelines": "https://signal.org/brand"
+    },
+    "snapchat": {
+      "title": "Snapchat",
+      "simple_icons_slug": "snapchat",
+      "brand_hex": "FFFC00",
+      "source": "https://www.snapchat.com/brand-guidelines",
+      "license": "CC0-1.0 (Simple Icons)",
+      "guidelines": "https://www.snapchat.com/brand-guidelines"
+    },
+    "starbucks": {
+      "title": "Starbucks",
+      "simple_icons_slug": "starbucks",
+      "brand_hex": "006241",
+      "source": "https://starbucks.com",
+      "license": "CC0-1.0 (Simple Icons)",
+      "guidelines": "https://creative.starbucks.com"
+    },
+    "steam": {
+      "title": "Steam",
+      "simple_icons_slug": "steam",
+      "brand_hex": "000000",
+      "source": "https://partner.steamgames.com/doc/marketing/branding",
+      "license": "CC0-1.0 (Simple Icons)",
+      "guidelines": "https://partner.steamgames.com/doc/marketing/branding"
+    },
+    "steem": {
+      "title": "Steem",
+      "simple_icons_slug": "steem",
+      "brand_hex": "171FC9",
+      "source": "https://steem.com/brand/",
+      "license": "CC0-1.0 (Simple Icons)",
+      "guidelines": null
+    },
+    "steemit": {
+      "title": "Steemit",
+      "simple_icons_slug": "steemit",
+      "brand_hex": "06D6A9",
+      "source": "https://steemit.com",
+      "license": "CC0-1.0 (Simple Icons)",
+      "guidelines": null
+    },
+    "taobao": {
+      "title": "Taobao",
+      "simple_icons_slug": "taobao",
+      "brand_hex": "E94F20",
+      "source": "https://www.alibabagroup.com/en/ir/reports",
+      "license": "CC0-1.0 (Simple Icons)",
+      "guidelines": null
+    },
+    "telegram": {
+      "title": "Telegram",
+      "simple_icons_slug": "telegram",
+      "brand_hex": "26A5E4",
+      "source": "https://telegram.org/tour/screenshots",
+      "license": "CC0-1.0 (Simple Icons)",
+      "guidelines": null
+    },
+    "tencentqq": {
+      "title": "QQ",
+      "simple_icons_slug": "qq",
+      "brand_hex": "1EBAFC",
+      "source": "https://en.wikipedia.org/wiki/File:Tencent_QQ.svg",
+      "license": "CC0-1.0 (Simple Icons)",
+      "guidelines": "https://qq.design/brand/BrandDesign/Logo"
+    },
+    "ticketmaster": {
+      "title": "Ticketmaster",
+      "simple_icons_slug": "ticketmaster",
+      "brand_hex": "026CDF",
+      "source": "https://design.ticketmaster.com/brand/overview/",
+      "license": "CC0-1.0 (Simple Icons)",
+      "guidelines": null
+    },
+    "tiktok": {
+      "title": "TikTok",
+      "simple_icons_slug": "tiktok",
+      "brand_hex": "000000",
+      "source": "https://tiktok.com",
+      "license": "CC0-1.0 (Simple Icons)",
+      "guidelines": null
+    },
+    "tinder": {
+      "title": "Tinder",
+      "simple_icons_slug": "tinder",
+      "brand_hex": "FF6B6B",
+      "source": "https://www.gotinder.com/press",
+      "license": "CC0-1.0 (Simple Icons)",
+      "guidelines": null
+    },
+    "tradingview": {
+      "title": "TradingView",
+      "simple_icons_slug": "tradingview",
+      "brand_hex": "131622",
+      "source": "https://www.tradingview.com/media-kit",
+      "license": "CC0-1.0 (Simple Icons)",
+      "guidelines": null
+    },
+    "twitch": {
+      "title": "Twitch",
+      "simple_icons_slug": "twitch",
+      "brand_hex": "9146FF",
+      "source": "https://brand.twitch.tv",
+      "license": "CC0-1.0 (Simple Icons)",
+      "guidelines": "https://brand.twitch.tv"
+    },
+    "twitter": {
+      "title": "X",
+      "simple_icons_slug": "x",
+      "brand_hex": "000000",
+      "source": "https://x.com",
+      "license": "CC0-1.0 (Simple Icons)",
+      "guidelines": "https://about.x.com/en/who-we-are/brand-toolkit"
+    },
+    "uber": {
+      "title": "Uber",
+      "simple_icons_slug": "uber",
+      "brand_hex": "000000",
+      "source": "https://assets.uber.com/d/k4nuxdZ8MC7E/logos/collection/151",
+      "license": "CC0-1.0 (Simple Icons)",
+      "guidelines": "https://assets.uber.com/d/k4nuxdZ8MC7E/user-guide#/user-guide/terms-of-use"
+    },
+    "ubisoft": {
+      "title": "Ubisoft",
+      "simple_icons_slug": "ubisoft",
+      "brand_hex": "000000",
+      "source": "https://www.ubisoft.com/en-US/company/overview.aspx",
+      "license": "CC0-1.0 (Simple Icons)",
+      "guidelines": null
+    },
+    "vercel": {
+      "title": "Vercel",
+      "simple_icons_slug": "vercel",
+      "brand_hex": "000000",
+      "source": "https://vercel.com/geist/brands",
+      "license": "CC0-1.0 (Simple Icons)",
+      "guidelines": "https://vercel.com/geist/brands"
+    },
+    "viber": {
+      "title": "Viber",
+      "simple_icons_slug": "viber",
+      "brand_hex": "7360F2",
+      "source": "https://www.viber.com/brand-center",
+      "license": "CC0-1.0 (Simple Icons)",
+      "guidelines": "https://www.viber.com/brand-center"
+    },
+    "vinted": {
+      "title": "Vinted",
+      "simple_icons_slug": "vinted",
+      "brand_hex": "007782",
+      "source": "https://www.vinted.com",
+      "license": "CC0-1.0 (Simple Icons)",
+      "guidelines": null
+    },
+    "vkcom": {
+      "title": "VK",
+      "simple_icons_slug": "vk",
+      "brand_hex": "0077FF",
+      "source": "https://vk.com/brand",
+      "license": "CC0-1.0 (Simple Icons)",
+      "guidelines": "https://vk.com/brand"
+    },
+    "wechat": {
+      "title": "WeChat",
+      "simple_icons_slug": "wechat",
+      "brand_hex": "07C160",
+      "source": "https://wechat.design/tool/brand",
+      "license": "CC0-1.0 (Simple Icons)",
+      "guidelines": "https://wechat.design/brand/main-brand"
+    },
+    "whatsapp": {
+      "title": "WhatsApp",
+      "simple_icons_slug": "whatsapp",
+      "brand_hex": "25D366",
+      "source": "https://about.meta.com/brand/resources/whatsapp/whatsapp-brand",
+      "license": "CC0-1.0 (Simple Icons)",
+      "guidelines": "https://about.meta.com/brand/resources/whatsapp/whatsapp-brand"
+    },
+    "x": {
+      "title": "X",
+      "simple_icons_slug": "x",
+      "brand_hex": "000000",
+      "source": "https://x.com",
+      "license": "CC0-1.0 (Simple Icons)",
+      "guidelines": "https://about.x.com/en/who-we-are/brand-toolkit"
+    },
+    "zalo": {
+      "title": "Zalo",
+      "simple_icons_slug": "zalo",
+      "brand_hex": "0068FF",
+      "source": "https://zalo.me",
+      "license": "CC0-1.0 (Simple Icons)",
+      "guidelines": null
+    },
+    "zillow": {
+      "title": "Zillow",
+      "simple_icons_slug": "zillow",
+      "brand_hex": "006AFF",
+      "source": "https://www.zillow.com",
+      "license": "CC0-1.0 (Simple Icons)",
+      "guidelines": null
+    },
+    "zoho": {
+      "title": "Zoho",
+      "simple_icons_slug": "zoho",
+      "brand_hex": "E42527",
+      "source": "https://www.zoho.com/branding",
+      "license": "CC0-1.0 (Simple Icons)",
+      "guidelines": null
+    },
+    "zomato": {
+      "title": "Zomato",
+      "simple_icons_slug": "zomato",
+      "brand_hex": "E23744",
+      "source": "https://www.zomato.com/business/apps",
+      "license": "CC0-1.0 (Simple Icons)",
+      "guidelines": null
+    }
+  }
+}

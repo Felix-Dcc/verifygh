@@ -3,7 +3,7 @@
 import Link from "next/link";
 import useSWR from "swr";
 
-import { ServiceAvatar } from "@/components/brand";
+import { ServiceLogo } from "@/components/service-logo";
 import { ArrowRightIcon } from "@/components/icons";
 import { Badge, Button, Skeleton } from "@/components/ui/primitives";
 import { cedis } from "@/lib/format";
@@ -89,7 +89,7 @@ function FeaturedCard({ service }: { service: Service }) {
       className="card group p-4 transition-shadow hover:shadow-raised focus-visible:shadow-raised"
     >
       <div className="flex items-center gap-3">
-        <ServiceAvatar name={service.name} accentColor={service.accent_color} />
+        <ServiceLogo name={service.name} src={service.icon_url} slug={service.slug} />
         <div className="min-w-0 flex-1">
           <p className="truncate text-sm font-semibold text-ink">{service.name}</p>
           <p className="truncate text-xs text-ink-muted">

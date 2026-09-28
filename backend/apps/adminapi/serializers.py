@@ -56,6 +56,7 @@ class AdminOrderSerializer(serializers.ModelSerializer):
     user_email = serializers.CharField(source="user.email", read_only=True)
     user_id = serializers.UUIDField(source="user.id", read_only=True)
     service_name = serializers.CharField(source="service.name", read_only=True)
+    service_icon = serializers.CharField(source="service.icon_url", read_only=True)
     country_code = serializers.CharField(source="country.code", read_only=True)
     provider_name = serializers.CharField(source="provider.name", read_only=True)
     has_code = serializers.SerializerMethodField()
@@ -63,8 +64,8 @@ class AdminOrderSerializer(serializers.ModelSerializer):
     class Meta:
         model = Order
         fields = [
-            "id", "reference", "user_id", "user_email", "service_name", "country_code",
-            "provider_name", "provider_order_id", "phone_number", "price", "currency",
+            "id", "reference", "user_id", "user_email", "service_name", "service_icon",
+            "country_code", "provider_name", "provider_order_id", "phone_number", "price", "currency",
             "provider_cost", "provider_currency", "exchange_rate", "status", "refund_status",
             "failure_reason", "has_code", "expires_at", "completed_at", "created_at",
         ]
@@ -183,16 +184,35 @@ class AdminPaymentDetailSerializer(AdminPaymentSerializer):
 class AdminServiceSerializer(serializers.ModelSerializer):
     offering_count = serializers.IntegerField(read_only=True, default=0)
     available_count = serializers.IntegerField(read_only=True, default=0)
+    marketplace_offerings = serializers.IntegerField(read_only=True, default=0)
+    has_uploaded_logo = serializers.SerializerMethodField()
+    bundled_icon_url = serializers.SerializerMethodField()
+
+    def get_has_uploaded_logo(self, obj) -> bool:
+        return bool(obj.logo_content_type)
+
+    def get_bundled_icon_url(self, obj) -> str:
+        from apps.catalog.presentation import bundled_icon_url
+
+        return bundled_icon_url(obj.slug)
+
+    def validate_icon_url(self, value: str) -> str:
+        from apps.catalog.logos import validate_icon_url
+
+        return validate_icon_url(value)
 
     class Meta:
         model = Service
         fields = [
             "id", "slug", "name", "category", "description", "accent_color", "icon_url",
+            "has_uploaded_logo", "bundled_icon_url",
             "aliases", "is_popular", "popular_rank",
             "is_enabled", "is_maintenance", "maintenance_note", "supports_sms",
             "supports_voice", "display_order", "offering_count", "available_count",
+            "marketplace_offerings",
         ]
-        read_only_fields = ["id", "slug", "offering_count", "available_count"]
+        read_only_fields = ["id", "slug", "offering_count", "available_count",
+                            "marketplace_offerings", "has_uploaded_logo", "bundled_icon_url"]
 
 
 class AdminCountrySerializer(serializers.ModelSerializer):
@@ -208,6 +228,7 @@ class AdminOfferingSerializer(serializers.ModelSerializer):
 
     service_name = serializers.CharField(source="service.name", read_only=True)
     service_slug = serializers.CharField(source="service.slug", read_only=True)
+    service_icon = serializers.CharField(source="service.icon_url", read_only=True)
     country_code = serializers.CharField(source="country.code", read_only=True)
     provider_name = serializers.CharField(source="provider.name", read_only=True)
     customer_price = serializers.SerializerMethodField()
@@ -220,7 +241,7 @@ class AdminOfferingSerializer(serializers.ModelSerializer):
     class Meta:
         model = ProviderService
         fields = [
-            "id", "provider_name", "service_name", "service_slug", "country_code",
+            "id", "provider_name", "service_name", "service_slug", "service_icon", "country_code",
             "provider_service_code", "cost_amount", "cost_currency", "base_cost", "cost_floor",
             "customer_price", "margin", "pricing_rule_name", "pricing_error", "is_enabled",
             "is_available", "available_count", "supports_sms", "supports_voice",

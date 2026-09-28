@@ -6,8 +6,8 @@ import * as React from "react";
 import useSWR, { mutate as globalMutate } from "swr";
 
 import { useAuth } from "@/components/auth-provider";
-import { ServiceAvatar } from "@/components/brand";
 import { AvailabilityLabel } from "@/components/marketplace/availability";
+import { ServiceLogo } from "@/components/service-logo";
 import { Dialog } from "@/components/ui/dialog";
 import { Alert, Button, Skeleton, cn } from "@/components/ui/primitives";
 import { useToast } from "@/components/ui/toast";
@@ -132,7 +132,7 @@ export function BuyDialog({
     <Dialog
       open={open}
       onClose={onClose}
-      title={detail ? detail.name : "Loading"}
+      title="Get a verification number"
       dismissible={!submitting}
       footer={
         !user ? (
@@ -161,11 +161,11 @@ export function BuyDialog({
         </div>
       ) : (
         <div className="space-y-4">
-          <div className="flex items-center gap-3">
-            <ServiceAvatar name={detail.name} accentColor={detail.accent_color} size="lg" />
-            <div className="min-w-0">
-              <p className="text-sm font-medium text-ink">Verification number</p>
-              <p className="text-sm text-ink-muted">One-time SMS, delivered to this screen</p>
+          <div className="flex flex-col items-center gap-2 rounded-xl bg-canvas px-4 py-5 text-center">
+            <ServiceLogo name={detail.name} src={detail.icon_url} slug={detail.slug} size="lg" />
+            <div>
+              <p className="text-base font-semibold text-ink">{detail.name}</p>
+              <p className="text-xs text-ink-muted">SMS verification number</p>
             </div>
           </div>
 

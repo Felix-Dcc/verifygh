@@ -214,7 +214,7 @@ def sync_catalog(adapter_key: str | None = None) -> dict:
     for dto in provider_services:
         slug = dto.code.lower()
         if slug not in service_rows:
-            from apps.catalog.presentation import PRESENTATION
+            from apps.catalog.presentation import PRESENTATION, bundled_icon_url
 
             category, accent = SERVICE_METADATA.get(slug, (ServiceCategory.OTHER, "#0F766E"))
             name, aliases, category, rank = PRESENTATION.get(
@@ -227,6 +227,7 @@ def sync_catalog(adapter_key: str | None = None) -> dict:
                     "aliases": aliases,
                     "category": category,
                     "accent_color": accent,
+                    "icon_url": bundled_icon_url(slug),
                     "is_popular": rank is not None,
                     "popular_rank": rank or 100,
                     "supports_sms": dto.supports_sms,

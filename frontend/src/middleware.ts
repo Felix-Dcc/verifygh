@@ -44,7 +44,8 @@ function buildCsp(nonce: string): string {
       ...(isDev ? ["'unsafe-eval'"] : []),
     ],
     "style-src": ["'self'", "'unsafe-inline'"],
-    "img-src": ["'self'", "data:", "blob:"],
+    // The API origin serves logos staff upload (/api/v1/service-logos/...).
+    "img-src": ["'self'", "data:", "blob:", api].filter(Boolean),
     "font-src": ["'self'", "data:"],
     "connect-src": ["'self'", api, ...(isDev ? ["ws:", "wss:"] : [])].filter(Boolean),
     "form-action": ["'self'"],
@@ -119,7 +120,8 @@ export const config = {
      * files do not execute.
      */
     {
-      source: "/((?!_next/static|_next/image|favicon.ico|robots.txt|sitemap.xml).*)",
+      source:
+        "/((?!_next/static|_next/image|favicon.ico|icon.svg|apple-icon.png|manifest.webmanifest|opengraph-image|twitter-image|icons/|service-icons/|robots.txt|sitemap.xml).*)",
       missing: [
         { type: "header", key: "next-router-prefetch" },
         { type: "header", key: "purpose", value: "prefetch" },

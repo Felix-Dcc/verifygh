@@ -321,11 +321,13 @@ export function PageHeader({
   description,
   action,
   back,
+  icon,
 }: {
   title: string;
   description?: React.ReactNode;
   action?: React.ReactNode;
   back?: { href: string; label: string };
+  icon?: React.ReactNode;
 }) {
   return (
     <div className="mb-5 lg:mb-7">
@@ -347,11 +349,14 @@ export function PageHeader({
         </Link>
       ) : null}
       <div className="flex flex-wrap items-start justify-between gap-3">
-        <div className="min-w-0">
-          <h1 className="text-xl font-semibold tracking-tight text-ink sm:text-2xl">{title}</h1>
-          {description ? (
-            <div className="mt-1 text-sm text-ink-muted">{description}</div>
-          ) : null}
+        <div className="flex min-w-0 items-center gap-3">
+          {icon}
+          <div className="min-w-0">
+            <h1 className="text-xl font-semibold tracking-tight text-ink sm:text-2xl">{title}</h1>
+            {description ? (
+              <div className="mt-1 text-sm text-ink-muted">{description}</div>
+            ) : null}
+          </div>
         </div>
         {action ? <div className="shrink-0">{action}</div> : null}
       </div>

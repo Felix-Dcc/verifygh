@@ -393,3 +393,32 @@ def _service_meta(slug: str) -> dict:
     return {"name": service.name, "category": service.category, "icon_url": service.icon_url,
             "accent_color": service.accent_color, "availability": "UNAVAILABLE",
             "available_count": None, "price": None}
+
+
+class ServiceLogoView(APIView):
+    """An uploaded service logo, served from the database.
+
+    Public and heavily cached: the URL carries a version (?v=) that changes
+    whenever the logo does, so browsers keep it for a year and never ask again.
+    The sandboxing policy means an SVG opened directly in a tab cannot run
+    anything, on top of the checks it passed at upload.
+    """
+
+    permission_classes = [AllowAny]
+    authentication_classes: list = []
+    # Static content: a page of logos must not use up a visitor's API budget.
+    throttle_classes: list = []
+
+    def get(self, request, slug: str):
+        from django.http import HttpResponse
+
+        service = Service.objects.filter(slug=slug).only(
+            "logo_data", "logo_content_type"
+        ).first()
+        if service is None or not service.logo_data:
+            raise NotFound("No logo.")
+        response = HttpResponse(bytes(service.logo_data), content_type=service.logo_content_type)
+        response["Cache-Control"] = "public, max-age=31536000, immutable"
+        response["Content-Security-Policy"] = "default-src 'none'; style-src 'unsafe-inline'; sandbox"
+        response["X-Content-Type-Options"] = "nosniff"
+        return response

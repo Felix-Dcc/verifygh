@@ -30,6 +30,14 @@ const nextConfig = {
             : []),
         ],
       },
+      {
+        // Bundled service logos and brand icons: tiny, shared by every row that
+        // shows them, and only ever replaced by a new deploy.
+        source: "/:dir(service-icons|icons)/:file*",
+        headers: [
+          { key: "Cache-Control", value: "public, max-age=604800, stale-while-revalidate=86400" },
+        ],
+      },
     ];
   },
 };

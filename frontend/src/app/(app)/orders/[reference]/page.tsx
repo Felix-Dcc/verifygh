@@ -8,6 +8,7 @@ import useSWR, { mutate as globalMutate } from "swr";
 import { PageHeader } from "@/components/app-shell";
 import { CheckCircleIcon, ClockIcon, CopyIcon } from "@/components/icons";
 import { OrderTimeline } from "@/components/orders/order-timeline";
+import { ServiceLogo } from "@/components/service-logo";
 import { ReportProblem } from "@/components/orders/report-problem";
 import { ConfirmDialog } from "@/components/ui/dialog";
 import {
@@ -142,6 +143,14 @@ export default function OrderDetailPage() {
     <div className="space-y-4">
       <PageHeader
         title={order.service_name}
+        icon={
+          <ServiceLogo
+            name={order.service_name}
+            src={order.service_icon}
+            slug={order.service_slug}
+            size="lg"
+          />
+        }
         back={{ href: "/orders", label: "All orders" }}
         description={
           <span className="flex flex-wrap items-center gap-x-2 gap-y-1">
@@ -192,6 +201,9 @@ export default function OrderDetailPage() {
       <div className="grid gap-4 lg:grid-cols-5">
         <div className="space-y-4 lg:col-span-3">
           <PhoneCard
+            serviceName={order.service_name}
+            serviceIcon={order.service_icon}
+            serviceSlug={order.service_slug}
             phone={phone}
             dialCode={order.country_dial_code}
             status={status}
@@ -290,11 +302,17 @@ export default function OrderDetailPage() {
 /* ------------------------------------------------------------------ */
 
 function PhoneCard({
+  serviceName,
+  serviceIcon,
+  serviceSlug,
   phone,
   dialCode,
   status,
   secondsLeft,
 }: {
+  serviceName: string;
+  serviceIcon: string;
+  serviceSlug: string;
   phone: string;
   dialCode: string;
   status: string;
@@ -329,7 +347,12 @@ function PhoneCard({
 
   return (
     <Card className="p-4 sm:p-5">
-      <p className="text-xs uppercase tracking-wide text-ink-faint">Phone number</p>
+      <div className="flex items-center gap-2.5">
+        <ServiceLogo name={serviceName} src={serviceIcon} slug={serviceSlug} size="sm" />
+        <p className="text-xs uppercase tracking-wide text-ink-faint">
+          {serviceName} number
+        </p>
+      </div>
 
       {phone ? (
         <>

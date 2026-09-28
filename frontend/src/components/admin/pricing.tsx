@@ -4,6 +4,7 @@ import * as React from "react";
 import useSWR, { mutate as globalMutate } from "swr";
 
 import { Pagination } from "@/components/admin/pagination";
+import { ServiceLogo } from "@/components/service-logo";
 import { Dialog } from "@/components/ui/dialog";
 import {
   Alert,
@@ -127,7 +128,15 @@ export function OfferingsPricingCard({ canManage }: { canManage: boolean }) {
                   return (
                     <tr key={offering.id} className="transition-colors hover:bg-canvas">
                       <td className="whitespace-nowrap px-5 py-2.5 font-medium text-ink">
-                        {offering.service_name}
+                        <span className="inline-flex items-center gap-2.5">
+                          <ServiceLogo
+                            name={offering.service_name}
+                            src={offering.service_icon}
+                            slug={offering.service_slug}
+                            size="sm"
+                          />
+                          {offering.service_name}
+                        </span>
                       </td>
                       <td className="px-5 py-2.5 text-ink-soft">{offering.country_code}</td>
                       <td className="px-5 py-2.5 text-ink-muted">{offering.provider_name}</td>

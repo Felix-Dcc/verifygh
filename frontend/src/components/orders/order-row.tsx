@@ -1,6 +1,6 @@
 import Link from "next/link";
 
-import { ServiceAvatar } from "@/components/brand";
+import { ServiceLogo } from "@/components/service-logo";
 import { ChevronRightIcon } from "@/components/icons";
 import { StatusBadge } from "@/components/ui/primitives";
 import { cedis, relativeTime } from "@/lib/format";
@@ -20,7 +20,7 @@ export function OrderStatusRow({ order }: { order: OrderSummary }) {
         href={`/orders/${order.reference}`}
         className="flex items-center gap-3 px-4 py-3.5 transition-colors hover:bg-canvas sm:px-5"
       >
-        <ServiceAvatar name={order.service_name} />
+        <ServiceLogo name={order.service_name} src={order.service_icon} slug={order.service_slug} />
 
         <div className="min-w-0 flex-1">
           <div className="flex min-w-0 items-center gap-2">

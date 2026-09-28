@@ -144,6 +144,8 @@ def country_rows(country_code: str) -> list[dict]:
     offerings = list(
         sellable_offerings().filter(country__code=country_code)
         .select_related("service", "country", "provider")
+        # Uploaded logo bytes are served by their own endpoint, never listed.
+        .defer("service__logo_data")
         .order_by("service_id", "-is_available", "provider__priority", "cost_amount")
     )
     try:

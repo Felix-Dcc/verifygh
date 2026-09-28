@@ -79,6 +79,11 @@ api_v1 = [
     ),
     path("catalog/health/", catalog_views.CatalogHealthView.as_view(), name="catalog-health"),
     path(
+        "service-logos/<slug:slug>/",
+        catalog_views.ServiceLogoView.as_view(),
+        name="service-logo",
+    ),
+    path(
         "admin/number-issues-metrics/",
         numbers_admin.AdminIssueMetricsView.as_view(),
         name="admin-number-issue-metrics",

@@ -59,7 +59,17 @@ class Service(BaseModel):
         max_length=16, choices=ServiceCategory.choices, default=ServiceCategory.OTHER,
         db_index=True,
     )
-    icon_url = models.URLField(blank=True, default="")
+    #: The service's logo: a bundled asset ("/service-icons/tiktok.svg", served
+    #: by the web app - see apps/catalog/service_icons.json) or the URL of a logo
+    #: staff uploaded (served by the API from `logo_data`). Empty means the
+    #: frontend shows its generic fallback. This field is the one place the
+    #: frontend learns which logo a service uses.
+    icon_url = models.CharField(max_length=300, blank=True, default="")
+    #: An uploaded logo, when staff replaced the bundled one. Small (capped at
+    #: upload), raw bytes rather than base64, validated before it is stored.
+    logo_data = models.BinaryField(null=True, blank=True, editable=False)
+    logo_content_type = models.CharField(max_length=40, blank=True, default="")
+    logo_updated_at = models.DateTimeField(null=True, blank=True)
     # Short brand colour used by the frontend avatar when no logo is available.
     accent_color = models.CharField(max_length=7, blank=True, default="")
     description = models.CharField(max_length=200, blank=True, default="")

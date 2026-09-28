@@ -6,6 +6,7 @@ import useSWR from "swr";
 import { MetricTile } from "@/components/admin/charts";
 import { Pagination } from "@/components/admin/pagination";
 import { PageHeader } from "@/components/app-shell";
+import { ServiceLogo } from "@/components/service-logo";
 import { useAuth } from "@/components/auth-provider";
 import { FlagIcon, SearchIcon } from "@/components/icons";
 import { Dialog } from "@/components/ui/dialog";
@@ -149,8 +150,11 @@ export default function AdminNumberIssuesPage() {
                       {issue.provider_name}
                     </td>
                     <td className="whitespace-nowrap px-5 py-3.5 text-ink">
-                      {issue.service_name}
-                      <span className="ml-2 text-xs text-ink-muted">{issue.country_code}</span>
+                      <span className="inline-flex items-center gap-2.5">
+                        <ServiceLogo name={issue.service_name} src={issue.service_icon} size="sm" />
+                        {issue.service_name}
+                        <span className="text-xs text-ink-muted">{issue.country_code}</span>
+                      </span>
                     </td>
                     <td className="tabular whitespace-nowrap px-5 py-3.5 text-ink-soft">
                       {issue.number_masked || "-"}

@@ -684,7 +684,16 @@ class AdminServiceViewSet(AdminBase, mixins.ListModelMixin, mixins.UpdateModelMi
     pagination_class = None
 
     def get_queryset(self):
-        return Service.objects.annotate(
+        from apps.catalog.marketplace import marketplace_country_codes
+
+        return Service.objects.defer("logo_data").annotate(
+            # Offerings customers can actually be sold: the services whose
+            # branding matters, and the ones a missing logo is worth flagging.
+            marketplace_offerings=Count(
+                "offerings",
+                filter=Q(offerings__country__code__in=marketplace_country_codes()),
+                distinct=True,
+            ),
             offering_count=Count("offerings", distinct=True),
             available_count=Count(
                 "offerings", filter=Q(offerings__is_available=True), distinct=True
@@ -693,6 +702,56 @@ class AdminServiceViewSet(AdminBase, mixins.ListModelMixin, mixins.UpdateModelMi
 
     def perform_update(self, serializer):
         _audited_update(self.request, serializer, "SERVICE_UPDATE")
+
+    @action(detail=True, methods=["post", "delete"], url_path="logo")
+    def logo(self, request, slug=None):
+        """Upload a replacement logo (POST, multipart `file`) or remove it (DELETE).
+
+        Removing an uploaded logo goes back to the bundled one, if there is
+        one. To show no logo at all, set icon_url to "" instead.
+        """
+        from apps.catalog.logos import validate_logo
+        from apps.catalog.presentation import bundled_icon_url
+
+        service = Service.objects.filter(slug=slug).first()
+        if service is None:
+            raise NotFound("We could not find that service.")
+        before = {"icon_url": service.icon_url}
+
+        if request.method == "POST":
+            upload = request.FILES.get("file")
+            data = upload.read() if upload else b""
+            content_type = validate_logo(data)
+            now = timezone.now()
+            url = request.build_absolute_uri(f"/api/v1/service-logos/{service.slug}/")
+            fields = {
+                "logo_data": data,
+                "logo_content_type": content_type,
+                "logo_updated_at": now,
+                "icon_url": f"{url}?v={int(now.timestamp())}",
+            }
+            action_name, default_reason = "SERVICE_LOGO_UPLOAD", "Service logo uploaded"
+        else:
+            fields = {
+                "logo_data": None,
+                "logo_content_type": "",
+                "logo_updated_at": timezone.now(),
+                "icon_url": bundled_icon_url(service.slug),
+            }
+            action_name, default_reason = "SERVICE_LOGO_REMOVE", "Service logo removed"
+
+        with transaction.atomic():
+            Service.objects.filter(pk=service.pk).update(**fields)
+            record_admin_action(
+                admin=request.user, action=action_name, target=service,
+                reason=str(request.data.get("reason", "") or default_reason)[:500],
+                before=before, after={"icon_url": fields["icon_url"],
+                                      "content_type": fields["logo_content_type"]},
+                request=request,
+            )
+        _invalidate_marketplace()
+        service = self.get_queryset().get(pk=service.pk)
+        return Response(AdminServiceSerializer(service).data)
 
 
 class AdminCountryViewSet(AdminBase, mixins.ListModelMixin, mixins.UpdateModelMixin,

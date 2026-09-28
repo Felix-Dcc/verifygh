@@ -7,7 +7,7 @@ import useSWR from "swr";
 
 import { PageHeader } from "@/components/app-shell";
 import { useAuth } from "@/components/auth-provider";
-import { ServiceAvatar } from "@/components/brand";
+import { ServiceLogo } from "@/components/service-logo";
 import {
   ArrowRightIcon,
   BoltIcon,
@@ -165,7 +165,7 @@ function Dashboard() {
                   href={`/orders/${order.reference}`}
                   className="flex items-center gap-3 px-4 py-3.5 transition-colors hover:bg-canvas sm:px-5"
                 >
-                  <ServiceAvatar name={order.service_name} />
+                  <ServiceLogo name={order.service_name} src={order.service_icon} slug={order.service_slug} />
                   <div className="min-w-0 flex-1">
                     <p className="truncate text-sm font-medium text-ink">
                       {order.service_name}{" "}
