@@ -36,21 +36,40 @@ import {
 
 const REPO = "Felix-Dcc/verifygh";
 
-/** The API's public domain. Swap this for your own when you attach one. */
-const API_DOMAIN = "verifygh-production.up.railway.app";
+/**
+ * The registrable domain everything sits under.
+ *
+ * Both halves of the platform share it deliberately. On `up.railway.app` they
+ * were separate *sites* - that hostname is on the Public Suffix List - so the
+ * auth cookie was third-party and needed SameSite=None to work at all. Under
+ * one registrable domain the cookie is first-party and SameSite=Lax holds, so
+ * it is no longer sent on cross-site requests.
+ */
+const ROOT_DOMAIN = "getverifygh.com";
+
+/** The API's public domain. */
+const API_DOMAIN = `api.${ROOT_DOMAIN}`;
 
 /**
  * The frontend's public domain.
  *
- * Note for go-live: these two are different *sites*, because `up.railway.app`
- * is a public suffix. The auth cookie is therefore a third-party cookie, which
- * browsers increasingly block. Put both behind one registrable domain
- * (app.verifygh.com and api.verifygh.com) before taking real customers, and
- * set AUTH_COOKIE_DOMAIN to `.verifygh.com` then - never to `.up.railway.app`,
- * which is shared with every other Railway app.
+ * `www`, not the apex: Namecheap's apex is occupied by a URL redirect to www,
+ * and an ALIAS cannot coexist with it. The redirect does the right thing, so
+ * the bare domain still reaches the site.
  */
-const WEB_DOMAIN = "verifygh-web-production.up.railway.app";
+const WEB_DOMAIN = `www.${ROOT_DOMAIN}`;
 const WEB_ORIGIN = `https://${WEB_DOMAIN}`;
+
+/**
+ * The Railway-issued hostnames, kept alive alongside the custom ones.
+ *
+ * Still in ALLOWED_HOSTS and the CORS list because the Paystack *live* webhook
+ * may still point at the old API host. Dropping them before that is repointed
+ * would mean real payments arriving at a host Django refuses - money taken and
+ * never credited. Remove once the webhook is confirmed on API_DOMAIN.
+ */
+const LEGACY_API_DOMAIN = "verifygh-production.up.railway.app";
+const LEGACY_WEB_ORIGIN = "https://verifygh-web-production.up.railway.app";
 
 /** Everything Django needs. The three processes share one configuration. */
 function backendEnv(databaseUrl: VariableValue, redisUrl: VariableValue) {
@@ -73,7 +92,7 @@ function backendEnv(databaseUrl: VariableValue, redisUrl: VariableValue) {
 
     // Healthchecks arrive as healthcheck.railway.app; without it here Django
     // answers 400 DisallowedHost and every deploy fails its healthcheck.
-    ALLOWED_HOSTS: `healthcheck.railway.app,${API_DOMAIN},\${{RAILWAY_PUBLIC_DOMAIN}}`,
+    ALLOWED_HOSTS: `healthcheck.railway.app,${API_DOMAIN},${LEGACY_API_DOMAIN},\${{RAILWAY_PUBLIC_DOMAIN}}`,
 
     // Railway's edge is one proxy hop. The client IP is read that many hops
     // from the right of X-Forwarded-For; wrong here means either everyone
@@ -83,7 +102,10 @@ function backendEnv(databaseUrl: VariableValue, redisUrl: VariableValue) {
 
     // The API and the app are on different domains, so the cookie is cross-site.
     AUTH_COOKIE_SECURE: "true",
-    AUTH_COOKIE_SAMESITE: "None",
+    // Lax, not None: the site and the API are now first-party to each other,
+    // so the cookie does not need to survive a cross-site request - and should
+    // not be sent on one.
+    AUTH_COOKIE_SAMESITE: "Lax",
 
     CELERY_TASK_ALWAYS_EAGER: "false",
     LOG_FORMAT: "json",
@@ -95,44 +117,47 @@ function backendEnv(databaseUrl: VariableValue, redisUrl: VariableValue) {
     REFERRAL_SIGNUP_BONUS_GHS: "5.00",
     REFERRAL_MAX_MONTHLY_SUCCESSFUL_REFERRALS: "20",
 
-    // Paystack, in TEST mode. The sk_test_ key credits real wallets with
-    // simulated money, so production normally refuses it - ALLOW_PAYSTACK_TEST_KEYS
-    // is the deliberate staging exception.
-    //
-    // BEFORE REAL CUSTOMERS: set PAYSTACK_SECRET_KEY to the sk_live_ key and
-    // delete the line below. Leaving it set means every "payment" is free.
+    // Paystack in LIVE mode. ALLOW_PAYSTACK_TEST_KEYS is deliberately absent:
+    // with it set, a key accidentally reverted to sk_test_ would boot happily
+    // and credit every wallet for free. Its absence makes that combination
+    // refuse to start.
     PAYMENT_PROVIDER: "paystack",
-    ALLOW_PAYSTACK_TEST_KEYS: "true",
 
     // OnlineSim confirmed in writing on 2026-09-27 that their API may be
     // integrated into third-party software products, with our account
     // answerable for what our customers do. TextVerified refused the same
     // permission, so its adapter stays in the tree but unused.
     VERIFICATION_PROVIDER: "onlinesim",
+    // 0 lists everything OnlineSim offers - 98 countries, ~15,000 offerings.
+    // A cap would decide the shop window by accident.
+    PROVIDER_CATALOG_LIMIT: "0",
+    // Walked first, so these fill the catalogue and lead the listing.
+    PROVIDER_PRIORITY_COUNTRIES: "CA,US,GB",
+    // A full sync is ~99 calls, one per country. At the old ceiling of 120 a
+    // sync left ~21 for everything else, so a customer ordering during one
+    // could be refused. This is our own restraint, not a limit OnlineSim
+    // publishes.
+    PROVIDER_RATE_LIMIT_PER_MINUTE: "300",
     // Tariffs arrive in the OnlineSim profile's own currency. If the profile is
     // not USD, change this or the exchange rate is applied to the wrong unit
     // and every price on the site is wrong.
     ONLINESIM_CURRENCY: "USD",
 
+    // Verification and password-reset links are built from this, so it must be
+    // the host a customer can actually open.
     FRONTEND_URL: WEB_ORIGIN,
-    CORS_ALLOWED_ORIGINS: WEB_ORIGIN,
-    CSRF_TRUSTED_ORIGINS: WEB_ORIGIN,
+    CORS_ALLOWED_ORIGINS: `${LEGACY_WEB_ORIGIN},${WEB_ORIGIN}`,
+    CSRF_TRUSTED_ORIGINS: `${LEGACY_WEB_ORIGIN},${WEB_ORIGIN}`,
 
     // Transactional email. RESEND_API_KEY is a secret and lives in the
     // dashboard; with it set, the app configures Resend's documented SMTP
     // endpoint itself.
     //
-    // The sender's domain must be verified in Resend or every send is
-    // rejected outright.
-    //
-    // No domain is verified yet, so this is Resend's own test sender. It works
-    // immediately but ONLY delivers to the Resend account owner's address -
-    // enough to prove the pipeline, useless for real customers.
-    //
-    // BEFORE REAL CUSTOMERS: verify a domain in Resend (see docs/EMAIL.md) and
-    // change this to an address on it, e.g. VerifyGH <no-reply@verifygh.com>.
-    // Until then every signup except your own silently fails to arrive.
-    DEFAULT_FROM_EMAIL: "VerifyGH <onboarding@resend.dev>",
+    // getverifygh.com is verified in Resend - DKIM, SPF, the bounce MX and the
+    // relay CNAME all pass - so mail reaches anyone, not just the account
+    // owner. Sending from an unverified domain is rejected outright, so this
+    // and the Resend domain have to move together.
+    DEFAULT_FROM_EMAIL: `VerifyGH <no-reply@${ROOT_DOMAIN}>`,
     EMAIL_VERIFICATION_TTL_HOURS: "24",
 
     // --- set these in the Railway dashboard -----------------------------
@@ -141,7 +166,9 @@ function backendEnv(databaseUrl: VariableValue, redisUrl: VariableValue) {
     // Left unset on purpose: a cookie domain of .up.railway.app would be
     // shared with every Railway app, and browsers reject it anyway. Set it
     // only once the API and app share a registrable domain.
-    AUTH_COOKIE_DOMAIN: preserve(),
+    // Shared across www and api so one sign-in covers both. Safe here in a way
+    // it never was on .up.railway.app, which every Railway app shares.
+    AUTH_COOKIE_DOMAIN: `.${ROOT_DOMAIN}`,
     PAYSTACK_SECRET_KEY: preserve(),
     // Set this and the marketplace can stock itself. Without it the OnlineSim
     // adapter is unconfigured, the catalogue stays empty, and the deposit guard
@@ -200,6 +227,13 @@ export default defineRailway(() => {
     ].join(" "),
     healthcheck: "/health/",
     healthcheckTimeout: 120,
+    // Declared here so applying this file cannot strip a domain that was
+    // attached from the CLI. The Railway-issued hostname stays alongside it
+    // until the Paystack live webhook is confirmed on API_DOMAIN.
+    networking: {
+      customDomains: { [API_DOMAIN]: {} },
+      serviceDomains: { [LEGACY_API_DOMAIN]: {} },
+    },
     env,
   });
 
@@ -234,6 +268,9 @@ export default defineRailway(() => {
     start: "npx next start -H :: -p $PORT",
     healthcheck: "/",
     healthcheckTimeout: 120,
+    networking: {
+      customDomains: { [WEB_DOMAIN]: {} },
+    },
     env: {
       // Compiled into the browser bundle at build time, so it must be the
       // API's public URL - not the private one, which a browser cannot reach.
