@@ -28,6 +28,21 @@ export function Dialog({
   const panelRef = React.useRef<HTMLDivElement>(null);
   const titleId = React.useId();
 
+  // Read through refs, so the effect below depends on `open` alone.
+  //
+  // It used to list `onClose` and `dismissible` as dependencies. Callers pass
+  // `onClose={() => ...}`, a new function on every render - so each keystroke
+  // in a text field inside the dialog re-rendered the parent, tore the effect
+  // down (moving focus back to the button behind the dialog) and ran it again
+  // (moving focus to the panel). The field lost focus after every character,
+  // and a reason could only be typed one letter at a time.
+  const onCloseRef = React.useRef(onClose);
+  const dismissibleRef = React.useRef(dismissible);
+  React.useEffect(() => {
+    onCloseRef.current = onClose;
+    dismissibleRef.current = dismissible;
+  });
+
   React.useEffect(() => {
     if (!open) return;
 
@@ -36,8 +51,8 @@ export function Dialog({
     document.body.style.overflow = "hidden";
 
     const onKeyDown = (event: KeyboardEvent) => {
-      if (event.key === "Escape" && dismissible) {
-        onClose();
+      if (event.key === "Escape" && dismissibleRef.current) {
+        onCloseRef.current();
         return;
       }
       if (event.key !== "Tab" || !panelRef.current) return;
@@ -68,7 +83,9 @@ export function Dialog({
       document.body.style.overflow = overflow;
       previouslyFocused?.focus?.();
     };
-  }, [open, onClose, dismissible]);
+    // `open` only. Anything else here re-runs the focus handling on every
+    // render of the parent - see the note above the refs.
+  }, [open]);
 
   if (!open) return null;
 
