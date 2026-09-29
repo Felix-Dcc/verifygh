@@ -181,6 +181,14 @@ class Order(BaseModel):
             models.UniqueConstraint(
                 fields=["user", "idempotency_key"], name="order_idempotency_unique"
             ),
+            # One upstream reservation belongs to one order. Two orders pointing
+            # at the same provider reservation would mean one number billed
+            # twice, or one customer's code shown to another.
+            models.UniqueConstraint(
+                fields=["provider", "provider_order_id"],
+                condition=~models.Q(provider_order_id=""),
+                name="order_provider_order_id_unique",
+            ),
             models.CheckConstraint(
                 check=models.Q(price__gte=Decimal("0.00")), name="order_price_non_negative"
             ),

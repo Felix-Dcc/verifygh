@@ -16,11 +16,16 @@ How this adapter behaves:
 * `Idempotency-Key` is forwarded on creation, so a retry after a network
   timeout cannot reserve - and bill us for - two numbers.
 
-**AUTHORISATION.** TextVerified's terms prohibit sharing numbers with third
-parties. Reselling access, which is what this platform does, needs an explicit
-reseller or partner arrangement with them. Having the API documented is not
-the same as being permitted to resell, and production still refuses to sell
-until an authorised provider is configured. See docs/PROVIDER_INTEGRATION.md.
+* `v2.sms.received` webhooks are verified (HMAC-SHA512 over the raw body,
+  `X-Webhook-Signature`) and used only as a prompt to read the order back
+  through the API. Polling stays the source of truth.
+
+**AUTHORISATION.** TextVerified's terms (read 2026-09-29) say sharing its numbers
+with third parties is prohibited, and its FAQ says it is not a reseller. Selling
+its numbers to our customers therefore needs its written permission. Until
+staff record that permission on the provider row (`resale_authorized`), this
+adapter may sync the catalogue, read prices and read our balance, but nothing
+is listed to customers or ordered for them. See docs/PROVIDERS.md.
 
 **Testing without spending balance.** The API documents mock service names
 (`test_success201`, `test_delayed_success201`, `test_pending201`,
@@ -32,9 +37,15 @@ uses them and is skipped unless an API key is present.
 
 from __future__ import annotations
 
+import base64
+import binascii
+import hashlib
+import hmac
+import json
 import logging
+import time
 from datetime import UTC, datetime, timedelta
-from decimal import Decimal, InvalidOperation
+from decimal import ROUND_CEILING, Decimal, InvalidOperation
 
 import requests
 from django.conf import settings
@@ -43,6 +54,7 @@ from django.core.cache import cache
 from apps.common.errors import ProviderError, ServiceUnavailable
 from apps.verification.base import (
     AvailabilityDTO,
+    BalanceDTO,
     CodeDTO,
     ProviderCountryDTO,
     ProviderOrderDTO,
@@ -58,10 +70,37 @@ REQUEST_TIMEOUT = 20
 #: Seconds before expiry at which the cached token is refreshed anyway.
 TOKEN_REFRESH_MARGIN = 60
 
+#: How long one catalogue sync may spend pricing services. Each price is its
+#: own documented call, and the sync runs inside a Celery task with a time
+#: limit, so it prices what it can in this window and resumes next time.
+SYNC_TIME_BUDGET_SECONDS = 60
+
+#: Where the next catalogue sync resumes pricing.
+PRICING_CURSOR_KEY = "textverified:pricing_cursor"
+
+#: Documented error codes that mean "our account", not "this customer" - an
+#: empty balance stops every order and needs a person to top it up.
+OPERATIONAL_ERROR_CODES = {"insufficientbalance"}
+
+WEBHOOK_SIGNATURE_HEADER = "x-webhook-signature"
+WEBHOOK_SIGNATURE_PREFIX = "HMAC-SHA512="
+
 
 class _NotConfigured(ServiceUnavailable):
     code = "PROVIDER_NOT_CONFIGURED"
     message = "This provider is not available yet."
+
+
+def _provider_error(message: str, provider_code: str = "", *,
+                    operational: bool = False) -> ProviderError:
+    """A ProviderError carrying TextVerified's own code for staff alerting.
+
+    The message is what a customer could ever see; the code stays internal.
+    """
+    error = ProviderError(message)
+    error.provider_code = provider_code
+    error.operational = operational
+    return error
 
 
 def _decimal(value, default: Decimal = Decimal("0")) -> Decimal:
@@ -88,7 +127,11 @@ class TextVerifiedProvider(VerificationProvider):
 
     #: Set from the Provider row / agreement, not assumed.
     permits_code_display = True
-    supports_webhooks = False
+    #: Documented: signed `v2.sms.received` callbacks. Acted on only when the
+    #: webhook secret is configured (see `accepts_webhooks`).
+    supports_webhooks = True
+    #: `GET /api/pub/v2/account/me` reports `currentBalance`.
+    supports_balance = True
 
     # -- endpoints, from the published OpenAPI v2 specification -----------
     BASE_URL = "https://www.textverified.com"
@@ -129,6 +172,7 @@ class TextVerifiedProvider(VerificationProvider):
         self.api_key = credentials.get("api_key", "")
         self.api_username = credentials.get("api_username", "")
         self.base_url = (credentials.get("base_url") or self.BASE_URL).rstrip("/")
+        self.webhook_secret = str(credentials.get("webhook_secret") or "")
         self._session = requests.Session()
         self._token: str | None = None
         self._token_expires: datetime | None = None
@@ -211,15 +255,20 @@ class TextVerifiedProvider(VerificationProvider):
             raise ProviderError("We could not reach the verification provider.") from exc
 
         if response.status_code == 429:
-            # Back off; never retry through a rate limit.
+            # Back off; never retry through a rate limit. The docs say limits
+            # may change, so the caller (the next beat tick, the customer's
+            # retry) is the backoff.
             logger.warning("textverified_rate_limited")
-            raise ServiceUnavailable(
+            busy = ServiceUnavailable(
                 "The verification provider is busy. Please try again shortly.",
                 code="PROVIDER_RATE_LIMITED",
             )
+            busy.provider_code = "RATE_LIMITED"
+            raise busy
         if response.status_code in (401, 403):
             logger.error("textverified_unauthorised", extra={"status": response.status_code})
-            raise ProviderError("The verification provider rejected our credentials.")
+            raise _provider_error("The verification provider rejected our credentials.",
+                                  "UNAUTHORIZED", operational=True)
         if response.status_code == 404:
             raise ProviderError("The verification provider does not recognise that request.")
 
@@ -234,10 +283,12 @@ class TextVerifiedProvider(VerificationProvider):
 
         if response.status_code >= 400:
             # The documented error shape is {errorCode, errorDescription}.
-            code = str(payload.get("errorCode", ""))[:60]
+            code = str(payload.get("errorCode", "") if isinstance(payload, dict) else "")[:60]
+            operational = code.lower() in OPERATIONAL_ERROR_CODES
             logger.error("textverified_error", extra={"status": response.status_code,
-                                                      "provider_code": code})
-            raise ProviderError(_message_for(code))
+                                                      "provider_code": code,
+                                                      "operational": operational})
+            raise _provider_error(_message_for(code), code, operational=operational)
         return payload
 
     def _request(self, method: str, url: str, *, json_body: dict | None = None,
@@ -263,12 +314,17 @@ class TextVerifiedProvider(VerificationProvider):
     # -- catalog ---------------------------------------------------------
 
     def get_services(self) -> list[ProviderServiceDTO]:
-        """Every service we can price.
+        """Every service we can price, a slice per sync.
 
-        The service list and the price are separate documented calls, so this
-        prices each service individually. A service we cannot price is left out
-        rather than listed at a guessed cost - an unpriced row would be sold at
-        the wrong price.
+        The service list is one documented call; each price is another
+        (`POST /pricing/verifications`), and the docs warn pricing may answer
+        429. So one sync prices as many services as PROVIDER_CATALOG_LIMIT
+        allows (0 = no count limit) within SYNC_TIME_BUDGET_SECONDS, starting
+        where the last sync stopped, and stops at the first 429. Services not
+        priced this time are not returned, so the catalogue keeps their last
+        known price instead of dropping them. A service that cannot be priced
+        is left out rather than listed at a guessed cost. Voice-only services
+        are skipped: we sell SMS verifications.
         """
         self._require_configured("listing services")
         payload = self._request(
@@ -276,25 +332,42 @@ class TextVerifiedProvider(VerificationProvider):
             params={"numberType": self.NUMBER_TYPE, "reservationType": "verification"},
         )
 
-        limit = int(settings.VERIFYGH.get("PROVIDER_CATALOG_LIMIT", 60))
-        services: list[ProviderServiceDTO] = []
-        skipped = 0
+        entries: list[tuple[str, str]] = []
         for entry in payload if isinstance(payload, list) else []:
             name = str(entry.get("serviceName") or "").strip()
-            if not name:
+            if not name or str(entry.get("capability") or "").lower() == "voice":
                 continue
-            if len(services) >= limit:
-                skipped += 1
-                continue
+            entries.append((name, str(entry.get("description") or name)[:120]))
+        if not entries:
+            return []
+
+        limit = int(settings.VERIFYGH.get("PROVIDER_CATALOG_LIMIT", 60))
+        budget = len(entries) if limit <= 0 else min(limit, len(entries))
+        start = int(cache.get(PRICING_CURSOR_KEY) or 0) % len(entries)
+        deadline = time.monotonic() + SYNC_TIME_BUDGET_SECONDS
+
+        services: list[ProviderServiceDTO] = []
+        skipped = attempted = 0
+        stopped = ""
+        while attempted < budget:
+            if time.monotonic() >= deadline:
+                stopped = "time_budget"
+                break
+            name, description = entries[(start + attempted) % len(entries)]
             try:
                 cost = self.get_pricing(name, "US")
+            except ServiceUnavailable:
+                stopped = "rate_limited"
+                break
             except ProviderError:
+                attempted += 1
                 skipped += 1
                 continue
+            attempted += 1
             services.append(
                 ProviderServiceDTO(
                     code=name,
-                    name=str(entry.get("description") or name)[:120],
+                    name=description,
                     country_code="US",
                     cost=cost,
                     currency="USD",
@@ -304,8 +377,11 @@ class TextVerifiedProvider(VerificationProvider):
                 )
             )
 
-        logger.info("textverified_services_synced",
-                    extra={"listed": len(services), "skipped": skipped})
+        cache.set(PRICING_CURSOR_KEY, (start + attempted) % len(entries), None)
+        logger.info("textverified_services_synced", extra={
+            "listed": len(services), "skipped": skipped, "catalogue": len(entries),
+            "stopped": stopped or "complete",
+        })
         return services
 
     def get_countries(self) -> list[ProviderCountryDTO]:
@@ -365,7 +441,9 @@ class TextVerifiedProvider(VerificationProvider):
         tolerance = _decimal(
             settings.VERIFYGH.get("PROVIDER_PRICE_TOLERANCE", "1.05"), Decimal("1.05")
         )
-        max_price = (price * tolerance).quantize(Decimal("0.01"))
+        # Rounded up: rounding to the nearest cent could cut the tolerance to
+        # nothing on a cheap service ($0.10 x 1.05 would round back to $0.10).
+        max_price = (price * tolerance).quantize(Decimal("0.01"), rounding=ROUND_CEILING)
 
         created = self._request(
             "POST", self._url(self.PATH_CREATE_ORDER),
@@ -487,6 +565,69 @@ class TextVerifiedProvider(VerificationProvider):
             return False
         return True
 
+    # -- our account -----------------------------------------------------
+
+    def get_balance(self) -> BalanceDTO:
+        """`GET /api/pub/v2/account/me` -> `currentBalance`.
+
+        Read-only. TextVerified is funded with prepaid credits bought by card or
+        cryptocurrency on its website; no API adds money. The Account schema has
+        no held or frozen amount, and the FAQ says credits are deducted only
+        when a verification comes in, so nothing is reported as frozen.
+        """
+        self._require_configured("reading the balance")
+        payload = self._request("GET", self._url(self.PATH_ACCOUNT))
+        if not isinstance(payload, dict) or payload.get("currentBalance") is None:
+            raise _provider_error("The verification provider did not report a balance.")
+        return BalanceDTO(available=_decimal(payload.get("currentBalance")),
+                          frozen=Decimal("0"), currency="USD")
+
+    # -- webhooks ----------------------------------------------------------
+
+    @property
+    def accepts_webhooks(self) -> bool:
+        return bool(self.webhook_secret)
+
+    def _signatures(self, raw_body: bytes) -> list[str]:
+        """The documented signature: Base64(HMAC-SHA512(secret, body)).
+
+        The docs name the secret (`whsec_...`) but not whether it is used as
+        written or with its encoded part decoded, so both are computed. Either
+        is derived from our secret alone, so accepting both admits nothing
+        that does not hold it.
+        """
+        keys = [self.webhook_secret.encode()]
+        if self.webhook_secret.startswith("whsec_"):
+            try:
+                keys.append(base64.b64decode(self.webhook_secret[6:], validate=True))
+            except (binascii.Error, ValueError):
+                pass
+        return [base64.b64encode(hmac.new(key, raw_body, hashlib.sha512).digest()).decode()
+                for key in keys]
+
+    def parse_webhook(self, raw_body: bytes, headers: dict) -> list[str] | None:
+        if not self.webhook_secret:
+            return None
+        header = str(headers.get(WEBHOOK_SIGNATURE_HEADER) or "").strip()
+        if not header.startswith(WEBHOOK_SIGNATURE_PREFIX):
+            return None
+        given = header[len(WEBHOOK_SIGNATURE_PREFIX):].strip()
+        if not any(hmac.compare_digest(given, expected)
+                   for expected in self._signatures(raw_body)):
+            return None
+        try:
+            event = json.loads(raw_body)
+        except (ValueError, UnicodeDecodeError):
+            return []
+        if not isinstance(event, dict):
+            return []
+        name = str(event.get("event") or event.get("Event") or "")
+        data = event.get("data") or event.get("Data") or {}
+        if name != "v2.sms.received" or not isinstance(data, dict):
+            return []
+        reservation = str(data.get("reservationId") or data.get("ReservationId") or "")
+        return [reservation[:128]] if reservation else []
+
     # -- health ----------------------------------------------------------
 
     def health_check(self) -> bool:
@@ -499,15 +640,13 @@ class TextVerifiedProvider(VerificationProvider):
             return False
 
     def account_balance(self) -> Decimal | None:
-        """Our balance with the provider. Surfaced on the admin health page so
-        nobody discovers an empty upstream account through failed orders."""
+        """Our spendable balance with the provider, or None when it cannot be read."""
         if not self.is_configured:
             return None
         try:
-            payload = self._request("GET", self._url(self.PATH_ACCOUNT))
+            return self.get_balance().available
         except Exception:
             return None
-        return _decimal(payload.get("currentBalance"), Decimal("0"))
 
 
 #: Documented create-error codes, translated into something a customer can read.

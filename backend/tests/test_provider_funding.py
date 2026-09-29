@@ -359,7 +359,10 @@ def second_provider(catalog):
     try:
         sync_catalog("mock2")
         provider = Provider.objects.get(adapter_key="mock2")
-        Provider.objects.filter(pk=provider.pk).update(name="Second", priority=500)
+        # A fallback is only ever an authorised one; see the resale gate.
+        Provider.objects.filter(pk=provider.pk).update(
+            name="Second", priority=500, resale_authorized=True,
+            authorization_reference="Test fixture: written permission on file.")
         provider.refresh_from_db()
         yield provider
     finally:
@@ -527,7 +530,15 @@ def _order(provider, service, country, index, **fields):
     )
 
 
-def test_an_account_close_to_inactivity_deletion_is_flagged(instagram_us, admin_user):
+@pytest.fixture
+def idle_deletion_terms(monkeypatch):
+    """Give the mock provider OnlineSim's published rule: idle accounts are deleted."""
+    monkeypatch.setitem(funding.PROVIDER_FUNDING_TERMS, "mock",
+                        {"methods": "card", "deletes_idle_accounts": True})
+
+
+def test_an_account_close_to_inactivity_deletion_is_flagged(instagram_us, admin_user,
+                                                            idle_deletion_terms):
     _order(instagram_us.provider, instagram_us.service, instagram_us.country, 1,
            status=OrderStatus.COMPLETED,
            code_received_at=timezone.now() - timedelta(days=22))
@@ -537,6 +548,20 @@ def test_an_account_close_to_inactivity_deletion_is_flagged(instagram_us, admin_
 
     alert = ProviderAlert.objects.get(kind=AlertKind.INACTIVITY)
     assert "22 days" in alert.message and "USD 30.00" in alert.message
+
+
+def test_no_inactivity_warning_where_the_terms_have_no_such_rule(instagram_us, admin_user):
+    """TextVerified's terms publish no idle-account deletion; OnlineSim's did."""
+    _order(instagram_us.provider, instagram_us.service, instagram_us.country, 2,
+           status=OrderStatus.COMPLETED,
+           code_received_at=timezone.now() - timedelta(days=40))
+    set_balance("30", instagram_us.provider)
+
+    committed(funding.sync_all)
+
+    assert not ProviderAlert.objects.filter(kind=AlertKind.INACTIVITY).exists()
+    assert funding.PROVIDER_FUNDING_TERMS["textverified"]["deletes_idle_accounts"] is False
+    assert funding.PROVIDER_FUNDING_TERMS["onlinesim"]["deletes_idle_accounts"] is True
 
 
 def test_a_spike_in_failed_orders_is_flagged(instagram_us, admin_user):

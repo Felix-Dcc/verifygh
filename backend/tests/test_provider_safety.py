@@ -1,4 +1,4 @@
-"""TextVerified must stay inert, and fail safe, until it is genuinely configured."""
+"""TextVerified must fail safe until it is genuinely configured and authorised."""
 
 from __future__ import annotations
 
@@ -65,15 +65,18 @@ def test_every_mapped_state_is_a_documented_state():
     assert not unhandled, f"documented states with no mapping: {sorted(unhandled)}"
 
 
-def test_textverified_cannot_be_synced(db):
+def test_an_unconfigured_textverified_sync_reports_and_lists_nothing(db, settings):
     from apps.catalog.services import sync_catalog
-    from apps.common.errors import ServiceUnavailable
 
-    with pytest.raises(ServiceUnavailable):
-        sync_catalog("textverified")
+    settings.PROVIDER_CREDENTIALS = {**settings.PROVIDER_CREDENTIALS,
+                                     "textverified": {"api_key": "", "api_username": "",
+                                                      "base_url": ""}}
+    summary = sync_catalog("textverified")
 
-    assert not Provider.objects.filter(adapter_key="textverified").exists()
+    assert summary["errors"], "an unconfigured provider must report, not pretend"
     assert not ProviderService.objects.filter(provider__adapter_key="textverified").exists()
+    # A real provider's row starts unauthorised: syncing is never permission to sell.
+    assert Provider.objects.get(adapter_key="textverified").resale_authorized is False
 
 
 def test_a_catalog_sync_against_unconfigured_onlinesim_fails_cleanly(db, settings):

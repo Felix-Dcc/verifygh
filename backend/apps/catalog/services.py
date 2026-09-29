@@ -166,9 +166,13 @@ def _record_cost_change(offering, previous, dto) -> None:
 
 
 def ensure_provider_row(adapter_key: str) -> Provider:
+    # A new real provider starts unauthorised: it can be synced and priced, but
+    # nothing is sold through it until staff record its written permission.
+    # The development mock needs none, and production refuses to run it.
     provider, created = Provider.objects.get_or_create(
         adapter_key=adapter_key,
-        defaults={"name": adapter_key.title(), "is_enabled": True},
+        defaults={"name": adapter_key.title(), "is_enabled": True,
+                  "resale_authorized": adapter_key == "mock"},
     )
     if created:
         logger.info("provider_row_created", extra={"adapter_key": adapter_key})
@@ -192,6 +196,13 @@ def sync_catalog(adapter_key: str | None = None) -> dict:
         "unavailable": 0,
         "errors": [],
     }
+
+    if not provider_row.is_enabled:
+        # A switched-off provider is not called at all - not even to read its
+        # catalogue. Its existing rows and every order made through it stay.
+        logger.info("catalog_sync_skipped_disabled", extra={"provider": provider_client.key})
+        summary["errors"].append(f"{provider_row.name} is disabled; nothing was synced.")
+        return summary
 
     try:
         provider_countries = provider_client.get_countries()

@@ -61,11 +61,15 @@ TRUSTED_PROXY_COUNT=1
 
 PAYMENT_PROVIDER=paystack
 PAYSTACK_SECRET_KEY=sk_live_...
-# OnlineSim is the only supplier. Without ONLINESIM_API_KEY it refuses every
-# call, so the catalogue stays empty and nothing can be bought.
-# Production refuses to boot with `mock` - it would sell simulated numbers.
-VERIFICATION_PROVIDER=onlinesim
-ONLINESIM_API_KEY=...
+# TextVerified is the primary supplier (docs/PROVIDERS.md). Production refuses
+# to boot without both credentials, and refuses `mock` outright - there is no
+# fallback. Nothing is sold through it until its written resale authorisation
+# is recorded in Admin > Providers.
+VERIFICATION_PROVIDER=textverified
+TEXTVERIFIED_API_USERNAME=...   # the TextVerified account email
+TEXTVERIFIED_API_KEY=...
+# Optional: signed SMS webhooks (docs/PROVIDERS.md section 9).
+TEXTVERIFIED_WEBHOOK_SECRET=
 EXCHANGE_RATE_PROVIDER=api
 EXCHANGE_RATE_API_KEY=...
 EXCHANGE_RATE_API_URL=...

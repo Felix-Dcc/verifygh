@@ -53,6 +53,7 @@ const ADMIN_NAV: NavItem[] = [
   { href: "/admin/payments", label: "Payments", icon: WalletIcon },
   { href: "/admin/catalog", label: "Catalog", icon: GridIcon },
   { href: "/admin/pricing", label: "Pricing", icon: WalletIcon },
+  { href: "/admin/providers", label: "Providers", icon: ShieldIcon },
   { href: "/admin/funding", label: "Provider funding", icon: BoltIcon },
   { href: "/admin/referrals", label: "Referrals", icon: GiftIcon },
   { href: "/admin/system", label: "System", icon: SettingsIcon },

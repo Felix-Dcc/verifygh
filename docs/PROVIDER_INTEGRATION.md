@@ -1,10 +1,15 @@
 # Verification provider integration
 
+> **Superseded as the entry point by [PROVIDERS.md](PROVIDERS.md)** (2026-09-29):
+> TextVerified is now the intended primary provider, built and switched off
+> until it authorises resale in writing; OnlineSim is switched off. The
+> OnlineSim notes below remain accurate for its dormant adapter and history.
+
 How to replace the mock provider with a real, authorised upstream.
 
 ---
 
-## OnlineSim  *(the one we can actually use)*
+## OnlineSim  *(the provider until 2026-09-29; now switched off)*
 
 Built from their published API documentation at
 `https://onlinesim.io/docs/api/en/index`. A copy of the documented paths,

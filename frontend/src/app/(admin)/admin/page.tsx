@@ -46,7 +46,7 @@ export default function AdminOverviewPage() {
               ? "The payment provider is a mock."
               : "The verification provider is a mock."}{" "}
           No real money moves and no real numbers are issued. Configure the live providers before
-          launch - see <span className="font-medium">docs/PROVIDER_INTEGRATION.md</span>.
+          launch - see <span className="font-medium">docs/PROVIDERS.md</span>.
         </Alert>
       ) : null}
 

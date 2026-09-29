@@ -126,6 +126,15 @@ class VerificationProvider(abc.ABC):
     def __init__(self, config: dict | None = None):
         self.config = config or {}
 
+    @property
+    def is_configured(self) -> bool:
+        """Whether the credentials this adapter needs are present.
+
+        Adapters with credentials override this. It answers "could we call the
+        provider", never "is the provider up" - that is `health_check`.
+        """
+        return True
+
     # -- catalog ---------------------------------------------------------
 
     @abc.abstractmethod
@@ -230,6 +239,26 @@ class VerificationProvider(abc.ABC):
         raise NotImplementedError(
             f"{self.display_name} documents no API for funding our account."
         )
+
+    # -- push notifications ------------------------------------------------
+
+    @property
+    def accepts_webhooks(self) -> bool:
+        """Whether a signed callback from this provider can be verified now.
+
+        False unless the provider documents a signature scheme *and* its secret
+        is configured. An unsigned or unverifiable callback is never acted on.
+        """
+        return False
+
+    def parse_webhook(self, raw_body: bytes, headers: dict) -> list[str] | None:
+        """Verify a callback and return the provider order ids it concerns.
+
+        None means the signature did not verify. The ids are only a hint to
+        look now: the order is then read back through the authenticated API,
+        so nothing in a callback body is ever trusted as the code itself.
+        """
+        return None
 
     # -- health ----------------------------------------------------------
 

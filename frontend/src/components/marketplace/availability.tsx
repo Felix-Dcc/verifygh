@@ -11,7 +11,7 @@ const DOT: Record<Availability, string> = {
  * Stock as the provider reported it, and no more.
  *
  * A number appears only when the server sends one - it withholds counts that
- * look like a ceiling (OnlineSim reports 9999 for almost everything) - so the
+ * look like a ceiling (some providers report 9999 for almost everything) - so the
  * words here never claim stock we were not told about.
  */
 /** A service we sell but cannot supply right now. Never says why. */

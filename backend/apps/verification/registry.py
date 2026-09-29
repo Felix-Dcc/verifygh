@@ -22,16 +22,23 @@ from apps.common.errors import ServiceUnavailable
 from apps.verification.base import VerificationProvider
 from apps.verification.mock import MockVerificationProvider
 from apps.verification.onlinesim import OnlineSimProvider
+from apps.verification.textverified import TextVerifiedProvider
 
 logger = logging.getLogger("verifygh.provider")
 
-#: OnlineSim is the only supplier. TextVerified is deliberately absent: it
-#: refused resale permission, so nothing may sync its catalogue, reserve a
-#: number from it or health-check it. `apps/verification/textverified.py` stays
-#: as a documented reference, reachable only by importing it directly - which
-#: is what its endpoint-provenance tests do.
+#: Adapters that exist. Being registered is not permission to sell: a
+#: provider's catalogue row must also be enabled and carry a recorded resale
+#: authorisation (`Provider.resale_authorized`) before anything is listed or
+#: charged through it - see orders.services.candidate_offerings.
+#:
+#: TextVerified is the intended primary provider. Its terms prohibit sharing
+#: numbers with third parties, so it stays unauthorised until TextVerified
+#: agrees in writing (docs/PROVIDERS.md). OnlineSim was the provider until
+#: 2026-09-29; its adapter stays so orders made through it keep their history
+#: and could still be settled, but its row is switched off.
 _REGISTRY: dict[str, type[VerificationProvider]] = {
     MockVerificationProvider.key: MockVerificationProvider,
+    TextVerifiedProvider.key: TextVerifiedProvider,
     OnlineSimProvider.key: OnlineSimProvider,
 }
 
@@ -55,6 +62,49 @@ def get_provider(adapter_key: str | None = None) -> VerificationProvider:
             "Verification is temporarily unavailable.", code="UNKNOWN_PROVIDER"
         )
     return RateLimitedProvider(adapter())
+
+
+STATS_TTL = 60 * 60 * 24 * 7
+
+
+def _stats_key(provider_key: str) -> str:
+    return f"provider_stats:{provider_key}"
+
+
+def record_call(provider_key: str, operation: str, elapsed_ms: float,
+                failure: Exception | None) -> None:
+    """Keep a small running record of upstream calls, for the admin Providers page.
+
+    Read-modify-write through the cache, so two simultaneous calls can drop an
+    update: good enough for "when did it last work, and how fast is it", which
+    is all it is used for. Never raises. Stores the error *class and code*,
+    never a message body - provider responses do not reach staff screens raw.
+    """
+    try:
+        now = time.time()
+        stats = cache.get(_stats_key(provider_key)) or {"since": now, "calls": 0, "failures": 0}
+        stats["calls"] = stats.get("calls", 0) + 1
+        previous = stats.get("avg_ms")
+        stats["avg_ms"] = elapsed_ms if previous is None else previous * 0.9 + elapsed_ms * 0.1
+        if failure is None:
+            stats["last_success_at"] = now
+            stats["last_success_operation"] = operation
+        else:
+            stats["failures"] = stats.get("failures", 0) + 1
+            stats["last_failure_at"] = now
+            stats["last_failure_operation"] = operation
+            code = getattr(failure, "provider_code", "") or getattr(failure, "code", "")
+            stats["last_failure_error"] = f"{failure.__class__.__name__} {code}".strip()[:80]
+        cache.set(_stats_key(provider_key), stats, STATS_TTL)
+    except Exception:
+        logger.warning("provider_stats_unavailable", extra={"provider": provider_key})
+
+
+def call_stats(provider_key: str) -> dict:
+    try:
+        return cache.get(_stats_key(provider_key)) or {}
+    except Exception:
+        return {}
 
 
 def get_default_provider_row():
@@ -122,17 +172,34 @@ class RateLimitedProvider(VerificationProvider):
             inner.key, settings.VERIFYGH["PROVIDER_RATE_LIMIT_PER_MINUTE"]
         )
 
+    @property
+    def is_configured(self) -> bool:
+        return self._inner.is_configured
+
+    @property
+    def accepts_webhooks(self) -> bool:
+        return self._inner.accepts_webhooks
+
+    def parse_webhook(self, raw_body: bytes, headers: dict):
+        # Local signature check, no upstream call: not budgeted.
+        return self._inner.parse_webhook(raw_body, headers)
+
     def _call(self, name: str, *args, **kwargs):
         self._limiter.check()
         started = time.monotonic()
+        failure: Exception | None = None
         try:
             return getattr(self._inner, name)(*args, **kwargs)
+        except Exception as exc:
+            failure = exc
+            raise
         finally:
             elapsed_ms = (time.monotonic() - started) * 1000
             logger.info(
                 "provider_call",
                 extra={"provider": self.key, "operation": name, "ms": round(elapsed_ms)},
             )
+            record_call(self.key, name, elapsed_ms, failure)
 
     def get_services(self):
         return self._call("get_services")

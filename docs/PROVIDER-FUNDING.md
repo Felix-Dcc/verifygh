@@ -1,5 +1,14 @@
 # Provider funding: keeping OnlineSIM able to sell
 
+> **2026-09-29: TextVerified replaced OnlineSim as the intended primary
+> provider, and it has the same problem.** It is funded with prepaid credits
+> bought by card or cryptocurrency on its website (Terms; FAQ "Credits"), and
+> `GET /api/pub/v2/account/me` only reads the balance. Postpaid, invoiced or
+> credit terms are not documented. Everything below - the reserve, the guard,
+> the alerts, the cash-flow view - applies to it unchanged, except OnlineSim's
+> 30-day idle-account deletion, which TextVerified's terms do not have. See
+> [PROVIDERS.md](PROVIDERS.md) section 7.
+
 Written 2026-09-29. Research sources are OnlineSIM's own published pages, read on
 that date; every claim below cites one. Where the pages are silent, the answer
 is marked **UNKNOWN - requires confirmation from OnlineSIM**.

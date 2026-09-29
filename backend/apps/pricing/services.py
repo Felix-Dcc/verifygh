@@ -187,7 +187,10 @@ def _enforce_minimum(simulation: Simulation, offerings, policy: PricingPolicy) -
 def listed_offerings(**filters):
     from apps.catalog.marketplace import sellable_offerings
 
-    return list(sellable_offerings().filter(**filters).select_related("service", "country", "provider"))
+    # Staff price a provider's catalogue before it is authorised to sell, so
+    # it is ready the day it is. Customers still never see those offerings.
+    return list(sellable_offerings(include_unauthorized=True).filter(**filters)
+                .select_related("service", "country", "provider"))
 
 
 # ---------------------------------------------------------------------------

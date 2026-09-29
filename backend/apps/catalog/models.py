@@ -122,6 +122,19 @@ class Provider(BaseModel):
     # body or code to the end user. When false, we show delivery status only.
     permits_code_display = models.BooleanField(default=True)
 
+    # Whether this provider has agreed, in writing, to our reselling its
+    # numbers to our customers. Nothing is sold through a provider without it:
+    # its offerings are never listed to customers and never charged for, even
+    # when the provider is enabled and its catalogue is synced. Staff record
+    # the evidence (an email, a ticket) when granting it; see admin > Providers.
+    resale_authorized = models.BooleanField(default=False)
+    authorization_reference = models.CharField(max_length=300, blank=True, default="")
+    authorized_at = models.DateTimeField(null=True, blank=True)
+    authorized_by = models.ForeignKey(
+        settings.AUTH_USER_MODEL, null=True, blank=True, on_delete=models.SET_NULL,
+        related_name="+",
+    )
+
     last_synced_at = models.DateTimeField(null=True, blank=True)
     last_sync_error = models.TextField(blank=True, default="")
 

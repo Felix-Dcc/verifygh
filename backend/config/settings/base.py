@@ -424,6 +424,8 @@ VERIFYGH = {
     "CURRENCY": "GHS",
     "FRONTEND_URL": env("FRONTEND_URL", "http://localhost:3000"),
     # Provider selection — swapping a provider is a config change, not a rewrite.
+    # Production: textverified (see docs/PROVIDERS.md). Selecting a provider is
+    # not permission to sell through it - that is Provider.resale_authorized.
     "VERIFICATION_PROVIDER": env("VERIFICATION_PROVIDER", "mock"),
     "PAYMENT_PROVIDER": env("PAYMENT_PROVIDER", "mock"),
     # Providers whose webhook endpoint is live. Defaults to the active provider
@@ -439,8 +441,10 @@ VERIFYGH = {
     "MAX_ACTIVE_ORDERS": env_int("MAX_ACTIVE_ORDERS", 5),
     # How many orders the whole platform may have in flight at once, across
     # every user. This exists to stay *below* the provider's own ceiling on
-    # numbers held simultaneously - OnlineSim's standard limit is 40, confirmed
-    # by their support on 2026-09-27.
+    # numbers held simultaneously. OnlineSim's standard limit was 40 (support,
+    # 2026-09-27). TextVerified publishes no number: its API answers
+    # TooManyUnfinishedVerifications past its limit, and its FAQ offers to raise
+    # concurrency for power users on request - ask for the figure in writing.
     #
     # Deliberately lower than theirs. Our count and the provider's can drift:
     # closing an operation is not instant (their protective interval refuses a
@@ -482,8 +486,8 @@ VERIFYGH = {
     "PAYMENT_TTL_MINUTES": env_int("PAYMENT_TTL_MINUTES", 15),
     # How many provider services to price per catalogue sync. The service list
     # and the price are separate calls upstream, so this bounds the sync.
-    # 0 means no ceiling: list everything the provider offers. A number caps the
-    # walk, which is useful when only a few countries are being sold.
+    # 0 means no ceiling. TextVerified also stops at a 60-second budget or its
+    # first 429 and resumes where it left off on the next sync.
     "PROVIDER_CATALOG_LIMIT": env_int("PROVIDER_CATALOG_LIMIT", 60),
     # Which countries fill the bounded catalogue first. Without this the order
     # is whatever the provider happens to return, and the limit decides the
@@ -568,6 +572,9 @@ VERIFYGH = {
 }
 
 PROVIDER_CREDENTIALS = {
+    # Legacy: OnlineSim is no longer the active provider (2026-09-29). Kept so
+    # orders made through it can still be read back; production does not need
+    # these once no OnlineSim order is in flight.
     "onlinesim": {
         "api_key": env("ONLINESIM_API_KEY", ""),
         # Their documented host. Overridable only so a test can point elsewhere.
@@ -577,10 +584,18 @@ PROVIDER_CREDENTIALS = {
         # exchange rate will be applied to the wrong unit.
         "currency": env("ONLINESIM_CURRENCY", "USD"),
     },
+    # The primary provider. The documented auth call takes the account email
+    # (api_username) and the API key from the TextVerified dashboard; both are
+    # secrets as far as this codebase is concerned: never logged, never sent to
+    # the browser. base_url stays empty for the documented host.
     "textverified": {
         "api_key": env("TEXTVERIFIED_API_KEY", ""),
         "api_username": env("TEXTVERIFIED_API_USERNAME", ""),
         "base_url": env("TEXTVERIFIED_BASE_URL", ""),
+        # Optional. The `whsec_...` secret from TextVerified's API Webhook
+        # Settings. Set it and signed v2.sms.received callbacks prompt an
+        # immediate read of the order; without it we poll only.
+        "webhook_secret": env("TEXTVERIFIED_WEBHOOK_SECRET", ""),
     },
 }
 

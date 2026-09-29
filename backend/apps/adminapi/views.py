@@ -1034,12 +1034,19 @@ class AdminSystemHealthView(AdminBase, APIView):
         verification = get_provider()
         payments = get_payment_provider()
         rate = latest_rate_row()
+        # A switched-off provider is not called, not even to ask if it is up.
+        verification_row = Provider.objects.filter(adapter_key=verification.key).first()
+        verification_enabled = verification_row is None or verification_row.is_enabled
 
         return Response(
             {
                 "verification_provider": {
                     "key": verification.key,
-                    "healthy": verification.health_check(),
+                    "healthy": verification.health_check() if verification_enabled else False,
+                    "enabled": verification_enabled,
+                    "configured": verification.is_configured,
+                    "resale_authorized": bool(verification_row
+                                              and verification_row.resale_authorized),
                     "is_mock": verification.key == "mock",
                 },
                 "payment_provider": {

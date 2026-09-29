@@ -32,8 +32,11 @@ SAFE = {
     "TRUSTED_PROXY_COUNT": "1",
     "PAYMENT_PROVIDER": "paystack",
     "PAYSTACK_SECRET_KEY": "sk_live_" + "0" * 40,
-    "VERIFICATION_PROVIDER": "onlinesim",
-    # Empty, so the real provider is present but refuses every call.
+    "VERIFICATION_PROVIDER": "textverified",
+    # Placeholders of the right presence, not real credentials: boot checks
+    # they are set, it never calls the provider.
+    "TEXTVERIFIED_API_USERNAME": "ops@verifygh.example",
+    "TEXTVERIFIED_API_KEY": "placeholder-textverified-key",
     "ONLINESIM_API_KEY": "",
     "WEBHOOK_PROVIDERS": "",
     "ALLOW_MOCK_VERIFICATION_IN_PRODUCTION": "",
@@ -48,6 +51,7 @@ SAFE = {
 
 #: Variables that must not leak in from the developer's shell.
 SCRUB = set(SAFE) | {"DEBUG", "MOCK_PAYMENT_SECRET", "REQUIRE_POSTGRES", "DB_POOL_MODE",
+                    "TEXTVERIFIED_BASE_URL", "TEXTVERIFIED_WEBHOOK_SECRET", "ONLINESIM_BASE_URL",
                     "EMAIL_HOST", "EMAIL_HOST_USER", "EMAIL_HOST_PASSWORD",
                     "REQUIRE_EMAIL_VERIFICATION_FOR_PURCHASE",
                     "DB_CONN_MAX_AGE", "DB_SSLROOTCERT", "HUBTEL_CLIENT_ID",
@@ -95,6 +99,14 @@ UNSAFE = [
     ("paystack public key", {"PAYSTACK_SECRET_KEY": "pk_live_" + "0" * 40}, "public key"),
     ("mock webhook route", {"WEBHOOK_PROVIDERS": "mock"}, "must not include 'mock'"),
     ("mock verification", {"VERIFICATION_PROVIDER": "mock"}, "simulated numbers"),
+    # The primary provider without its credentials fails at boot - never at the
+    # first purchase, and never by falling back to something else.
+    ("textverified without api key", {"TEXTVERIFIED_API_KEY": None}, "TEXTVERIFIED_API_KEY"),
+    ("textverified without username", {"TEXTVERIFIED_API_USERNAME": ""},
+     "TEXTVERIFIED_API_USERNAME"),
+    ("onlinesim without api key", {"VERIFICATION_PROVIDER": "onlinesim"}, "ONLINESIM_API_KEY"),
+    ("unknown verification provider", {"VERIFICATION_PROVIDER": "numbersrus"},
+     "not a provider this codebase has an adapter for"),
     ("proxy count unset", {"TRUSTED_PROXY_COUNT": None}, "TRUSTED_PROXY_COUNT"),
     # Email verification gates every purchase. A backend that delivers nothing
     # does not switch that gate off, it makes it impossible to pass - while
@@ -156,18 +168,17 @@ def test_a_dotenv_file_is_ignored_in_production(tmp_path):
     assert "Missing required production environment variables: SECRET_KEY" in result.stderr
 
 
-def test_onlinesim_is_inert_in_the_safe_baseline():
-    """Without its API key the real provider sells nothing."""
+def test_the_safe_baseline_selects_textverified_and_never_the_mock():
     result = subprocess.run(
         [sys.executable, "-c",
          "import django; django.setup(); "
          "from apps.verification.registry import get_provider as g; "
-         "p = g('onlinesim'); print('CONFIGURED', p.health_check())"],
+         "p = g(); print('PROVIDER', p.key, p.is_configured)"],
         cwd=BACKEND, env={**{k: v for k, v in os.environ.items() if k not in SCRUB}, **SAFE},
         capture_output=True, text=True, timeout=120,
     )
     assert result.returncode == 0, result.stderr[-2000:]
-    assert "CONFIGURED False" in result.stdout
+    assert "PROVIDER textverified True" in result.stdout
 
 
 # ---------------------------------------------------------------------------

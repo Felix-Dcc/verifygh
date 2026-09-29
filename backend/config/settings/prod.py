@@ -192,17 +192,42 @@ if _payment_provider not in IMPLEMENTED_PAYMENT_PROVIDERS:
     )
 
 # The mock verification provider hands out simulated numbers. In production
-# that means taking real cedis for nothing. OnlineSim is the real provider; with
-# no ONLINESIM_API_KEY it refuses every call, so the catalogue stays empty and
-# nothing can be bought.
+# that means taking real cedis for nothing.
 if VERIFYGH["VERIFICATION_PROVIDER"] == "mock" and not env_bool(
     "ALLOW_MOCK_VERIFICATION_IN_PRODUCTION", False
 ):
     raise ImproperlyConfigured(
         "VERIFICATION_PROVIDER=mock would sell simulated numbers for real money. "
-        "Use onlinesim (inert until ONLINESIM_API_KEY is set), or set "
+        "Use textverified with its credentials, or set "
         "ALLOW_MOCK_VERIFICATION_IN_PRODUCTION=true for a non-public staging stack."
     )
+
+# A real provider without its credentials fails here, at boot, rather than at
+# the first customer's purchase - and never falls back to anything else.
+_VERIFICATION_CREDENTIALS = {
+    "textverified": {"api_username": "TEXTVERIFIED_API_USERNAME",
+                     "api_key": "TEXTVERIFIED_API_KEY"},
+    "onlinesim": {"api_key": "ONLINESIM_API_KEY"},
+}
+_verification_provider = VERIFYGH["VERIFICATION_PROVIDER"]
+if _verification_provider != "mock":
+    if _verification_provider not in _VERIFICATION_CREDENTIALS:
+        _problems.append(
+            f"VERIFICATION_PROVIDER={_verification_provider} is not a provider this "
+            f"codebase has an adapter for: {', '.join(sorted(_VERIFICATION_CREDENTIALS))}."
+        )
+    else:
+        _supplied = PROVIDER_CREDENTIALS.get(_verification_provider, {})  # noqa: F405
+        _missing = [
+            variable
+            for field, variable in _VERIFICATION_CREDENTIALS[_verification_provider].items()
+            if not str(_supplied.get(field) or "").strip()
+        ]
+        if _missing:
+            _problems.append(
+                f"VERIFICATION_PROVIDER={_verification_provider} needs {', '.join(_missing)}. "
+                "Without them nothing can be sold, and there is no fallback provider."
+            )
 
 # The mock adapter signs with a secret that is published in .env.example. Its
 # webhook endpoint must never be reachable in production.

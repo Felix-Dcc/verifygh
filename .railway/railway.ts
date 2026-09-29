@@ -130,28 +130,23 @@ function backendEnv(databaseUrl: VariableValue, redisUrl: VariableValue) {
     // refuse to start.
     PAYMENT_PROVIDER: "paystack",
 
-    // OnlineSim confirmed in writing on 2026-09-27 that their API may be
-    // integrated into third-party software products, with our account
-    // answerable for what our customers do. TextVerified refused the same
-    // permission, so its adapter stays in the tree but unused.
-    VERIFICATION_PROVIDER: "onlinesim",
-    // 0 lists everything OnlineSim offers - 98 countries, ~15,000 offerings.
-    // A cap would decide the shop window by accident.
+    // TextVerified is the primary provider (docs/PROVIDERS.md). The API refuses
+    // to boot without TEXTVERIFIED_API_USERNAME and TEXTVERIFIED_API_KEY, and
+    // nothing is sold through it until its written permission to resell is
+    // recorded in Admin > Providers - its terms prohibit sharing numbers with
+    // third parties. OnlineSim, the previous provider, is switched off.
+    VERIFICATION_PROVIDER: "textverified",
+    // 0 = no count limit. The TextVerified sync still stops at a 60-second
+    // budget or its first 429, and resumes where it stopped next time.
     PROVIDER_CATALOG_LIMIT: "0",
     // The only country customers may browse or buy. The catalogue sync walks
     // only these, so Canada is neither synced nor sold.
     MARKETPLACE_COUNTRIES: "US",
     // Walked first, so these fill the catalogue and lead the listing.
     PROVIDER_PRIORITY_COUNTRIES: "US",
-    // A full sync is ~99 calls, one per country. At the old ceiling of 120 a
-    // sync left ~21 for everything else, so a customer ordering during one
-    // could be refused. This is our own restraint, not a limit OnlineSim
-    // publishes.
+    // Our own restraint on upstream calls. TextVerified documents 429s but no
+    // figures, so this stays generous and the adapter backs off on a 429.
     PROVIDER_RATE_LIMIT_PER_MINUTE: "300",
-    // Tariffs arrive in the OnlineSim profile's own currency. If the profile is
-    // not USD, change this or the exchange rate is applied to the wrong unit
-    // and every price on the site is wrong.
-    ONLINESIM_CURRENCY: "USD",
 
     // Verification and password-reset links are built from this, so it must be
     // the host a customer can actually open.
@@ -180,12 +175,13 @@ function backendEnv(databaseUrl: VariableValue, redisUrl: VariableValue) {
     // it never was on .up.railway.app, which every Railway app shares.
     AUTH_COOKIE_DOMAIN: `.${ROOT_DOMAIN}`,
     PAYSTACK_SECRET_KEY: preserve(),
-    // Set this and the marketplace can stock itself. Without it the OnlineSim
-    // adapter is unconfigured, the catalogue stays empty, and the deposit guard
-    // keeps top-ups paused - which is the safe failure, not a broken one.
-    ONLINESIM_API_KEY: preserve(),
+    // TextVerified credentials: the account email and the API key from its
+    // dashboard. Required - the API refuses to boot without them.
+    TEXTVERIFIED_API_USERNAME: preserve(),
     TEXTVERIFIED_API_KEY: preserve(),
     TEXTVERIFIED_BASE_URL: preserve(),
+    // Optional: the whsec_ secret from TextVerified's webhook settings.
+    TEXTVERIFIED_WEBHOOK_SECRET: preserve(),
     EXCHANGE_RATE_API_KEY: preserve(),
     // Set this and verification emails start arriving. Without it the API
     // refuses to boot, rather than writing them to the container log where

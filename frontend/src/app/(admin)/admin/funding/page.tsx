@@ -16,8 +16,8 @@ import { Alert, Skeleton } from "@/components/ui/primitives";
 /**
  * Admin > Provider funding: the prepaid balance numbers are bought from.
  *
- * OnlineSim is prepaid with no funding API, so this page is where staff see
- * the balance coming, top it up by hand and keep the books - with customer
+ * Our providers are prepaid with no funding API, so this page is where staff
+ * see the balance coming, top it up by hand and keep the books - with customer
  * money shown apart from our own. See docs/PROVIDER-FUNDING.md.
  */
 export default function AdminFundingPage() {
@@ -45,11 +45,11 @@ export default function AdminFundingPage() {
         description="The prepaid balance every number is bought from, when to top it up, and how customer money, provider money and profit stay apart."
       />
 
-      <Alert tone="info" title="OnlineSim's commercial model requires provider-side funding">
-        OnlineSim is prepaid only: it sells a number only against money already in our account there,
-        and has no API to add money. Software cannot remove that requirement. VerifyGH watches the balance,
-        refuses purchases it cannot cover before charging anyone, and alerts you - the top-up itself is
-        made by hand on the OnlineSim website.
+      <Alert tone="info" title="Our providers require provider-side funding">
+        Every provider we use is prepaid: it sells a number only against credit already in our account
+        there, and none has an API to add money. Software cannot remove that requirement. VerifyGH watches
+        each balance, refuses purchases it cannot cover before charging anyone, and alerts you - the
+        top-up itself is made by hand on the provider&apos;s website.
       </Alert>
 
       {error ? <Alert tone="danger">Could not load provider funding.</Alert> : null}

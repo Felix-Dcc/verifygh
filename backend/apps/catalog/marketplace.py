@@ -88,16 +88,24 @@ def marketplace_countries() -> list[Country]:
 # ---------------------------------------------------------------------------
 
 
-def sellable_offerings() -> QuerySet:
-    """Every offering a customer could be shown: enabled all the way up, and in
-    a marketplace country. In stock or not - availability is a display state."""
-    return ProviderService.objects.filter(
+def sellable_offerings(*, include_unauthorized: bool = False) -> QuerySet:
+    """Every offering a customer could be shown: enabled all the way up, in a
+    marketplace country, from a provider that has authorised us to resell. In
+    stock or not - availability is a display state.
+
+    `include_unauthorized` is for staff only - pricing a provider's catalogue
+    before its authorisation arrives. Nothing customer-facing may pass it.
+    """
+    queryset = ProviderService.objects.filter(
         is_enabled=True,
         provider__is_enabled=True,
         service__is_enabled=True,
         country__is_enabled=True,
         country__code__in=marketplace_country_codes(),
     )
+    if not include_unauthorized:
+        queryset = queryset.filter(provider__resale_authorized=True)
+    return queryset
 
 
 def availability(offering: ProviderService, service: Service | None = None) -> dict:

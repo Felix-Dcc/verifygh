@@ -17,6 +17,8 @@ from apps.orders import views as order_views
 from apps.payments import views as payment_views
 from apps.pricing import admin_api as pricing_admin
 from apps.referrals import admin_api as referral_admin
+from apps.verification import admin_api as provider_admin
+from apps.verification import views as verification_views
 from apps.wallet import views as wallet_views
 
 router = DefaultRouter()
@@ -113,6 +115,16 @@ api_v1 = [
          name="admin-pricing-publish"),
     path("admin/pricing/bulk/", pricing_admin.PricingBulkView.as_view(),
          name="admin-pricing-bulk"),
+    path(
+        "verification/webhooks/<str:provider_key>/",
+        verification_views.VerificationWebhookView.as_view(),
+        name="verification-webhook",
+    ),
+    path("admin/providers/", provider_admin.ProvidersView.as_view(), name="admin-providers"),
+    path("admin/providers/<str:adapter_key>/status/", provider_admin.ProviderStatusView.as_view(),
+         name="admin-provider-status"),
+    path("admin/providers/<str:adapter_key>/authorization/",
+         provider_admin.ProviderAuthorizationView.as_view(), name="admin-provider-authorization"),
     path("admin/funding/", funding_admin.FundingOverviewView.as_view(), name="admin-funding"),
     path("admin/funding/<str:adapter_key>/", funding_admin.FundingAccountView.as_view(),
          name="admin-funding-account"),

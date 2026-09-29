@@ -1,11 +1,12 @@
 """Provider funding: read, grade and guard our prepaid provider balances.
 
-OnlineSim sells numbers only against money already sitting in our account
-there (Terms 4.1), offers no wholesale or credit terms (FAQ: "We only have
-retail sales"), and has no API that adds money - `getBalance` only reads it.
-So VerifyGH keeps a prepaid reserve at the provider, topped up by hand from
-operating funds. This module is everything software can honestly do about
-that:
+Every provider we have used sells numbers only against money already in our
+account there, and none has an API that adds money. TextVerified is funded
+with credits bought by card or cryptocurrency (Terms; FAQ "Credits") and
+`GET /account/me` only reads the balance. OnlineSim was the same (Terms 4.1,
+FAQ "We only have retail sales", `getBalance` read-only). So VerifyGH keeps a
+prepaid reserve at the provider, topped up by hand from operating funds. This
+module is everything software can honestly do about that:
 
 * read the balance on a schedule and grade it against staff-set levels;
 * refuse a purchase *before* charging the customer when the balance cannot
@@ -70,6 +71,24 @@ WALLET_NOT_PROFIT = (
 
 def _cfg(name: str):
     return settings.VERIFYGH[name]
+
+
+#: What each provider's own published terms say about funding its account.
+#: Facts with sources, not settings: change them only when the source changes.
+PROVIDER_FUNDING_TERMS = {
+    # Terms 4.1 and 11.4/11.5, read 2026-09-29.
+    "onlinesim": {"methods": "card, cryptocurrency, bank transfer or recharge code",
+                  "deletes_idle_accounts": True},
+    # Terms ("Purchases, Cancellation, and Refunds") and FAQ ("Credits"), read
+    # 2026-09-29. No inactivity rule is published.
+    "textverified": {"methods": "card (via Stripe) or cryptocurrency",
+                     "deletes_idle_accounts": False},
+}
+
+
+def _funding_terms(provider) -> dict:
+    return PROVIDER_FUNDING_TERMS.get(provider.adapter_key,
+                                      {"methods": "", "deletes_idle_accounts": False})
 
 
 def _decimal(value, name: str, *, minimum: Decimal = ZERO, maximum: Decimal | None = None,
@@ -148,6 +167,15 @@ def sync_balance(provider) -> ProviderAccount:
     now = timezone.now()
     try:
         adapter = _adapter(provider)
+        if not adapter.is_configured:
+            # Missing credentials are a setup gap, not an outage: nothing is
+            # called, nothing is alerted, and the page says what is missing.
+            ProviderAccount.objects.filter(pk=account.pk).update(
+                last_sync_attempt_at=now, status=BalanceStatus.UNKNOWN,
+                last_sync_error="Not configured: this provider's credentials are not set.",
+            )
+            account.refresh_from_db()
+            return account
         supported = adapter.supports_balance
         reading = adapter.get_balance() if supported else None
     except (ProviderError, ServiceUnavailable) as exc:
@@ -527,6 +555,8 @@ def last_completed_purchase_at(provider):
 
 
 def inactivity(provider, account: ProviderAccount) -> dict:
+    """Days since the last completed purchase, and the deletion date where the
+    provider's terms have one (OnlineSim's do; TextVerified's do not)."""
     last = last_completed_purchase_at(provider)
     deletion_days = int(_cfg("PROVIDER_INACTIVITY_DELETION_DAYS"))
     if last is None:
@@ -534,13 +564,14 @@ def inactivity(provider, account: ProviderAccount) -> dict:
     return {
         "last_completed_purchase_at": last,
         "days_since": (timezone.now() - last).days,
-        "deletion_on": (last + timedelta(days=deletion_days)).date(),
+        "deletion_on": ((last + timedelta(days=deletion_days)).date()
+                        if _funding_terms(provider)["deletes_idle_accounts"] else None),
     }
 
 
 def check_inactivity(provider, account: ProviderAccount) -> ProviderAlert | None:
     state = inactivity(provider, account)
-    if state["days_since"] is None or not account.available or account.available <= 0:
+    if state["deletion_on"] is None or not account.available or account.available <= 0:
         return None
     if state["days_since"] < int(_cfg("PROVIDER_INACTIVITY_WARNING_DAYS")):
         return None
@@ -785,8 +816,10 @@ def account_report(account: ProviderAccount) -> dict:
         "supports_account_funding": False,
         "funding_instructions": (
             f"{provider.name} is prepaid and has no funding API. Top up by hand in the "
-            f"{provider.name} web account (card, crypto or bank transfer), then record "
-            "the top-up here."),
+            f"{provider.name} web account"
+            + (f" ({_funding_terms(provider)['methods']})" if _funding_terms(provider)["methods"]
+               else "")
+            + ", then record the top-up here."),
         "guard_enabled": bool(_cfg("PROVIDER_FUNDING_GUARD")),
     }
 

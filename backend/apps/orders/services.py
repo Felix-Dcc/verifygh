@@ -215,14 +215,15 @@ def resolve_offering(service_slug: str, country_code: str) -> ProviderService:
 def candidate_offerings(service_slug: str, country_code: str) -> list[ProviderService]:
     """Every offering that could fill a (service, country) order, best first.
 
-    Only providers that are enabled *and* have a registered adapter qualify -
-    a provider we are not authorised to resell never gets here. The country is
+    Only providers that are enabled, have a registered adapter *and* have
+    authorised us in writing to resell their numbers qualify - a provider we
+    are not authorised to resell never gets here. The country is
     checked against the marketplace list before anything else: a request for a
     country we do not sell is refused even if the catalogue happens to hold an
     offering for it.
     """
-    from apps.verification.registry import available_adapters
     from apps.catalog.marketplace import require_marketplace_country
+    from apps.verification.registry import available_adapters
 
     country_code = require_marketplace_country(country_code)
     service = Service.objects.filter(slug=service_slug).first()
@@ -252,6 +253,7 @@ def candidate_offerings(service_slug: str, country_code: str) -> list[ProviderSe
             is_enabled=True,
             is_available=True,
             provider__is_enabled=True,
+            provider__resale_authorized=True,
             provider__adapter_key__in=available_adapters(),
         )
         .order_by("provider__priority", "cost_amount")
@@ -502,6 +504,14 @@ def fulfil_order(order: Order) -> Order:
     """
     if order.status != OrderStatus.PROCESSING:
         return order
+
+    if not (order.provider.is_enabled and order.provider.resale_authorized):
+        # Checked again here, not only when the order was priced: a provider can
+        # be switched off, or its authorisation withdrawn, between the charge
+        # and this task. No number is requested; the customer is refunded.
+        logger.warning("order_provider_not_authorized",
+                       extra={"order": order.reference, "provider": order.provider.adapter_key})
+        return fail_order(order, reason="This service is temporarily unavailable.")
 
     try:
         # Inside the try: an order whose provider has since been removed from

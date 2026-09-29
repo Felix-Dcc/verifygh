@@ -727,7 +727,7 @@ export function ReviewPanel({ summary, canManage }: { summary?: PricingSummary; 
           {canManage ? (
             <div className="flex flex-col gap-2 p-4 sm:flex-row sm:items-end sm:p-5">
               <Field label="Reason" htmlFor="publish-reason" required className="flex-1">
-                <Input id="publish-reason" value={reason} onChange={(e) => setReason(e.target.value)} placeholder="e.g. Reviewed OnlineSim price change" />
+                <Input id="publish-reason" value={reason} onChange={(e) => setReason(e.target.value)} placeholder="e.g. Reviewed provider price change" />
               </Field>
               <Button onClick={publish} loading={busy} disabled={reason.trim().length < 5}>
                 Publish {rows.length} prices
