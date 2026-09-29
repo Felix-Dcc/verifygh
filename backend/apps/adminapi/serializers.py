@@ -68,6 +68,9 @@ class AdminOrderSerializer(serializers.ModelSerializer):
             "country_code", "provider_name", "provider_order_id", "phone_number", "price", "currency",
             "provider_cost", "provider_currency", "exchange_rate", "status", "refund_status",
             "failure_reason", "has_code", "expires_at", "completed_at", "created_at",
+            # The full pricing snapshot frozen at purchase: provider cost, the
+            # pricing FX rate, markup, any override, gross profit and margin.
+            "price_breakdown",
         ]
         read_only_fields = fields
 

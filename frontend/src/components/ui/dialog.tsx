@@ -16,6 +16,7 @@ export function Dialog({
   children,
   footer,
   dismissible = true,
+  size = "md",
 }: {
   open: boolean;
   onClose: () => void;
@@ -24,6 +25,8 @@ export function Dialog({
   children?: React.ReactNode;
   footer?: React.ReactNode;
   dismissible?: boolean;
+  /** "lg" for dense admin detail, like a price breakdown beside its editor. */
+  size?: "md" | "lg";
 }) {
   const panelRef = React.useRef<HTMLDivElement>(null);
   const titleId = React.useId();
@@ -105,7 +108,7 @@ export function Dialog({
         className={cn(
           "relative w-full animate-slide-up bg-surface shadow-pop outline-none",
           "max-h-[90vh] overflow-y-auto rounded-t-3xl px-5 pb-safe pt-5",
-          "sm:max-w-md sm:rounded-2xl sm:pb-5",
+          size === "lg" ? "sm:max-w-2xl sm:rounded-2xl sm:pb-5" : "sm:max-w-md sm:rounded-2xl sm:pb-5",
         )}
       >
         {/* Grab handle: signals "this sheet can be dismissed" on touch. */}

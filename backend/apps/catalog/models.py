@@ -150,6 +150,14 @@ class ProviderService(BaseModel):
 
     cost_amount = models.DecimalField(max_digits=12, decimal_places=4, default=Decimal("0.0000"))
     cost_currency = models.CharField(max_length=3, default="USD")
+    #: Where `cost_amount` came from. NOT_SYNCED (or a zero cost) means we do
+    #: not know what the number costs us, and it is never sold.
+    cost_source = models.CharField(
+        max_length=12,
+        choices=[("PROVIDER_API", "Provider API"), ("MANUAL", "Entered by staff"),
+                 ("NOT_SYNCED", "Not synced")],
+        default="NOT_SYNCED",
+    )
 
     is_enabled = models.BooleanField(default=True, db_index=True)
     is_available = models.BooleanField(
@@ -170,6 +178,12 @@ class ProviderService(BaseModel):
     #: is compared against, so every change can be written down.
     customer_price = models.DecimalField(max_digits=12, decimal_places=2, null=True, blank=True)
     price_updated_at = models.DateTimeField(null=True, blank=True)
+    #: What the pricing engine would charge now. Equal to `customer_price`
+    #: unless prices are published by review (PricingPolicy.auto_publish_prices
+    #: off) and something moved - then `price_review_pending` is set until staff
+    #: publish it.
+    recommended_price = models.DecimalField(max_digits=12, decimal_places=2, null=True, blank=True)
+    price_review_pending = models.BooleanField(default=False, db_index=True)
 
     last_synced_at = models.DateTimeField(null=True, blank=True)
 

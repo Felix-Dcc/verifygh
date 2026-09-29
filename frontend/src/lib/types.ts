@@ -570,6 +570,8 @@ export type NumberIssueMetrics = {
 export type AdminOrder = {
   id: string;
   reference: string;
+  /** The pricing snapshot frozen at purchase (see PriceQuote); older orders hold fewer fields. */
+  price_breakdown?: Partial<PriceQuote> & { applied?: Record<string, string | boolean> };
   user_id: string;
   user_email: string;
   service_name: string;
@@ -863,4 +865,228 @@ export type ReferralAnalytics = {
   promotional_credit_reversed: string;
   average_acquisition_cost: string;
   conversion_rate: number;
+};
+
+/* -------------------------------------------------------------------------
+ * Admin > Pricing
+ * ---------------------------------------------------------------------- */
+
+export type PricingStatus =
+  | "ACTIVE"
+  | "INACTIVE"
+  | "OUT_OF_STOCK"
+  | "NOT_SOLD"
+  | "NOT_SYNCED";
+
+export type PricingRow = {
+  id: string;
+  service: { slug: string; name: string; icon_url: string };
+  country: { code: string; name: string; flag: string };
+  provider: { key: string; name: string; demo: boolean };
+  /** Exactly what the provider reported (or staff entered); null = not synced. */
+  provider_cost: string | null;
+  currency: string;
+  cost_source: "PROVIDER_API" | "MANUAL" | "NOT_SYNCED";
+  status: PricingStatus;
+  is_enabled: boolean;
+  is_available: boolean;
+  price_review_pending: boolean;
+  fx_rate?: string;
+  fx_mode?: string;
+  ghs_cost?: string;
+  markup?: string;
+  markup_type?: string;
+  markup_percent_effective?: string;
+  calculated_price?: string;
+  override_price?: string | null;
+  recommended_price?: string;
+  /** What customers pay now; null when it is not sold. */
+  customer_price?: string | null;
+  gross_profit?: string;
+  gross_margin_percent?: string;
+  below_minimum_margin?: boolean;
+  is_loss?: boolean;
+  rule?: string;
+};
+
+/** The engine's full breakdown (Quote.as_dict). */
+export type PriceQuote = {
+  customer_price: string;
+  currency: string;
+  provider_cost: string;
+  provider_currency: string;
+  cost_source: string;
+  exchange_rate: string;
+  market_rate: string | null;
+  fx_mode: string;
+  fx_adjustment_percent: string;
+  base_cost: string;
+  markup: string;
+  payment_fee: string;
+  risk_buffer: string;
+  raw_price: string;
+  calculated_price: string;
+  override_price: string | null;
+  override_reason: string;
+  recommended_price: string;
+  published_price: string | null;
+  pending_review: boolean;
+  below_minimum_margin: boolean;
+  minimum_margin_percent: string;
+  pricing_rule_name: string;
+  applied: Record<string, string | boolean>;
+  gross_profit: string;
+  gross_margin_percent: string;
+  markup_percent_effective: string;
+  is_loss: boolean;
+  quoted_at: string | null;
+};
+
+export type PricingSummary = {
+  total_services: number;
+  total_offerings: number;
+  active_offerings: number;
+  average_markup_percent: string | null;
+  average_gross_margin_percent: string | null;
+  below_minimum_margin: number;
+  not_sold: number;
+  not_synced: number;
+  pending_review: number;
+  active_overrides: number;
+  fx: {
+    currency: string;
+    pricing_rate?: string;
+    mode?: string;
+    market_rate?: string | null;
+    adjustment_percent?: string;
+    error?: string;
+  }[];
+  policy: PricingPolicyData;
+  providers: { key: string; name: string; demo: boolean }[];
+};
+
+export type PricingPolicyData = {
+  minimum_margin_percent: string;
+  enforce_minimum_margin: boolean;
+  auto_publish_prices: boolean;
+  updated_at: string | null;
+};
+
+export type PricingOfferingDetail = {
+  row: PricingRow;
+  published: PriceQuote | null;
+  recommended: PriceQuote | null;
+  rule: {
+    id: string;
+    name: string;
+    scope: { service: string | null; country: string | null; provider: string | null };
+    markup_type: "PERCENTAGE" | "FIXED" | "HYBRID";
+    markup_percent: string;
+    markup_fixed: string;
+  } | null;
+  cost_editable: boolean;
+  overrides: {
+    price: string;
+    reason: string;
+    allow_loss: boolean;
+    is_active: boolean;
+    created_by: string | null;
+    created_at: string;
+    ended_by: string | null;
+    ended_at: string | null;
+    end_reason: string;
+  }[];
+  cost_history: {
+    old: string | null;
+    new: string;
+    currency: string;
+    source: string;
+    sync_method: string;
+    by: string | null;
+    reason: string;
+    at: string;
+  }[];
+  price_history: {
+    old: string | null;
+    new: string;
+    source: string;
+    by: string | null;
+    reason: string;
+    at: string;
+  }[];
+  provider_comparison: {
+    providers: {
+      provider: string;
+      provider_key: string;
+      cost: string | null;
+      currency: string;
+      ghs_cost: string | null;
+      available: boolean;
+      enabled: boolean;
+      priority: number;
+      this: boolean;
+    }[];
+    lowest_available_ghs_cost: string | null;
+    routing: string;
+  };
+};
+
+export type PricingPreview = {
+  quote: PriceQuote;
+  warnings: ("LOSS_MAKING" | "BELOW_MINIMUM_MARGIN")[];
+  enforce_minimum_margin: boolean;
+};
+
+export type PricingImpact = {
+  offerings: number;
+  changed: number;
+  unsellable: number;
+  below_minimum_margin: number;
+  average_change: string;
+  average_gross_margin_after: string | null;
+  examples: { service: string; country: string; before: string; after: string; gross_margin_after: string }[];
+  below_minimum_examples: string[];
+  governed_by_this_rule?: number;
+  keep_their_own_rule?: number;
+  pricing_rate?: string;
+  market_rate?: string | null;
+};
+
+export type PricingFXRow = {
+  currency: string;
+  mode: "MANUAL" | "AUTOMATIC" | "MARKET";
+  manual_rate: string | null;
+  adjustment_percent: string;
+  effective_rate: string | null;
+  error: string;
+  market_rate: string | null;
+  market_rate_source: string | null;
+  market_rate_at: string | null;
+  updated_by: string | null;
+  updated_at: string | null;
+};
+
+export type ProviderCostChangeRow = {
+  id: string;
+  service_name: string;
+  country_code: string;
+  provider_key: string;
+  old_cost: string | null;
+  new_cost: string;
+  currency: string;
+  source: "PROVIDER_API" | "MANUAL";
+  sync_method: string;
+  changed_by_email: string | null;
+  reason: string;
+  created_at: string;
+};
+
+export type PricingAuditRow = {
+  id: string;
+  admin_email: string | null;
+  action: string;
+  reason: string;
+  before: Record<string, unknown>;
+  after: Record<string, unknown>;
+  created_at: string;
 };

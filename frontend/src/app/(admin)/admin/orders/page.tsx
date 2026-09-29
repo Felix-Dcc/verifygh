@@ -258,19 +258,6 @@ function OrderDialog({
             <dl className="divide-y divide-line rounded-xl border border-line">
               <Row label="Status" value={order.status} />
               <Row label="Customer paid" value={cedis(order.price)} />
-              <Row
-                label="Provider cost"
-                value={`$${Number.parseFloat(order.provider_cost).toFixed(4)} @ ${Number.parseFloat(order.exchange_rate).toFixed(4)}`}
-              />
-              <Row
-                label="Margin"
-                value={cedis(
-                  (
-                    Number.parseFloat(order.price) -
-                    Number.parseFloat(order.provider_cost) * Number.parseFloat(order.exchange_rate)
-                  ).toFixed(2),
-                )}
-              />
               <Row label="Provider" value={order.provider_name} />
               <Row label="Provider order id" value={order.provider_order_id || "-"} />
               <Row
@@ -284,6 +271,8 @@ function OrderDialog({
                 <Row label="Failure" value={order.failure_reason} />
               ) : null}
             </dl>
+
+            <PricingSnapshot order={order} />
 
             <p className="text-xs text-ink-muted">
               The verification code itself is never shown here. Support can confirm that a message
@@ -427,6 +416,47 @@ function OrderDialog({
         ) : null}
       </div>
     </Dialog>
+  );
+}
+
+/**
+ * The price this order was sold at, exactly as it was calculated at purchase.
+ * Later changes to FX, markup or provider cost never touch it. Orders placed
+ * before the full snapshot existed show what they recorded.
+ */
+function PricingSnapshot({ order }: { order: AdminOrder }) {
+  const snap = order.price_breakdown ?? {};
+  const cost = Number.parseFloat(order.provider_cost);
+  const rate = Number.parseFloat(order.exchange_rate);
+  const ghsCost = snap.base_cost ? Number.parseFloat(snap.base_cost) : cost * rate;
+  const price = Number.parseFloat(order.price);
+  const profit = price - ghsCost;
+  const applied = snap.applied ?? {};
+  const markup =
+    applied.markup_type === "FIXED"
+      ? `+ ${cedis(String(applied.markup_fixed))}`
+      : applied.markup_type === "HYBRID"
+        ? `${applied.markup_percent}% + ${cedis(String(applied.markup_fixed))}`
+        : applied.markup_percent !== undefined
+          ? `${applied.markup_percent}%`
+          : "-";
+  return (
+    <div>
+      <p className="mb-2 text-sm font-semibold text-ink">Pricing snapshot at purchase</p>
+      <dl className="divide-y divide-line rounded-xl border border-line">
+        <Row label="Provider cost" value={`${order.provider_currency === "USD" ? "$" : `${order.provider_currency} `}${cost.toFixed(4)}`} />
+        <Row label="VerifyGH Pricing FX Rate" value={`${rate.toFixed(4)}${snap.fx_mode ? ` (${String(snap.fx_mode).toLowerCase()})` : ""}`} />
+        <Row label="Provider cost in cedis" value={cedis(ghsCost.toFixed(2))} />
+        <Row label="Markup" value={`${markup}${snap.pricing_rule_name ? ` - ${snap.pricing_rule_name}` : ""}`} />
+        {snap.calculated_price ? <Row label="Calculated price" value={cedis(snap.calculated_price)} /> : null}
+        {snap.override_price ? <Row label="Manual override" value={cedis(snap.override_price)} /> : null}
+        <Row label="Customer paid" value={cedis(order.price)} />
+        <Row label="Gross profit" value={cedis(profit.toFixed(2))} />
+        <Row label="Gross margin %" value={price > 0 ? `${((profit / price) * 100).toFixed(2)}%` : "-"} />
+        <Row label="Provider transaction" value={order.provider_order_id || "-"} />
+        <Row label="Priced at" value={snap.quoted_at ? formatDateTime(snap.quoted_at) : formatDateTime(order.created_at)} />
+      </dl>
+    </div>
   );
 }
 

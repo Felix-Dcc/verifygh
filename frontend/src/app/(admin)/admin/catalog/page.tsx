@@ -1,9 +1,9 @@
 "use client";
 
+import Link from "next/link";
 import * as React from "react";
 import useSWR, { mutate as globalMutate } from "swr";
 
-import { OfferingsPricingCard, PriceHistoryCard, PricingRulesCard } from "@/components/admin/pricing";
 import { PageHeader } from "@/components/app-shell";
 import { useAuth } from "@/components/auth-provider";
 import { RefreshIcon } from "@/components/icons";
@@ -35,7 +35,7 @@ import type {
   PricingRule,
 } from "@/lib/types";
 
-type Tab = "services" | "countries" | "pricing" | "rates";
+type Tab = "services" | "countries";
 
 export default function AdminCatalogPage() {
   const { can } = useAuth();
@@ -52,8 +52,6 @@ export default function AdminCatalogPage() {
         options={[
           { value: "services" as Tab, label: "Services" },
           { value: "countries" as Tab, label: "Countries" },
-          { value: "pricing" as Tab, label: "Pricing rules" },
-          { value: "rates" as Tab, label: "Exchange rates" },
         ]}
         value={tab}
         onChange={setTab}
@@ -61,8 +59,13 @@ export default function AdminCatalogPage() {
 
       {tab === "services" ? <ServicesTab canManage={can("CATALOG_MANAGE")} /> : null}
       {tab === "countries" ? <CountriesTab canManage={can("CATALOG_MANAGE")} /> : null}
-      {tab === "pricing" ? <PricingTab canManage={can("PRICING_MANAGE")} /> : null}
-      {tab === "rates" ? <RatesTab canManage={can("PRICING_MANAGE")} /> : null}
+      <p className="text-sm text-ink-muted">
+        Provider costs, the VerifyGH Pricing FX Rate, markup and prices are managed in{" "}
+        <Link href="/admin/pricing" className="font-medium text-brand-700 underline">
+          Pricing
+        </Link>
+        .
+      </p>
     </div>
   );
 }
@@ -182,7 +185,6 @@ function ServicesTab({ canManage }: { canManage: boolean }) {
         }}
       />
 
-      <OfferingsPricingCard canManage={canManage} />
     </>
   );
 }
@@ -508,140 +510,6 @@ function CountriesTab({ canManage }: { canManage: boolean }) {
         </ul>
       )}
     </Card>
-  );
-}
-
-/* ------------------------------------------------------------------ */
-
-function PricingTab({ canManage }: { canManage: boolean }) {
-  if (!canManage) {
-    return (
-      <Alert tone="info" title="Pricing is restricted">
-        Only a super admin can view or change pricing rules.
-      </Alert>
-    );
-  }
-  return (
-    <>
-      <PricingRulesCard />
-      <PriceHistoryCard />
-    </>
-  );
-}
-
-/* ------------------------------------------------------------------ */
-
-function RatesTab({ canManage }: { canManage: boolean }) {
-  const toast = useToast();
-  const { data: rates, mutate } = useSWR<ExchangeRate[]>("/admin/exchange-rates/");
-  const [rate, setRate] = React.useState("");
-  const [note, setNote] = React.useState("");
-  const [busy, setBusy] = React.useState(false);
-
-  if (!canManage) {
-    return (
-      <Alert tone="info" title="Exchange rates are restricted">
-        Only a super admin can view or set exchange rates.
-      </Alert>
-    );
-  }
-
-  async function save(event: React.FormEvent) {
-    event.preventDefault();
-    setBusy(true);
-    try {
-      await api.post("/admin/exchange-rates/", { rate, note, reason: note || "Manual FX update" });
-      setRate("");
-      setNote("");
-      await mutate();
-      await globalMutate((key) => String(Array.isArray(key) ? key[0] : key).startsWith("/services"));
-      toast.success("Rate recorded", "Prices across the marketplace have been recalculated.");
-    } catch (error) {
-      toast.error("Could not save", error instanceof ApiError ? error.message : "Try again.");
-    } finally {
-      setBusy(false);
-    }
-  }
-
-  const current = rates?.[0];
-
-  return (
-    <div className="grid gap-4 lg:grid-cols-3">
-      <Card className="lg:col-span-1">
-        <CardHeader title="Record a new rate" description="Rates are append-only - never edited." />
-        <form onSubmit={save} className="space-y-4 p-4 pt-4 sm:p-5 sm:pt-4">
-          {current ? (
-            <div className="rounded-xl bg-canvas p-3.5 text-sm">
-              <p className="text-ink-muted">Current rate</p>
-              <p className="tabular mt-0.5 text-lg font-semibold text-ink">
-                1 USD = {Number.parseFloat(current.rate).toFixed(4)} GHS
-              </p>
-              <p className="mt-0.5 text-xs text-ink-faint">
-                {current.source} - {relativeTime(current.fetched_at)}
-              </p>
-            </div>
-          ) : (
-            <Alert tone="warn" title="No rate configured">
-              Nothing can be priced until a rate exists.
-            </Alert>
-          )}
-
-          <Field label="USD to GHS" htmlFor="rate" required>
-            <Input
-              id="rate"
-              inputMode="decimal"
-              required
-              value={rate}
-              onChange={(event) => setRate(event.target.value.replace(/[^\d.]/g, ""))}
-              placeholder="12.4000"
-              className="tabular"
-            />
-          </Field>
-
-          <Field label="Note" htmlFor="rate-note" hint="Recorded with the rate and audited.">
-            <Input
-              id="rate-note"
-              value={note}
-              onChange={(event) => setNote(event.target.value)}
-              placeholder="e.g. Interbank mid-rate, 17 Sept"
-            />
-          </Field>
-
-          <Button type="submit" fullWidth loading={busy} disabled={!rate}>
-            Record rate
-          </Button>
-
-          <p className="text-xs leading-relaxed text-ink-muted">
-            Changing the rate reprices the marketplace immediately. Orders already placed keep the
-            rate frozen onto them.
-          </p>
-        </form>
-      </Card>
-
-      <Card className="lg:col-span-2">
-        <CardHeader title="Rate history" />
-        {!rates ? (
-          <RowSkeletons />
-        ) : (
-          <ul className="mt-2 divide-y divide-line">
-            {rates.map((entry, index) => (
-              <li key={entry.id} className="flex items-center gap-3 px-4 py-3 sm:px-5">
-                <span className="tabular text-sm font-semibold text-ink">
-                  {Number.parseFloat(entry.rate).toFixed(4)}
-                </span>
-                <span className="min-w-0 flex-1 truncate text-xs text-ink-muted">
-                  {entry.note || entry.source}
-                </span>
-                {index === 0 ? <Badge tone="brand">Current</Badge> : null}
-                <span className="shrink-0 text-xs text-ink-faint">
-                  {formatDateTime(entry.fetched_at)}
-                </span>
-              </li>
-            ))}
-          </ul>
-        )}
-      </Card>
-    </div>
   );
 }
 

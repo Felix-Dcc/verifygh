@@ -144,6 +144,27 @@ def _cheapest_offering_prices() -> bool:
     return True
 
 
+def _record_cost_change(offering, previous, dto) -> None:
+    """Write down what the provider now charges. Only markets we sell are kept:
+    the full provider catalogue changes constantly and nobody buys most of it."""
+    from apps.catalog.marketplace import marketplace_country_codes
+    from apps.pricing.models import CostSource, ProviderCostChange
+
+    if offering.country.code not in marketplace_country_codes():
+        return
+    ProviderCostChange.objects.create(
+        offering=offering,
+        provider_key=offering.provider.adapter_key,
+        service_name=offering.service.name[:80],
+        country_code=offering.country.code,
+        old_cost=previous[0] if previous else None,
+        new_cost=dto.cost,
+        currency=dto.currency,
+        source=CostSource.PROVIDER_API,
+        sync_method="CATALOG_SYNC",
+    )
+
+
 def ensure_provider_row(adapter_key: str) -> Provider:
     provider, created = Provider.objects.get_or_create(
         adapter_key=adapter_key,
@@ -245,6 +266,11 @@ def sync_catalog(adapter_key: str | None = None) -> dict:
         if service is None or country is None:
             continue
 
+        previous = ProviderService.objects.filter(
+            provider=provider_row, service=service, country=country
+        ).values_list("cost_amount", "cost_currency").first()
+        cost_known = dto.cost is not None and dto.cost > 0
+
         offering, created = ProviderService.objects.update_or_create(
             provider=provider_row,
             service=service,
@@ -253,6 +279,7 @@ def sync_catalog(adapter_key: str | None = None) -> dict:
                 "provider_service_code": dto.code,
                 "cost_amount": dto.cost,
                 "cost_currency": dto.currency,
+                "cost_source": "PROVIDER_API" if cost_known else "NOT_SYNCED",
                 "is_available": dto.available,
                 "available_count": dto.available_count,
                 "supports_sms": dto.supports_sms,
@@ -262,6 +289,10 @@ def sync_catalog(adapter_key: str | None = None) -> dict:
             },
         )
         summary["offerings"] += 1
+        if cost_known and (previous is None or previous[0] != dto.cost
+                           or previous[1] != dto.currency):
+            _record_cost_change(offering, previous, dto)
+            summary["cost_changes"] = summary.get("cost_changes", 0) + 1
         if not dto.available:
             summary["unavailable"] += 1
 

@@ -58,7 +58,7 @@ from apps.orders.models import Order, OrderStatus, Refund, RefundReason
 from apps.orders.services import cancel_order as cancel_order_service
 from apps.orders.services import issue_refund
 from apps.payments.models import Payment, PaymentStatus
-from apps.pricing.models import ExchangeRate, PricingRule
+from apps.pricing.models import ExchangeRate, PricingPolicy, PricingRule
 from apps.pricing.rates import record_rate
 from apps.wallet.models import LedgerDirection, WalletLedgerEntry
 from apps.wallet.serializers import LedgerEntrySerializer
@@ -816,6 +816,15 @@ class AdminPricingRuleViewSet(AdminBase, viewsets.ModelViewSet):
     serializer_class = PricingRuleSerializer
     required_permission = AdminPermission.PRICING_MANAGE
     pagination_class = None
+
+    def check_permissions(self, request):
+        # Reading rules is part of seeing the pricing; changing them is not.
+        from rest_framework.permissions import SAFE_METHODS
+
+        self.required_permission = (AdminPermission.PRICING_VIEW
+                                    if request.method in SAFE_METHODS or self.action == "preview"
+                                    else AdminPermission.PRICING_MANAGE)
+        super().check_permissions(request)
     queryset = PricingRule.objects.select_related("service", "country").order_by(
         "priority", "-created_at"
     )
@@ -823,6 +832,7 @@ class AdminPricingRuleViewSet(AdminBase, viewsets.ModelViewSet):
     @transaction.atomic
     def perform_create(self, serializer):
         reason = _pricing_reason(self.request)
+        _check_rule_against_policy(serializer)
         rule = serializer.save()
         record_admin_action(
             admin=self.request.user, action="PRICING_RULE_CREATE", target=rule,
@@ -834,6 +844,7 @@ class AdminPricingRuleViewSet(AdminBase, viewsets.ModelViewSet):
     @transaction.atomic
     def perform_update(self, serializer):
         reason = _pricing_reason(self.request)
+        _check_rule_against_policy(serializer)
         before = PricingRuleSerializer(serializer.instance).data
         rule = serializer.save()
         record_admin_action(
@@ -886,7 +897,7 @@ class AdminPriceChangeViewSet(AdminBase, mixins.ListModelMixin, viewsets.Generic
     """Every change to a customer price: old, new, what caused it, who and why."""
 
     serializer_class = PriceChangeSerializer
-    required_permission = AdminPermission.CATALOG_MANAGE
+    required_permission = AdminPermission.PRICING_VIEW
 
     def get_queryset(self):
         from apps.pricing.models import PriceChange
@@ -907,6 +918,13 @@ class AdminExchangeRateViewSet(AdminBase, mixins.ListModelMixin, viewsets.Generi
     serializer_class = ExchangeRateSerializer
     required_permission = AdminPermission.PRICING_MANAGE
     pagination_class = None
+
+    def check_permissions(self, request):
+        from rest_framework.permissions import SAFE_METHODS
+
+        self.required_permission = (AdminPermission.PRICING_VIEW if request.method in SAFE_METHODS
+                                    else AdminPermission.PRICING_MANAGE)
+        super().check_permissions(request)
 
     def get_queryset(self):
         return ExchangeRate.objects.order_by("-fetched_at", "-id")[:50]
@@ -1073,6 +1091,26 @@ def _pricing_reason(request) -> str:
     if len(reason) < 5:
         raise ValidationFailed("Give a reason for this pricing change (at least 5 characters).")
     return reason[:500]
+
+
+def _check_rule_against_policy(serializer) -> None:
+    """A rule edit that would push prices below an enforced minimum margin is refused."""
+    from apps.pricing import services as pricing
+
+    candidate = PricingRule(**{
+        f.attname: getattr(serializer.instance, f.attname)
+        for f in PricingRule._meta.concrete_fields
+    }) if serializer.instance else PricingRule()
+    for name, value in serializer.validated_data.items():
+        setattr(candidate, name, value)
+    rules = [r for r in PricingRule.objects.filter(is_active=True)
+             if not serializer.instance or r.pk != serializer.instance.pk]
+    if candidate.is_active:
+        rules.append(candidate)
+    offerings = pricing.listed_offerings()
+    policy = PricingPolicy.get()
+    pricing._enforce_minimum(pricing.simulate(offerings, rules=rules, policy=policy),
+                             offerings, policy)
 
 
 def _reprice_after_commit(request, reason: str) -> None:

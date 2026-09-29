@@ -28,7 +28,9 @@ class AdminPermission(models.TextChoices):
     ORDER_REFUND = "ORDER_REFUND", "Issue refunds"
     PAYMENT_VIEW = "PAYMENT_VIEW", "View payments"
     CATALOG_MANAGE = "CATALOG_MANAGE", "Enable/disable services and countries"
-    PRICING_MANAGE = "PRICING_MANAGE", "Change pricing rules and markup"
+    PRICING_VIEW = "PRICING_VIEW", "See provider costs, FX, markup and margins"
+    PRICING_MANAGE = "PRICING_MANAGE", "Change pricing: FX, markup, overrides, publishing"
+    PRICING_LOSS_OVERRIDE = "PRICING_LOSS_OVERRIDE", "Approve a price below provider cost"
     PROVIDER_MANAGE = "PROVIDER_MANAGE", "Configure providers"
     AUDIT_VIEW = "AUDIT_VIEW", "View the audit log"
     REFERRAL_VIEW = "REFERRAL_VIEW", "View referrals and referral analytics"
@@ -58,12 +60,16 @@ _ADMIN = _SUPPORT | {
     # Moving a report along without money. Refunds and replacements still
     # need ORDER_REFUND.
     AdminPermission.ISSUE_MANAGE,
+    # Admins can see what things cost and earn; changing prices stays with
+    # super admins, who act as finance.
+    AdminPermission.PRICING_VIEW,
 }
 
 _SUPER_ADMIN = _ADMIN | {
     AdminPermission.USER_ROLE_CHANGE,
     AdminPermission.WALLET_ADJUST,
     AdminPermission.PRICING_MANAGE,
+    AdminPermission.PRICING_LOSS_OVERRIDE,
     AdminPermission.PROVIDER_MANAGE,
 }
 

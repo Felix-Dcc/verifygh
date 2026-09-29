@@ -14,6 +14,7 @@ from apps.notifications import views as notification_views
 from apps.numbers import admin_api as numbers_admin
 from apps.orders import views as order_views
 from apps.payments import views as payment_views
+from apps.pricing import admin_api as pricing_admin
 from apps.referrals import admin_api as referral_admin
 from apps.wallet import views as wallet_views
 
@@ -45,6 +46,16 @@ admin_router.register(
 )
 admin_router.register(
     "price-changes", admin_views.AdminPriceChangeViewSet, basename="admin-price-change"
+)
+admin_router.register(
+    "pricing/offerings", pricing_admin.PricingOfferingViewSet, basename="admin-pricing-offering"
+)
+admin_router.register(
+    "pricing/cost-history", pricing_admin.ProviderCostHistoryViewSet,
+    basename="admin-pricing-cost-history",
+)
+admin_router.register(
+    "pricing/audit", pricing_admin.PricingAuditViewSet, basename="admin-pricing-audit"
 )
 admin_router.register("audit", admin_views.AdminAuditViewSet, basename="admin-audit")
 admin_router.register(
@@ -88,6 +99,19 @@ api_v1 = [
         numbers_admin.AdminIssueMetricsView.as_view(),
         name="admin-number-issue-metrics",
     ),
+    path("admin/pricing/summary/", pricing_admin.PricingSummaryView.as_view(),
+         name="admin-pricing-summary"),
+    path("admin/pricing/preview/", pricing_admin.PricingPreviewView.as_view(),
+         name="admin-pricing-preview"),
+    path("admin/pricing/fx/", pricing_admin.PricingFXView.as_view(), name="admin-pricing-fx"),
+    path("admin/pricing/fx/preview/", pricing_admin.PricingFXPreviewView.as_view(),
+         name="admin-pricing-fx-preview"),
+    path("admin/pricing/policy/", pricing_admin.PricingPolicyView.as_view(),
+         name="admin-pricing-policy"),
+    path("admin/pricing/publish/", pricing_admin.PricingPublishView.as_view(),
+         name="admin-pricing-publish"),
+    path("admin/pricing/bulk/", pricing_admin.PricingBulkView.as_view(),
+         name="admin-pricing-bulk"),
     path("admin/overview/", admin_views.AdminOverviewView.as_view(), name="admin-overview"),
     path("admin/charts/", admin_views.AdminChartsView.as_view(), name="admin-charts"),
     path("admin/health/", admin_views.AdminSystemHealthView.as_view(), name="admin-health"),

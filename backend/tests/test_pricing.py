@@ -117,10 +117,12 @@ def test_price_is_clamped_to_the_configured_floor_and_ceiling(offering, exchange
     assert quote_for_offering(offering, rule=ceiling_rule).customer_price == Decimal("13.00")
 
 
-def test_margin_is_reported(offering, exchange_rate):
+def test_markup_and_gross_margin_are_reported_separately(offering, exchange_rate):
+    """Cost 12.00, price 14.40: markup is 20% of cost, gross margin 16.67% of price."""
     quote = quote_for_offering(offering, rule=make_rule())
-    assert quote.margin == Decimal("2.40")
-    assert quote.margin_percent == Decimal("20.00")
+    assert quote.gross_profit == Decimal("2.40")
+    assert quote.markup_percent_effective == Decimal("20.00")
+    assert quote.gross_margin_percent == Decimal("16.67")
 
 
 def test_quote_records_which_rule_and_rate_produced_it(offering, exchange_rate):
