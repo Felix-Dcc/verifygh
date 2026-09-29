@@ -138,8 +138,15 @@ class VerificationProvider(abc.ABC):
     # -- catalog ---------------------------------------------------------
 
     @abc.abstractmethod
-    def get_services(self) -> list[ProviderServiceDTO]:
-        """Every (service, country) offering the provider exposes to us."""
+    def get_services(self, *, priority: list[str] | None = None,
+                     time_budget: float | None = None) -> list[ProviderServiceDTO]:
+        """Every (service, country) offering the provider exposes to us.
+
+        Adapters whose catalogue is priced one call at a time may return only
+        part of it per sync: `priority` names service codes to price first
+        (case-insensitive), and `time_budget` caps the seconds spent. Adapters
+        that get the whole catalogue in one go ignore both.
+        """
 
     @abc.abstractmethod
     def get_countries(self) -> list[ProviderCountryDTO]:

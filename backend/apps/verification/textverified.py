@@ -43,6 +43,7 @@ import hashlib
 import hmac
 import json
 import logging
+import random
 import time
 from datetime import UTC, datetime, timedelta
 from decimal import ROUND_CEILING, Decimal, InvalidOperation
@@ -70,10 +71,19 @@ REQUEST_TIMEOUT = 20
 #: Seconds before expiry at which the cached token is refreshed anyway.
 TOKEN_REFRESH_MARGIN = 60
 
-#: How long one catalogue sync may spend pricing services. Each price is its
-#: own documented call, and the sync runs inside a Celery task with a time
-#: limit, so it prices what it can in this window and resumes next time.
+#: How long one catalogue sync may spend pricing services by default. Each
+#: price is its own documented call, and the sync runs inside a Celery task
+#: with a time limit, so it prices what it can in this window and resumes next
+#: time. Callers inside a web request pass a shorter budget.
 SYNC_TIME_BUDGET_SECONDS = 60
+
+#: Backoff after a 429, as the docs advise: "wait and retry with exponential
+#: backoff and jitter". Starts here, doubles, never exceeds the cap.
+RATE_LIMIT_BACKOFF_START = 1.0
+RATE_LIMIT_BACKOFF_CAP = 16.0
+
+#: At most this many priority services are priced ahead of the rotation.
+PRIORITY_LIMIT = 60
 
 #: Where the next catalogue sync resumes pricing.
 PRICING_CURSOR_KEY = "textverified:pricing_cursor"
@@ -313,18 +323,27 @@ class TextVerifiedProvider(VerificationProvider):
 
     # -- catalog ---------------------------------------------------------
 
-    def get_services(self) -> list[ProviderServiceDTO]:
+    def get_services(self, *, priority: list[str] | None = None,
+                     time_budget: float | None = None) -> list[ProviderServiceDTO]:
         """Every service we can price, a slice per sync.
 
         The service list is one documented call; each price is another
-        (`POST /pricing/verifications`), and the docs warn pricing may answer
-        429. So one sync prices as many services as PROVIDER_CATALOG_LIMIT
-        allows (0 = no count limit) within SYNC_TIME_BUDGET_SECONDS, starting
-        where the last sync stopped, and stops at the first 429. Services not
-        priced this time are not returned, so the catalogue keeps their last
-        known price instead of dropping them. A service that cannot be priced
-        is left out rather than listed at a guessed cost. Voice-only services
-        are skipped: we sell SMS verifications.
+        (`POST /pricing/verifications`, 2,300+ services), and the docs warn
+        pricing may answer 429. So one sync:
+
+        * prices the `priority` services first (the ones customers actually
+          buy - the full list is alphabetical, so "009ibbq" would otherwise
+          come long before TikTok);
+        * then continues through the rest from where the last sync stopped;
+        * stops at PROVIDER_CATALOG_LIMIT services (0 = no count limit) or
+          when `time_budget` seconds are spent;
+        * after a 429, waits with exponential backoff and jitter and retries,
+          as the docs advise, instead of giving up.
+
+        Services not priced this time are not returned, so the catalogue keeps
+        their last known price instead of dropping them. A service that cannot
+        be priced is left out rather than listed at a guessed cost. Voice-only
+        services are skipped: we sell SMS verifications.
         """
         self._require_configured("listing services")
         payload = self._request(
@@ -341,28 +360,48 @@ class TextVerifiedProvider(VerificationProvider):
         if not entries:
             return []
 
+        # Priority first, in the caller's order; then the rest, rotated.
+        by_name = {name.lower(): (name, description) for name, description in entries}
+        first: list[tuple[str, str]] = []
+        for code in priority or []:
+            match = by_name.get(str(code).lower())
+            if match and match not in first:
+                first.append(match)
+            if len(first) >= PRIORITY_LIMIT:
+                break
+        chosen = set(first)
+        rest = [entry for entry in entries if entry not in chosen]
+        start = int(cache.get(PRICING_CURSOR_KEY) or 0) % len(rest) if rest else 0
+        queue = first + rest[start:] + rest[:start]
+
         limit = int(settings.VERIFYGH.get("PROVIDER_CATALOG_LIMIT", 60))
-        budget = len(entries) if limit <= 0 else min(limit, len(entries))
-        start = int(cache.get(PRICING_CURSOR_KEY) or 0) % len(entries)
-        deadline = time.monotonic() + SYNC_TIME_BUDGET_SECONDS
+        budget = len(queue) if limit <= 0 else min(limit, len(queue))
+        seconds = SYNC_TIME_BUDGET_SECONDS if time_budget is None else max(0.0, time_budget)
+        deadline = time.monotonic() + seconds
 
         services: list[ProviderServiceDTO] = []
-        skipped = attempted = 0
+        skipped = attempted = rate_limited = 0
+        backoff = RATE_LIMIT_BACKOFF_START
         stopped = ""
         while attempted < budget:
-            if time.monotonic() >= deadline:
+            remaining = deadline - time.monotonic()
+            if remaining <= 0:
                 stopped = "time_budget"
                 break
-            name, description = entries[(start + attempted) % len(entries)]
+            name, description = queue[attempted]
             try:
                 cost = self.get_pricing(name, "US")
             except ServiceUnavailable:
-                stopped = "rate_limited"
-                break
+                rate_limited += 1
+                wait = min(backoff + random.uniform(0, backoff / 2), remaining)
+                backoff = min(backoff * 2, RATE_LIMIT_BACKOFF_CAP)
+                time.sleep(wait)
+                continue
             except ProviderError:
                 attempted += 1
                 skipped += 1
                 continue
+            backoff = RATE_LIMIT_BACKOFF_START
             attempted += 1
             services.append(
                 ProviderServiceDTO(
@@ -377,9 +416,14 @@ class TextVerifiedProvider(VerificationProvider):
                 )
             )
 
-        cache.set(PRICING_CURSOR_KEY, (start + attempted) % len(entries), None)
+        # The cursor moves over the rotated part only; priority services are
+        # priced first on every sync.
+        rotated = max(0, attempted - len(first))
+        if rest:
+            cache.set(PRICING_CURSOR_KEY, (start + rotated) % len(rest), None)
         logger.info("textverified_services_synced", extra={
             "listed": len(services), "skipped": skipped, "catalogue": len(entries),
+            "priority": len(first), "rate_limited": rate_limited,
             "stopped": stopped or "complete",
         })
         return services

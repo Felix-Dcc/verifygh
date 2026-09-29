@@ -380,7 +380,7 @@ class OnlineSimProvider(VerificationProvider):
             logger.info("onlinesim_countries_unmapped", extra={"skipped": skipped})
         return countries
 
-    def get_services(self) -> list[ProviderServiceDTO]:
+    def get_services(self, *, priority=None, time_budget=None) -> list[ProviderServiceDTO]:
         """Every priced (service, country) offering, bounded by the catalog limit.
 
         `getTariffs` returns the service list for one country at a time, so this

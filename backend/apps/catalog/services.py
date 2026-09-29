@@ -179,7 +179,38 @@ def ensure_provider_row(adapter_key: str) -> Provider:
     return provider
 
 
-def sync_catalog(adapter_key: str | None = None) -> dict:
+def priority_service_codes() -> list[str]:
+    """Services to price first when a provider prices one call at a time.
+
+    Staff-marked popular services, then what customers pinned, then what they
+    bought in the last 30 days - the services a customer is actually likely
+    to look for.
+    """
+    from datetime import timedelta
+
+    from django.db.models import Count
+
+    from apps.catalog.models import PinnedService
+    from apps.orders.models import Order
+
+    codes: list[str] = list(
+        Service.objects.filter(is_popular=True).order_by("popular_rank", "name")
+        .values_list("slug", flat=True)
+    )
+    codes += list(
+        PinnedService.objects.values("service__slug").annotate(n=Count("id"))
+        .order_by("-n").values_list("service__slug", flat=True)[:50]
+    )
+    codes += list(
+        Order.objects.filter(created_at__gte=timezone.now() - timedelta(days=30))
+        .values("service__slug").annotate(n=Count("id")).order_by("-n")
+        .values_list("service__slug", flat=True)[:50]
+    )
+    seen: set[str] = set()
+    return [code for code in codes if not (code in seen or seen.add(code))]
+
+
+def sync_catalog(adapter_key: str | None = None, *, time_budget: float | None = None) -> dict:
     """Pull the provider catalogue and upsert it.
 
     Returns a summary so the admin UI and the Celery log can both show what
@@ -206,7 +237,8 @@ def sync_catalog(adapter_key: str | None = None) -> dict:
 
     try:
         provider_countries = provider_client.get_countries()
-        provider_services = provider_client.get_services()
+        provider_services = provider_client.get_services(
+            priority=priority_service_codes(), time_budget=time_budget)
     except Exception as exc:
         message = f"{exc.__class__.__name__}: {exc}"
         logger.exception("catalog_sync_failed", extra={"provider": provider_client.key})

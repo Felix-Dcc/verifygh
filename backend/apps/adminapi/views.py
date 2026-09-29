@@ -804,7 +804,10 @@ class AdminOfferingViewSet(AdminBase, mixins.ListModelMixin, mixins.UpdateModelM
         self.check_permissions(request)
         from apps.catalog.services import sync_catalog
 
-        summary = sync_catalog()
+        # Inside a web request (gunicorn times out at 60s), so a provider that
+        # prices one call at a time gets a short budget; the scheduled sync
+        # carries on from where this one stops.
+        summary = sync_catalog(time_budget=20)
         record_admin_action(
             admin=request.user, action="CATALOG_SYNC", target=None,
             reason="Manual catalog sync", after=summary, request=request,

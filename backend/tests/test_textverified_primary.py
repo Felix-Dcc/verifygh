@@ -371,34 +371,101 @@ def test_missing_credentials_are_reported_not_alerted(settings, exchange_rate, a
 # ---------------------------------------------------------------------------
 
 
-def test_the_sync_resumes_where_a_rate_limit_stopped_it(tv, settings):
-    settings.VERIFYGH = {**settings.VERIFYGH, "PROVIDER_CATALOG_LIMIT": 0}
-    names = [f"svc{i}" for i in range(5)]
+class FakeClock:
+    """time.monotonic/sleep for the adapter, so backoff costs no real time."""
+
+    def __init__(self):
+        self.now = 1000.0
+        self.slept: list[float] = []
+
+    def monotonic(self):
+        return self.now
+
+    def sleep(self, seconds):
+        self.slept.append(seconds)
+        self.now += seconds
+
+
+@pytest.fixture
+def clock(monkeypatch):
+    fake = FakeClock()
+    monkeypatch.setattr(tv_module.time, "monotonic", fake.monotonic)
+    monkeypatch.setattr(tv_module.time, "sleep", fake.sleep)
+    return fake
+
+
+def _catalogue(tv, names, extra=()):
     tv["routes"][("GET", "/api/pub/v2/services")] = Reply(
-        200, [{"serviceName": n, "capability": "sms"} for n in names]
-        + [{"serviceName": "voiceonly", "capability": "voice"}])
-    priced: list[str] = []
+        200, [{"serviceName": n, "capability": "Sms"} for n in names] + list(extra))
+
+
+def test_a_rate_limit_is_waited_out_with_backoff_not_given_up(tv, settings, clock):
+    settings.VERIFYGH = {**settings.VERIFYGH, "PROVIDER_CATALOG_LIMIT": 0}
+    _catalogue(tv, [f"svc{i}" for i in range(5)],
+               extra=[{"serviceName": "voiceonly", "capability": "voice"}])
+    refusals = {"left": 3}
 
     def pricing(body, params):
-        if len(priced) == 2:
+        if body["serviceName"] == "svc2" and refusals["left"]:
+            refusals["left"] -= 1
             return Reply(429, {})
-        priced.append(body["serviceName"])
         return Reply(200, {"serviceName": body["serviceName"], "price": 0.3})
 
     tv["routes"][("POST", "/api/pub/v2/pricing/verifications")] = pricing
-    adapter = tv_module.TextVerifiedProvider()
 
-    first = adapter.get_services()
-    assert [s.code for s in first] == ["svc0", "svc1"]
+    priced = tv_module.TextVerifiedProvider().get_services()
 
-    tv["routes"][("POST", "/api/pub/v2/pricing/verifications")] = (
-        lambda body, params: Reply(200, {"serviceName": body["serviceName"], "price": 0.3}))
-    second = adapter.get_services()
-    # Limit 0 is "no count limit"; it resumed at svc2, and the voice-only
-    # service is never priced (we sell SMS verifications).
-    assert [s.code for s in second] == ["svc2", "svc3", "svc4", "svc0", "svc1"]
+    # Every service priced despite three 429s; the waits grew, as documented.
+    assert [s.code for s in priced] == ["svc0", "svc1", "svc2", "svc3", "svc4"]
+    assert len(clock.slept) == 3 and clock.slept[0] < clock.slept[1] < clock.slept[2]
+    # Voice-only services are never priced: we sell SMS verifications.
     assert all(c["json"]["serviceName"] != "voiceonly" for c in tv["calls"]
                if c["path"] == "/api/pub/v2/pricing/verifications")
+
+
+def test_the_time_budget_stops_the_sync_and_the_next_one_resumes(tv, settings, clock):
+    settings.VERIFYGH = {**settings.VERIFYGH, "PROVIDER_CATALOG_LIMIT": 0}
+    _catalogue(tv, [f"svc{i}" for i in range(5)])
+
+    def slow_pricing(body, params):
+        clock.now += 4  # each price takes four seconds
+        return Reply(200, {"serviceName": body["serviceName"], "price": 0.3})
+
+    tv["routes"][("POST", "/api/pub/v2/pricing/verifications")] = slow_pricing
+    adapter = tv_module.TextVerifiedProvider()
+
+    first = adapter.get_services(time_budget=10)
+    second = adapter.get_services(time_budget=10)
+
+    assert [s.code for s in first] == ["svc0", "svc1", "svc2"]
+    assert [s.code for s in second] == ["svc3", "svc4", "svc0"]
+
+
+def test_services_customers_buy_are_priced_first(tv, settings, clock):
+    """The list is alphabetical; without this TikTok waits behind '009ibbq'."""
+    settings.VERIFYGH = {**settings.VERIFYGH, "PROVIDER_CATALOG_LIMIT": 3}
+    _catalogue(tv, ["009ibbq", "1688", "25clicks", "TikTok", "whatsapp", "zzz"])
+    tv["routes"][("POST", "/api/pub/v2/pricing/verifications")] = (
+        lambda body, params: Reply(200, {"serviceName": body["serviceName"], "price": 0.4}))
+
+    priced = tv_module.TextVerifiedProvider().get_services(priority=["whatsapp", "tiktok",
+                                                                     "not-at-textverified"])
+
+    assert [s.code for s in priced] == ["whatsapp", "TikTok", "009ibbq"]
+
+
+def test_the_sync_puts_popular_pinned_and_bought_services_first(db):
+    from apps.catalog.models import PinnedService, Service
+    from apps.catalog.services import priority_service_codes
+
+    Service.objects.create(slug="tiktok", name="TikTok", is_popular=True, popular_rank=1)
+    Service.objects.create(slug="telegram", name="Telegram", is_popular=True, popular_rank=2)
+    pinned = Service.objects.create(slug="hinge", name="Hinge")
+    Service.objects.create(slug="obscure", name="Obscure")
+    user = User.objects.create_user(email="pins@example.com", password="Correct-Horse-Battery-1")
+    PinnedService.objects.create(user=user, service=pinned)
+
+    assert priority_service_codes() == ["tiktok", "telegram", "hinge"]
 
 
 # ---------------------------------------------------------------------------

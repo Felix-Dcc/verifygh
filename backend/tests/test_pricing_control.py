@@ -258,7 +258,7 @@ def _provider_raises_cost(offering, new_cost: str):
     from apps.verification.mock import MockVerificationProvider
 
     original = MockVerificationProvider.get_services
-    MockVerificationProvider.get_services = lambda self: [dto]
+    MockVerificationProvider.get_services = lambda self, **_: [dto]
     try:
         sync_catalog("mock")
     finally:
