@@ -786,12 +786,18 @@ def cash_flow() -> dict:
     needed_ghs = ZERO
     unconverted = []
     unread = []
-    for account in ProviderAccount.objects.select_related("provider").filter(
-            provider__in=_funded_providers()):
+    accounts = {account.provider_id: account for account in ProviderAccount.objects.filter(
+        provider__in=_funded_providers())}
+    for provider in _funded_providers():
+        account = accounts.get(provider.id)
+        if account is None:
+            # Never synced: as unknown as an unread balance, not zero.
+            unread.append(provider.name)
+            continue
         rate = _fx(account.currency)
         spendable = account.spendable
         if spendable is None:
-            unread.append(account.provider.name)
+            unread.append(provider.name)
         top_up = recommended_top_up(account)
         if rate is None:
             unconverted.append(account.currency)

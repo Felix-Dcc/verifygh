@@ -593,10 +593,14 @@ def test_no_shortfall_is_claimed_while_a_balance_is_unread(user, funded_wallet, 
     funded_wallet(user, "150.00")
     _order(instagram_us.provider, instagram_us.service, instagram_us.country, 50,
            status=OrderStatus.COMPLETED, code_received_at=timezone.now())
-    funding.account_for(instagram_us.provider)
-
+    # No account row at all yet (the first sync has not run) ...
     flow = funding.cash_flow()
+    assert flow["provider_balance_unread"] == ["Mock"]
+    assert flow["estimated_shortfall_ghs"] is None
 
+    # ... and a row whose balance has never been read.
+    funding.account_for(instagram_us.provider)
+    flow = funding.cash_flow()
     assert flow["provider_balance_unread"] == ["Mock"]
     assert flow["estimated_shortfall_ghs"] is None
     assert flow["estimated_cost_to_serve_wallets_ghs"] is not None
