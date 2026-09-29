@@ -138,8 +138,11 @@ function backendEnv(databaseUrl: VariableValue, redisUrl: VariableValue) {
     // 0 lists everything OnlineSim offers - 98 countries, ~15,000 offerings.
     // A cap would decide the shop window by accident.
     PROVIDER_CATALOG_LIMIT: "0",
+    // The only country customers may browse or buy. The catalogue sync walks
+    // only these, so Canada is neither synced nor sold.
+    MARKETPLACE_COUNTRIES: "US",
     // Walked first, so these fill the catalogue and lead the listing.
-    PROVIDER_PRIORITY_COUNTRIES: "CA,US,GB",
+    PROVIDER_PRIORITY_COUNTRIES: "US",
     // A full sync is ~99 calls, one per country. At the old ceiling of 120 a
     // sync left ~21 for everything else, so a customer ordering during one
     // could be refused. This is our own restraint, not a limit OnlineSim

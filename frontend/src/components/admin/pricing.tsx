@@ -231,7 +231,7 @@ function RuleEditor({
     }
   }
 
-  const sellable = (countries ?? []).filter((c) => ["US", "CA"].includes(c.code));
+  const sellable = (countries ?? []).filter((c) => c.code === "US");
 
   return (
     <Dialog
@@ -367,7 +367,7 @@ function RuleEditor({
             minLength={5}
             value={form.reason}
             onChange={(e) => set("reason", e.target.value)}
-            placeholder="e.g. Lower TikTok Canada to match competitors"
+            placeholder="e.g. Lower TikTok US to match competitors"
           />
         </Field>
 

@@ -308,6 +308,8 @@ export type MarketRow = {
   pinned: boolean;
   /** A pin for a service not sold in this country at all. */
   unavailable_here?: boolean;
+  /** Sold here, but cannot be bought right now. Only ever seen on a pin. */
+  temporarily_unavailable?: boolean;
 };
 
 export type MarketCountry = {
@@ -351,6 +353,7 @@ export type MarketServiceDetail = {
     currency?: string;
     availability: Availability;
     available_count?: number | null;
+    temporarily_unavailable?: boolean;
   })[];
 };
 

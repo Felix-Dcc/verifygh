@@ -1,4 +1,4 @@
-import { cn } from "@/components/ui/primitives";
+import { Badge, cn } from "@/components/ui/primitives";
 import type { Availability } from "@/lib/types";
 
 const DOT: Record<Availability, string> = {
@@ -14,6 +14,15 @@ const DOT: Record<Availability, string> = {
  * look like a ceiling (OnlineSim reports 9999 for almost everything) - so the
  * words here never claim stock we were not told about.
  */
+/** A service we sell but cannot supply right now. Never says why. */
+export function TemporarilyUnavailableBadge({ className }: { className?: string }) {
+  return (
+    <Badge tone="warn" className={cn("whitespace-nowrap", className)}>
+      Temporarily unavailable
+    </Badge>
+  );
+}
+
 export function AvailabilityLabel({
   availability,
   count,

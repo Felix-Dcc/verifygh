@@ -300,7 +300,8 @@ class MarketplaceViewSet(viewsets.ViewSet):
         from apps.catalog import marketplace as mp
 
         country = self._country(request)
-        rows = mp.search(mp.country_rows(country), request.query_params.get("search", ""),
+        rows = mp.search(mp.listable(mp.country_rows(country)),
+                         request.query_params.get("search", ""),
                          request.query_params.get("category", ""))
         if request.query_params.get("include_unavailable") != "true":
             rows = [row for row in rows if row["availability"] != mp.UNAVAILABLE]
@@ -321,8 +322,12 @@ class MarketplaceViewSet(viewsets.ViewSet):
         from apps.catalog import marketplace as mp
 
         country = self._country(request)
-        rows = mp.country_rows(country)
+        every_row = mp.country_rows(country)
+        rows = mp.listable(every_row)
         by_slug = {row["slug"]: row for row in rows}
+        # Pins also see services we cannot pay for right now, badged
+        # "temporarily unavailable", so the pin is not silently lost.
+        pinnable = {row["slug"]: row for row in every_row}
         pinned = mp.pinned_slugs(request.user)
         pinned_set = set(pinned)
         return Response({
@@ -334,7 +339,7 @@ class MarketplaceViewSet(viewsets.ViewSet):
             # would look like the pin was lost. Pins not sold here at all are
             # listed with unavailable_here so the client can say so.
             "pinned": [
-                mp.public_row(by_slug[slug], pinned_set) if slug in by_slug
+                mp.public_row(pinnable[slug], pinned_set) if slug in pinnable
                 else {"slug": slug, "pinned": True, "unavailable_here": True,
                       **_service_meta(slug)}
                 for slug in pinned
@@ -359,7 +364,8 @@ class MarketplaceViewSet(viewsets.ViewSet):
                 "dial_code": country.dial_code,
                 **({"offered": True, "price": row["price"], "currency": row["currency"],
                     "availability": row["availability"],
-                    "available_count": row["available_count"]}
+                    "available_count": row["available_count"],
+                    "temporarily_unavailable": row["temporarily_unavailable"]}
                    if row else {"offered": False, "availability": mp.UNAVAILABLE}),
             })
         return Response({

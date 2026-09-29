@@ -4,7 +4,7 @@ Everything a customer sees is derived here from the synced catalogue and the
 pricing engine. Nothing is typed into the frontend, and three things are
 deliberately never made up:
 
-* **Countries.** Only MARKETPLACE_COUNTRIES (US and CA today). The list, the
+* **Countries.** Only MARKETPLACE_COUNTRIES (the US today). The list, the
   quote and the purchase all refuse anything else, so a customer editing a
   request cannot buy from a country we have chosen not to sell.
 * **Stock.** A count is shown only when the provider reported one and it is
@@ -41,7 +41,16 @@ AVAILABLE, LIMITED, UNAVAILABLE = "AVAILABLE", "LIMITED", "UNAVAILABLE"
 
 class UnsupportedCountry(ValidationFailed):
     code = "UNSUPPORTED_COUNTRY"
-    message = "We only offer numbers for the United States and Canada at the moment."
+    message = "We do not offer numbers for that country at the moment."
+
+    def __init__(self, message: str | None = None, **kwargs):
+        if message is None:
+            names = [country.name for country in marketplace_countries()]
+            if names:
+                message = ("We only offer numbers for the "
+                           f"{' and '.join(names) if len(names) < 3 else ', '.join(names)} "
+                           "at the moment.")
+        super().__init__(message, **kwargs)
 
 
 # ---------------------------------------------------------------------------
@@ -121,6 +130,7 @@ def _row(offering: ProviderService, quote) -> dict:
         "supports_voice": offering.supports_voice,
         "maintenance_note": service.maintenance_note if service.is_maintenance else "",
         **availability(offering, service),
+        "temporarily_unavailable": False,
         # Searched, never shown.
         "_terms": " ".join([service.name, service.slug, service.aliases]).lower(),
         "_order": (service.display_order, service.name.lower()),
@@ -135,7 +145,10 @@ def country_rows(country_code: str) -> list[dict]:
     choice `orders.services.purchasable_offering` makes. That includes our
     provider balance: an offering the balance cannot pay for is skipped for
     the next one at or below its price, and a service with none left is not
-    listed at all rather than offered and then refused.
+    listed at all rather than offered and then refused. Such a service is
+    still kept, marked `temporarily_unavailable` and `_hidden`, so a customer
+    who pinned it sees it greyed out rather than losing the pin; see
+    `listable`.
     """
     from apps.funding.services import unfunded_offering_ids
     from apps.pricing.engine import NoPricingRule, quote_many
@@ -160,6 +173,7 @@ def country_rows(country_code: str) -> list[dict]:
 
     unfunded = unfunded_offering_ids(offerings)
     preferred: dict = {}
+    held: dict = {}
     best: dict = {}
     for offering in offerings:
         quote = quotes.get(str(offering.pk))
@@ -169,12 +183,27 @@ def country_rows(country_code: str) -> list[dict]:
         # prefers, so neither does the listing.
         ceiling = preferred.setdefault(offering.service_id, quote.customer_price)
         if str(offering.pk) in unfunded or quote.customer_price > ceiling:
+            held.setdefault(offering.service_id, (offering, quote))
             continue
         best[offering.service_id] = _row(offering, quote)
+
+    for service_id, (offering, quote) in held.items():
+        if service_id not in best:
+            # Nothing we can pay for. Why is ours to know: the customer is told
+            # only that it is temporarily unavailable, with no price to tempt.
+            best[service_id] = {
+                **_row(offering, quote), "availability": UNAVAILABLE, "available_count": None,
+                "price": None, "temporarily_unavailable": True, "_hidden": True,
+            }
 
     rows = sorted(best.values(), key=lambda row: row["_order"])
     cache.set(key, rows, ROWS_CACHE_SECONDS)
     return rows
+
+
+def listable(rows: list[dict]) -> list[dict]:
+    """Rows a customer may browse to: everything except what we cannot pay for."""
+    return [row for row in rows if not row.get("_hidden")]
 
 
 def public_row(row: dict, pinned: set[str] | None = None) -> dict:

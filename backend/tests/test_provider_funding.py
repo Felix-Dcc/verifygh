@@ -671,8 +671,12 @@ def test_home_popular_and_the_purchase_screen_agree(api, mock_provider, instagra
     assert "instagram" not in {row["slug"] for row in home["popular"]}
     assert home["total"] == 0
 
-    detail = api.get(f"{MARKET}instagram/").data
-    assert all(option["offered"] is False for option in detail["countries"])
+    # The purchase screen (reached from a pin or a link) says why, customer-safe.
+    option = api.get(f"{MARKET}instagram/").data["countries"][0]
+    assert option["code"] == "US"
+    assert option["temporarily_unavailable"] is True
+    assert option["availability"] == "UNAVAILABLE"
+    assert option["price"] is None
 
     legacy = api.get("/api/v1/services/").data["results"]
     assert "instagram" not in {service["slug"] for service in legacy}
@@ -697,3 +701,34 @@ def test_a_dearer_fallback_does_not_keep_it_listed(api, instagram_us, second_pro
     set_balance("100", second_provider, key="mock2")
 
     assert "instagram" not in listed(api)
+
+
+def test_a_pinned_service_the_balance_cannot_cover_stays_pinned_and_badged(
+        api, auth, user, mock_provider, instagram_us):
+    client = auth(user)
+    assert client.post(f"{MARKET}instagram/pin/").status_code == 200
+    set_balance("0.01", mock_provider)
+
+    home = client.get(f"{MARKET}home/", {"country": "US"}).data
+    pinned = {row["slug"]: row for row in home["pinned"]}
+
+    row = pinned["instagram"]
+    assert row["temporarily_unavailable"] is True
+    assert row["availability"] == "UNAVAILABLE"
+    assert row["price"] is None
+    assert row.get("unavailable_here") is None  # it is sold here, just not right now
+    for leak in ("balance", "fund", "provider", "onlinesim", "mock"):
+        assert leak not in str(row).lower().replace("mock_", "")
+    # Still out of the browsable list.
+    assert "instagram" not in listed(client)
+
+    set_balance("500", mock_provider)
+    row = {r["slug"]: r for r in client.get(f"{MARKET}home/").data["pinned"]}["instagram"]
+    assert row["temporarily_unavailable"] is False
+    assert row["price"] is not None
+
+
+def test_a_listed_row_is_never_marked_temporarily_unavailable(api, mock_provider):
+    set_balance("500", mock_provider)
+    rows = api.get(MARKET, {"country": "US", "include_unavailable": "true"}).data["results"]
+    assert rows and not any(row["temporarily_unavailable"] for row in rows)

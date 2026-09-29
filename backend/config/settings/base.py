@@ -488,13 +488,13 @@ VERIFYGH = {
     # Which countries fill the bounded catalogue first. Without this the order
     # is whatever the provider happens to return, and the limit decides the
     # shop window by accident.
-    "PROVIDER_PRIORITY_COUNTRIES": env_list("PROVIDER_PRIORITY_COUNTRIES", "CA,US,GB"),
+    "PROVIDER_PRIORITY_COUNTRIES": env_list("PROVIDER_PRIORITY_COUNTRIES", "US"),
     # -- marketplace ---------------------------------------------------------
     # The only countries a customer may browse or buy, as ISO alpha-2 codes.
     # Enforced on the server - the marketplace, quotes and order creation all
     # refuse anything else - and the catalogue sync only walks these, so
     # adding a country is a variable change plus a sync, not a code change.
-    "MARKETPLACE_COUNTRIES": env_list("MARKETPLACE_COUNTRIES", "US,CA"),
+    "MARKETPLACE_COUNTRIES": env_list("MARKETPLACE_COUNTRIES", "US"),
     # At or below this many numbers in stock, an offering shows as "Limited".
     "AVAILABILITY_LIMITED_THRESHOLD": env_int("AVAILABILITY_LIMITED_THRESHOLD", 10),
     # Above this, show "Available" rather than a count. OnlineSim reports 9999

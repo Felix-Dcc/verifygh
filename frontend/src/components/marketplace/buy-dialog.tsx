@@ -6,7 +6,7 @@ import * as React from "react";
 import useSWR, { mutate as globalMutate } from "swr";
 
 import { useAuth } from "@/components/auth-provider";
-import { AvailabilityLabel } from "@/components/marketplace/availability";
+import { AvailabilityLabel, TemporarilyUnavailableBadge } from "@/components/marketplace/availability";
 import { ServiceLogo } from "@/components/service-logo";
 import { Dialog } from "@/components/ui/dialog";
 import { Alert, Button, Skeleton, cn } from "@/components/ui/primitives";
@@ -63,7 +63,10 @@ export function BuyDialog({
   }, [open, initialCountry]);
 
   const option = detail?.countries.find((entry) => entry.code === country);
-  const purchasable = Boolean(option?.offered && option.availability !== "UNAVAILABLE");
+  const paused = Boolean(option?.temporarily_unavailable);
+  const purchasable = Boolean(
+    option?.offered && option.availability !== "UNAVAILABLE" && !option.temporarily_unavailable,
+  );
 
   React.useEffect(() => {
     if (!open || !serviceSlug || !user || !purchasable) {
@@ -177,10 +180,14 @@ export function BuyDialog({
 
           <fieldset>
             <legend className="mb-2 text-sm font-medium text-ink">Country</legend>
-            <div className="grid grid-cols-2 gap-2" role="radiogroup">
+            <div
+              className={cn("grid gap-2", detail.countries.length > 1 ? "grid-cols-2" : "grid-cols-1")}
+              role="radiogroup"
+            >
               {detail.countries.map((entry) => {
                 const selected = entry.code === country;
-                const unavailable = !entry.offered || entry.availability === "UNAVAILABLE";
+                const unavailable =
+                  !entry.offered || entry.availability === "UNAVAILABLE" || entry.temporarily_unavailable;
                 return (
                   <button
                     key={entry.code}
@@ -200,11 +207,13 @@ export function BuyDialog({
                       {entry.name}
                     </span>
                     <span className="mt-0.5 text-xs text-ink-muted">
-                      {unavailable
-                        ? entry.offered
-                          ? "Unavailable right now"
-                          : "Not offered"
-                        : cedis(entry.price)}
+                      {entry.temporarily_unavailable
+                        ? "Temporarily unavailable"
+                        : unavailable
+                          ? entry.offered
+                            ? "Unavailable right now"
+                            : "Not offered"
+                          : cedis(entry.price)}
                     </span>
                   </button>
                 );
@@ -214,7 +223,9 @@ export function BuyDialog({
 
           <dl className="space-y-2.5 rounded-xl border border-line bg-canvas p-3.5 text-sm">
             <Row label="Availability">
-              {option ? (
+              {option && paused ? (
+                <TemporarilyUnavailableBadge />
+              ) : option ? (
                 <AvailabilityLabel
                   availability={option.offered ? option.availability : "UNAVAILABLE"}
                   count={option.available_count ?? null}
@@ -357,14 +368,20 @@ function BlockerNotice({ code, message, email }: { code: string; message: string
     TOO_MANY_ACTIVE_ORDERS: <>Finish or cancel one of your open orders, then try again.</>,
     DAILY_ORDER_LIMIT: <>You have hit today&apos;s order limit. It resets in 24 hours.</>,
     DAILY_SPEND_LIMIT: <>You have hit today&apos;s spending limit. It resets in 24 hours.</>,
-    NO_AVAILABILITY: <>Try the other country, or check back shortly. Nothing was charged.</>,
+    NO_AVAILABILITY: <>Check back shortly. Nothing was charged.</>,
     PROVIDER_UNAVAILABLE: <>Nothing was charged. Please try again in a moment.</>,
     PLATFORM_AT_CAPACITY: <>Nothing was charged. Please try again in a few minutes.</>,
     PRICE_UNAVAILABLE: <>Nothing was charged. Please try again later.</>,
-    UNSUPPORTED_COUNTRY: <>Choose the United States or Canada.</>,
+    UNSUPPORTED_COUNTRY: <>Numbers are available for the United States only.</>,
+    TEMPORARILY_UNAVAILABLE: <>Nothing was charged. Please try again shortly.</>,
     ACCOUNT_SUSPENDED: <>Contact support to resolve this.</>,
   };
-  const soft = ["NO_AVAILABILITY", "PROVIDER_UNAVAILABLE", "PLATFORM_AT_CAPACITY"].includes(code);
+  const soft = [
+    "NO_AVAILABILITY",
+    "PROVIDER_UNAVAILABLE",
+    "PLATFORM_AT_CAPACITY",
+    "TEMPORARILY_UNAVAILABLE",
+  ].includes(code);
 
   return (
     <Alert tone={soft ? "warn" : "danger"} title={message}>

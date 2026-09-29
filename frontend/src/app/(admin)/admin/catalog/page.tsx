@@ -127,7 +127,7 @@ function ServicesTab({ canManage }: { canManage: boolean }) {
         <div className="flex flex-wrap items-center gap-2 px-4 pt-3 sm:px-5">
           <SegmentedControl
             options={[
-              { value: "sold" as const, label: `Sold in US/CA (${sold.length})` },
+              { value: "sold" as const, label: `Sold in the US (${sold.length})` },
               { value: "missing" as const, label: `Missing logo (${missing.length})` },
               { value: "all" as const, label: "Whole provider catalogue" },
             ]}

@@ -204,7 +204,6 @@ export function PricingTable({
           <Select aria-label="Country" value={filters.country} onChange={(e) => set("country", e.target.value)} className="h-9 text-sm">
             <option value="">All countries</option>
             <option value="US">United States</option>
-            <option value="CA">Canada</option>
           </Select>
           <Select aria-label="Status" value={filters.status} onChange={(e) => set("status", e.target.value)} className="h-9 text-sm">
             {STATUS_FILTERS.map(([value, label]) => (
@@ -621,7 +620,6 @@ export function BulkMarkupPanel({ summary }: { summary?: PricingSummary }) {
             <Select id="bulk-country" value={scope.country} onChange={(e) => setScope({ ...scope, country: e.target.value })}>
               <option value="">All countries</option>
               <option value="US">United States</option>
-              <option value="CA">Canada</option>
             </Select>
           </Field>
           <Field label="Service (slug)" htmlFor="bulk-service" hint="Optional, e.g. tiktok">

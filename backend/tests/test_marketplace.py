@@ -43,12 +43,44 @@ def slugs(rows) -> list[str]:
     return [row["slug"] for row in rows]
 
 
+@pytest.fixture(autouse=True)
+def _two_countries(request, settings):
+    """VerifyGH sells the US only. Most tests here run with a second country
+    configured, to prove the per-country machinery (the tabs, the per-country
+    prices and stock, the refusal of anything else) still works for whenever
+    one is added back with a variable change."""
+    if "us_only" not in request.keywords:
+        settings.VERIFYGH = {**settings.VERIFYGH, "MARKETPLACE_COUNTRIES": ["US", "CA"]}
+
+
 # ---------------------------------------------------------------------------
 # Countries
 # ---------------------------------------------------------------------------
 
 
-def test_only_the_united_states_and_canada_are_offered(api, catalog):
+@pytest.mark.us_only
+def test_by_default_only_the_united_states_is_offered(api, catalog, customer, user,
+                                                      funded_wallet):
+    home = api.get(f"{MARKET}home/").data
+
+    assert [c["code"] for c in home["countries"]] == ["US"]
+    assert home["country"] == "US"
+    assert [c["code"] for c in api.get("/api/v1/countries/").data] == ["US"]
+    assert [c["code"] for c in api.get(f"{MARKET}instagram/").data["countries"]] == ["US"]
+
+    # Canada is refused everywhere, purchase included, and says so plainly.
+    funded_wallet(user, "100.00")
+    response = api.get(MARKET, {"country": "CA"})
+    assert response.status_code == 400
+    assert response.data["error"]["message"] == (
+        "We only offer numbers for the United States at the moment.")
+    assert customer.post("/api/v1/orders/", {"service": "instagram", "country": "CA"},
+                         format="json").status_code == 400
+    assert not Order.objects.filter(user=user).exists()
+    assert api.get("/api/v1/services/", {"country": "CA"}).data["results"] == []
+
+
+def test_only_the_configured_countries_are_offered(api, catalog):
     home = api.get(f"{MARKET}home/").data
 
     assert [c["code"] for c in home["countries"]] == ["US", "CA"]
@@ -230,6 +262,14 @@ def test_real_activity_makes_a_service_popular(user, customer, catalog, funded_w
 
 def test_pins_follow_the_customer_to_another_device(user, customer, catalog):
     assert customer.post(f"{MARKET}tiktok/pin/").status_code == 200
+    # Windows' clock can give two quick pins the same timestamp; keep the
+    # order this test is about unambiguous.
+    from datetime import timedelta
+
+    from django.utils import timezone
+
+    PinnedService.objects.filter(user=user).update(
+        created_at=timezone.now() - timedelta(seconds=5))
     assert customer.post(f"{MARKET}whatsapp/pin/").status_code == 200
 
     other_device = sign_in(user, "Correct-Horse-Battery-1")

@@ -7,7 +7,7 @@ import useSWRInfinite from "swr/infinite";
 
 import { useAuth } from "@/components/auth-provider";
 import { PinIcon, SearchIcon } from "@/components/icons";
-import { AvailabilityLabel } from "@/components/marketplace/availability";
+import { AvailabilityLabel, TemporarilyUnavailableBadge } from "@/components/marketplace/availability";
 import { BuyDialog } from "@/components/marketplace/buy-dialog";
 import { Alert, Button, Card, EmptyState, Input, Skeleton, cn } from "@/components/ui/primitives";
 import { ServiceLogo } from "@/components/service-logo";
@@ -198,7 +198,9 @@ export function Marketplace() {
             description={
               searching
                 ? "Try another name - for example Gmail, X or WhatsApp."
-                : "Try the other country, or check back shortly."
+                : (home?.countries.length ?? 0) > 1
+                  ? "Try the other country, or check back shortly."
+                  : "Please check back shortly."
             }
           />
         ) : (
@@ -277,6 +279,16 @@ function CountrySwitch({
   onChange: (code: string) => void;
 }) {
   if (countries.length === 0) return <Skeleton className="h-10 w-64 rounded-xl" />;
+  if (countries.length === 1) {
+    // Nothing to switch between: just say where the numbers are from.
+    const [only] = countries;
+    return (
+      <p className="inline-flex items-center gap-2 rounded-xl border border-line bg-surface px-3.5 py-2 text-sm font-medium text-ink">
+        <span aria-hidden>{only.flag_emoji}</span>
+        {only.name} numbers
+      </p>
+    );
+  }
   return (
     <div
       className="grid w-full grid-cols-2 rounded-xl border border-line bg-surface p-1 sm:w-auto"
@@ -338,7 +350,8 @@ function ServiceRow({
   onOpen: () => void;
   onPin: () => void;
 }) {
-  const unavailable = row.availability === "UNAVAILABLE" || row.unavailable_here;
+  const paused = Boolean(row.temporarily_unavailable);
+  const unavailable = row.availability === "UNAVAILABLE" || row.unavailable_here || paused;
   return (
     <div className="group flex items-center gap-1 pr-1.5 transition-colors hover:bg-canvas">
       <button
@@ -356,27 +369,37 @@ function ServiceRow({
           >
             {row.name}
           </span>
-          <AvailabilityLabel
-            availability={row.unavailable_here ? "UNAVAILABLE" : row.availability}
-            count={row.available_count}
-            className="sm:hidden"
-          />
+          {paused ? (
+            <TemporarilyUnavailableBadge className="mt-0.5 sm:hidden" />
+          ) : (
+            <AvailabilityLabel
+              availability={row.unavailable_here ? "UNAVAILABLE" : row.availability}
+              count={row.available_count}
+              className="sm:hidden"
+            />
+          )}
         </span>
         <span className="hidden w-36 shrink-0 truncate text-xs text-ink-muted lg:block">
           {countryLabel}
         </span>
-        <AvailabilityLabel
-          availability={row.unavailable_here ? "UNAVAILABLE" : row.availability}
-          count={row.available_count}
-          className="hidden w-32 shrink-0 sm:inline-flex"
-        />
+        {paused ? (
+          <span className="hidden w-32 shrink-0 sm:inline-flex">
+            <TemporarilyUnavailableBadge />
+          </span>
+        ) : (
+          <AvailabilityLabel
+            availability={row.unavailable_here ? "UNAVAILABLE" : row.availability}
+            count={row.available_count}
+            className="hidden w-32 shrink-0 sm:inline-flex"
+          />
+        )}
         <span
           className={cn(
             "tabular w-20 shrink-0 text-right text-sm font-semibold",
             unavailable ? "text-ink-faint" : "text-ink",
           )}
         >
-          {row.price && !row.unavailable_here ? cedis(row.price) : "-"}
+          {row.price && !row.unavailable_here && !paused ? cedis(row.price) : "-"}
         </span>
       </button>
       <button
