@@ -177,6 +177,9 @@ None new. `getBalance` uses the existing `ONLINESIM_API_KEY`.
   as before, and now also alerts staff and re-reads the balance.
 * `apps/numbers/services.py`: a free replacement is refused, with the real
   reason for staff, when the balance cannot pay for it.
+* `apps/catalog/marketplace.py` and the legacy `/services/` listing: offerings
+  the last balance reading cannot pay for are not listed (same rule and
+  price ceiling as the purchase); a balance change clears the cache.
 * Celery beat: `sync-provider-balances` every 2 minutes.
 * Settings (`VERIFYGH`): `PROVIDER_FUNDING_GUARD`, `PROVIDER_RESERVE_CRITICAL`
   / `_MINIMUM` / `_TARGET` (2 / 5 / 20, seeds for new accounts),
@@ -244,6 +247,7 @@ VerifyGH profit"; and the recent alerts.
 | Scenario | Behaviour |
 |---|---|
 | Balance below what a purchase needs | The balance is read live once (it may predate a top-up); if still short, other authorised providers are tried at or below the shown price; otherwise 503 "temporarily unavailable" before charging, and a PURCHASE_BLOCKED alert with the real reason |
+| Balance below what an offering costs, while browsing | The marketplace (list, home, popular, purchase screen, landing page) does not list it, unless an authorised fallback at or below its price is funded. Uses the stored reading only - no provider call per page view - and the listing refreshes as soon as a new reading changes the balance |
 | Balance never read | Treated as unknown, not zero: purchases proceed and the provider decides; the cash-flow view shows no shortfall figure |
 | Balance read fails | The last reading and status are kept; SYNC_FAILED alert after 3 failures in a row; API_UNAVAILABLE at once for a blocked account or bad key |
 | getNum says WARNING_LOW_BALANCE anyway (race, guard off) | Existing automatic refund; PROVIDER_REFUSED alert; balance re-read |

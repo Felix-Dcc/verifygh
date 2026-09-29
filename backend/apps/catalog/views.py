@@ -30,9 +30,13 @@ def _build_marketplace() -> dict:
     from the synced catalog, and every price goes through the pricing engine.
     """
     from apps.catalog.marketplace import sellable_offerings
+    from apps.funding.services import unfunded_offering_ids
 
     # Only the marketplace countries - the same rule the purchase enforces.
     offerings = list(sellable_offerings().select_related("provider", "service", "country"))
+    # And only what our provider balance can pay for, as far as we know.
+    unfunded = unfunded_offering_ids(offerings)
+    offerings = [offering for offering in offerings if str(offering.pk) not in unfunded]
 
     try:
         quotes = quote_many(offerings)

@@ -164,6 +164,7 @@ def sync_balance(provider) -> ProviderAccount:
     with transaction.atomic():
         account = ProviderAccount.objects.select_for_update().get(pk=account.pk)
         previous = account.status
+        previous_spendable = account.spendable
         account.available = Decimal(reading.available).quantize(FOUR_PLACES)
         account.frozen = Decimal(reading.frozen).quantize(FOUR_PLACES)
         account.currency = (reading.currency or account.currency).upper()[:3]
@@ -178,9 +179,22 @@ def sync_balance(provider) -> ProviderAccount:
         "provider": provider.adapter_key, "balance": str(account.available),
         "frozen": str(account.frozen), "status": account.status,
     })
+    if account.spendable != previous_spendable:
+        # What the marketplace may show depends on this balance.
+        refresh_marketplace()
     _alert_on_status_change(account, previous)
     _confirm_top_ups(account)
     return account
+
+
+def refresh_marketplace() -> None:
+    from django.core.cache import cache
+
+    from apps.catalog import marketplace
+    from apps.catalog.views import MARKETPLACE_CACHE_KEY
+
+    cache.delete(MARKETPLACE_CACHE_KEY)
+    marketplace.invalidate()
 
 
 def _record_sync_failure(account: ProviderAccount, exc: APIError, now) -> ProviderAccount:
@@ -342,6 +356,35 @@ def required_for(offering) -> Decimal:
     """
     tolerance = Decimal(str(_cfg("PROVIDER_PRICE_TOLERANCE")))
     return (Decimal(offering.cost_amount) * tolerance).quantize(FOUR_PLACES)
+
+
+def _known_short(account: ProviderAccount | None, offering) -> bool:
+    """True only when the last reading shows `account` cannot pay for `offering`.
+
+    Anything we cannot tell - no reading, no cost, a currency we cannot
+    compare, the guard switched off - is not a known shortfall.
+    """
+    if not _cfg("PROVIDER_FUNDING_GUARD"):
+        return False
+    if account is None or account.spendable is None or not offering.cost_amount:
+        return False
+    if (offering.cost_currency or "").upper() != account.currency.upper():
+        return False
+    return account.spendable < required_for(offering)
+
+
+def unfunded_offering_ids(offerings) -> set[str]:
+    """Offerings the last balance readings show we cannot pay for.
+
+    For listing only: reads stored balances, never the provider, so browsing
+    the marketplace costs no upstream calls. The purchase itself still
+    re-reads a low balance live before refusing.
+    """
+    provider_ids = {offering.provider_id for offering in offerings}
+    accounts = {account.provider_id: account for account in
+                ProviderAccount.objects.filter(provider_id__in=provider_ids)}
+    return {str(offering.pk) for offering in offerings
+            if _known_short(accounts.get(offering.provider_id), offering)}
 
 
 def check_funding(offering, *, live_recheck: bool = True) -> FundingCheck:
@@ -587,6 +630,7 @@ def update_account(account: ProviderAccount, *, data: dict, reason, actor,
         record_admin_action(admin=actor, action="PROVIDER_FUNDING_SETTINGS", target=account,
                             reason=reason, before=before, after=_account_state(account),
                             request=request)
+    refresh_marketplace()  # a credit limit changes what can be sold
     _alert_on_status_change(account, previous)
     return account
 

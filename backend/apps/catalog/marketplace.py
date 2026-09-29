@@ -132,8 +132,12 @@ def country_rows(country_code: str) -> list[dict]:
 
     Where several providers offer the same service, the one the purchase would
     actually use is shown: lowest provider priority, then cheapest - the same
-    choice `orders.services.resolve_offering` makes.
+    choice `orders.services.purchasable_offering` makes. That includes our
+    provider balance: an offering the balance cannot pay for is skipped for
+    the next one at or below its price, and a service with none left is not
+    listed at all rather than offered and then refused.
     """
+    from apps.funding.services import unfunded_offering_ids
     from apps.pricing.engine import NoPricingRule, quote_many
 
     key = _ROWS_KEY.format(country=country_code)
@@ -154,11 +158,19 @@ def country_rows(country_code: str) -> list[dict]:
         logger.error("marketplace_no_pricing_rule")
         return []
 
+    unfunded = unfunded_offering_ids(offerings)
+    preferred: dict = {}
     best: dict = {}
     for offering in offerings:
         quote = quotes.get(str(offering.pk))
-        if quote is not None and offering.service_id not in best:
-            best[offering.service_id] = _row(offering, quote)
+        if quote is None or offering.service_id in best:
+            continue
+        # The purchase never falls back to a dearer offering than the one it
+        # prefers, so neither does the listing.
+        ceiling = preferred.setdefault(offering.service_id, quote.customer_price)
+        if str(offering.pk) in unfunded or quote.customer_price > ceiling:
+            continue
+        best[offering.service_id] = _row(offering, quote)
 
     rows = sorted(best.values(), key=lambda row: row["_order"])
     cache.set(key, rows, ROWS_CACHE_SECONDS)

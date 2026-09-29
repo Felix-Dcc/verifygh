@@ -604,3 +604,96 @@ def test_no_shortfall_is_claimed_while_a_balance_is_unread(user, funded_wallet, 
     assert flow["provider_balance_unread"] == ["Mock"]
     assert flow["estimated_shortfall_ghs"] is None
     assert flow["estimated_cost_to_serve_wallets_ghs"] is not None
+
+
+# ---------------------------------------------------------------------------
+# The marketplace hides what the balance cannot pay for
+# ---------------------------------------------------------------------------
+
+MARKET = "/api/v1/marketplace/"
+
+
+def listed(api, country="US"):
+    return {row["slug"] for row in api.get(MARKET, {"country": country,
+                                                  "include_unavailable": "true"}).data["results"]}
+
+
+def affordable(provider, balance: Decimal, country="US") -> tuple[set, set]:
+    """Split the mock catalogue by whether `balance` covers each offering."""
+    covered, short = set(), set()
+    for offering in ProviderService.objects.select_related("service").filter(
+            provider=provider, country__code=country, is_enabled=True):
+        (covered if funding.required_for(offering) <= balance else short).add(
+            offering.service.slug)
+    return covered, short
+
+
+def test_services_the_balance_cannot_cover_are_not_listed(api, mock_provider):
+    everything = listed(api)
+    covered, short = affordable(mock_provider, Decimal("1.30"))
+    assert covered and short, "the mock catalogue should straddle the balance"
+
+    set_balance("1.30", mock_provider)
+    shown = listed(api)
+
+    assert shown == everything - short
+    assert covered & everything <= shown
+
+
+def test_hidden_services_come_back_as_soon_as_the_balance_is_read(api, mock_provider):
+    everything = listed(api)
+    set_balance("0.01", mock_provider)
+    assert listed(api) == set()
+
+    set_balance("500", mock_provider)  # topped up; the next reading clears the cache
+
+    assert listed(api) == everything
+
+
+def test_an_unread_balance_or_a_disabled_guard_hides_nothing(api, mock_provider, settings):
+    everything = listed(api)
+    funding.account_for(mock_provider)  # never read
+    assert listed(api) == everything
+
+    set_balance("0.01", mock_provider)
+    settings.VERIFYGH = {**settings.VERIFYGH, "PROVIDER_FUNDING_GUARD": False}
+    funding.refresh_marketplace()
+    assert listed(api) == everything
+
+
+def test_home_popular_and_the_purchase_screen_agree(api, mock_provider, instagram_us):
+    from apps.catalog.models import Service
+
+    Service.objects.filter(slug="instagram").update(is_popular=True, popular_rank=1)
+    set_balance("0.01", mock_provider)
+
+    home = api.get(f"{MARKET}home/", {"country": "US"}).data
+    assert "instagram" not in {row["slug"] for row in home["popular"]}
+    assert home["total"] == 0
+
+    detail = api.get(f"{MARKET}instagram/").data
+    assert all(option["offered"] is False for option in detail["countries"])
+
+    legacy = api.get("/api/v1/services/").data["results"]
+    assert "instagram" not in {service["slug"] for service in legacy}
+
+
+def test_a_funded_fallback_keeps_the_service_listed(api, instagram_us, second_provider):
+    set_balance("0.01", instagram_us.provider)
+    set_balance("100", second_provider, key="mock2")
+
+    assert "instagram" in listed(api)
+
+
+def test_a_dearer_fallback_does_not_keep_it_listed(api, instagram_us, second_provider):
+    from apps.pricing.history import refresh_offering_prices
+    from apps.pricing.models import MarkupType, PricingRule
+
+    PricingRule.objects.create(name="Second is dearer", provider=second_provider,
+                               markup_type=MarkupType.PERCENTAGE,
+                               markup_percent=Decimal("300.00"), priority=1)
+    refresh_offering_prices(source="PRICING_RULE", reason="test", actor=None)
+    set_balance("0.01", instagram_us.provider)
+    set_balance("100", second_provider, key="mock2")
+
+    assert "instagram" not in listed(api)
