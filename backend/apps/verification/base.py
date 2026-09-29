@@ -97,6 +97,20 @@ class ProviderOrderDTO:
     raw: dict = field(default_factory=dict)
 
 
+@dataclass(frozen=True)
+class BalanceDTO:
+    """Our own account balance with a provider, in the provider's currency.
+
+    `available` is what can be spent now. `frozen` is held against numbers
+    already reserved: OnlineSim charges it only if an SMS arrives and returns
+    it otherwise, so it is neither spendable nor spent.
+    """
+
+    available: Decimal
+    frozen: Decimal = Decimal("0")
+    currency: str = "USD"
+
+
 class VerificationProvider(abc.ABC):
     """Base class for every verification provider adapter."""
 
@@ -186,6 +200,36 @@ class VerificationProvider(abc.ABC):
     def release_retry_after_seconds(self, service_code: str) -> int:
         """How long to wait before retrying a release the provider refused."""
         return 60
+
+    # -- our account with the provider ------------------------------------
+
+    #: Whether the provider documents a way to read our account balance.
+    supports_balance: bool = False
+
+    #: Whether the provider documents a way to add money to our account through
+    #: its API. No provider we use does: OnlineSim is funded by hand through its
+    #: website (see docs/PROVIDER-FUNDING.md). Nothing may set this to True
+    #: without a documented endpoint and written permission from the provider.
+    supports_account_funding: bool = False
+
+    def get_balance(self) -> BalanceDTO | None:
+        """Our balance with the provider, or None when it has no way to tell us.
+
+        Raises ProviderError when the provider documents a balance call and the
+        call fails, so the caller can tell "unknown" apart from "unsupported".
+        """
+        return None
+
+    def fund_account(self, amount: Decimal, currency: str, reference: str):
+        """Add money to our provider account through the provider's API.
+
+        Deliberately unimplemented everywhere: no provider we use offers it.
+        Customer wallet money must never be routed here in any case - funding a
+        provider is an operating expense, recorded in apps/funding.
+        """
+        raise NotImplementedError(
+            f"{self.display_name} documents no API for funding our account."
+        )
 
     # -- health ----------------------------------------------------------
 

@@ -116,6 +116,8 @@ class RateLimitedProvider(VerificationProvider):
         self.permits_code_display = inner.permits_code_display
         self.supports_webhooks = inner.supports_webhooks
         self.supports_issue_reports = inner.supports_issue_reports
+        self.supports_balance = inner.supports_balance
+        self.supports_account_funding = inner.supports_account_funding
         self._limiter = ProviderRateLimiter(
             inner.key, settings.VERIFYGH["PROVIDER_RATE_LIMIT_PER_MINUTE"]
         )
@@ -169,6 +171,18 @@ class RateLimitedProvider(VerificationProvider):
 
     def release_retry_after_seconds(self, service_code: str) -> int:
         return self._inner.release_retry_after_seconds(service_code)
+
+    def get_balance(self):
+        if not self._inner.supports_balance:
+            return None
+        return self._call("get_balance")
+
+    def fund_account(self, amount, currency: str, reference: str):
+        if not self._inner.supports_account_funding:
+            raise NotImplementedError(
+                f"{self.display_name} documents no API for funding our account."
+            )
+        return self._call("fund_account", amount, currency, reference)
 
     def health_check(self) -> bool:
         return self._inner.health_check()

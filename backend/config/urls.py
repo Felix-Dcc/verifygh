@@ -10,6 +10,7 @@ from rest_framework.routers import DefaultRouter
 
 from apps.adminapi import views as admin_views
 from apps.catalog import views as catalog_views
+from apps.funding import admin_api as funding_admin
 from apps.notifications import views as notification_views
 from apps.numbers import admin_api as numbers_admin
 from apps.orders import views as order_views
@@ -112,6 +113,13 @@ api_v1 = [
          name="admin-pricing-publish"),
     path("admin/pricing/bulk/", pricing_admin.PricingBulkView.as_view(),
          name="admin-pricing-bulk"),
+    path("admin/funding/", funding_admin.FundingOverviewView.as_view(), name="admin-funding"),
+    path("admin/funding/<str:adapter_key>/", funding_admin.FundingAccountView.as_view(),
+         name="admin-funding-account"),
+    path("admin/funding/<str:adapter_key>/sync/", funding_admin.FundingSyncView.as_view(),
+         name="admin-funding-sync"),
+    path("admin/funding/<str:adapter_key>/top-ups/", funding_admin.FundingTopUpView.as_view(),
+         name="admin-funding-top-ups"),
     path("admin/overview/", admin_views.AdminOverviewView.as_view(), name="admin-overview"),
     path("admin/charts/", admin_views.AdminChartsView.as_view(), name="admin-charts"),
     path("admin/health/", admin_views.AdminSystemHealthView.as_view(), name="admin-health"),

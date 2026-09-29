@@ -80,6 +80,7 @@ INSTALLED_APPS = [
     "apps.payments",
     "apps.orders",
     "apps.numbers",
+    "apps.funding",
     "apps.notifications",
     "apps.adminapi",
     "apps.referrals",
@@ -509,6 +510,32 @@ VERIFYGH = {
     "PROVIDER_PRICE_TOLERANCE": env("PROVIDER_PRICE_TOLERANCE", "1.05"),
     # Upstream call budget — we never hammer a provider API.
     "PROVIDER_RATE_LIMIT_PER_MINUTE": env_int("PROVIDER_RATE_LIMIT_PER_MINUTE", 120),
+    # -- provider funding (apps/funding, docs/PROVIDER-FUNDING.md). OnlineSim is
+    # prepaid: numbers are bought from our own balance there, which staff top
+    # up by hand. These keep a purchase from charging a customer when that
+    # balance cannot cover it, and tell staff before it runs out.
+    #
+    # Refuse a purchase before charging when the provider balance is known to
+    # be too low. Off = the old behaviour: charge, fail at the provider, refund.
+    "PROVIDER_FUNDING_GUARD": env_bool("PROVIDER_FUNDING_GUARD", True),
+    # Reserve levels given to a provider account when it is first created, in
+    # the provider's currency. Staff change them in Admin > Provider funding.
+    "PROVIDER_RESERVE_CRITICAL": env("PROVIDER_RESERVE_CRITICAL", "2"),
+    "PROVIDER_RESERVE_MINIMUM": env("PROVIDER_RESERVE_MINIMUM", "5"),
+    "PROVIDER_RESERVE_TARGET": env("PROVIDER_RESERVE_TARGET", "20"),
+    # One alert of a kind per provider per this many minutes.
+    "PROVIDER_ALERT_COOLDOWN_MINUTES": env_int("PROVIDER_ALERT_COOLDOWN_MINUTES", 60),
+    # Balance reads that must fail in a row before staff are told.
+    "PROVIDER_SYNC_FAILURE_ALERT_AFTER": env_int("PROVIDER_SYNC_FAILURE_ALERT_AFTER", 3),
+    # Failed orders at one provider within the window that count as a spike.
+    "PROVIDER_FAILURE_SPIKE_THRESHOLD": env_int("PROVIDER_FAILURE_SPIKE_THRESHOLD", 5),
+    "PROVIDER_FAILURE_SPIKE_WINDOW_MINUTES": env_int("PROVIDER_FAILURE_SPIKE_WINDOW_MINUTES", 30),
+    # OnlineSim deletes an account, balance included, 30 days after its last
+    # completed purchase (Terms 11.4/11.5). Warn this many days in.
+    "PROVIDER_INACTIVITY_DELETION_DAYS": env_int("PROVIDER_INACTIVITY_DELETION_DAYS", 30),
+    "PROVIDER_INACTIVITY_WARNING_DAYS": env_int("PROVIDER_INACTIVITY_WARNING_DAYS", 20),
+    # A recorded top-up the balance has not reflected after this long is flagged.
+    "PROVIDER_TOP_UP_CONFIRM_HOURS": env_int("PROVIDER_TOP_UP_CONFIRM_HOURS", 24),
     "CURRENT_TERMS_VERSION": env("CURRENT_TERMS_VERSION", "2026-01-01"),
     # -- number quality (apps/numbers). The replacement/refund *policy* lives
     # here rather than in code, so the business can change it with a variable.

@@ -208,12 +208,20 @@ def check_purchase_eligibility(user) -> None:
 
 
 def resolve_offering(service_slug: str, country_code: str) -> ProviderService:
-    """Find the best purchasable offering for a (service, country) pair.
+    """The preferred offering for a (service, country) pair - what we quote."""
+    return candidate_offerings(service_slug, country_code)[0]
 
-    The country is checked against the marketplace list before anything else:
-    a request for a country we do not sell is refused even if the catalogue
-    happens to hold an offering for it.
+
+def candidate_offerings(service_slug: str, country_code: str) -> list[ProviderService]:
+    """Every offering that could fill a (service, country) order, best first.
+
+    Only providers that are enabled *and* have a registered adapter qualify -
+    a provider we are not authorised to resell never gets here. The country is
+    checked against the marketplace list before anything else: a request for a
+    country we do not sell is refused even if the catalogue happens to hold an
+    offering for it.
     """
+    from apps.verification.registry import available_adapters
     from apps.catalog.marketplace import require_marketplace_country
 
     country_code = require_marketplace_country(country_code)
@@ -236,7 +244,7 @@ def resolve_offering(service_slug: str, country_code: str) -> ProviderService:
         raise ServiceUnavailable("That country is not available right now.",
                                  code="COUNTRY_DISABLED")
 
-    offering = (
+    offerings = list(
         ProviderService.objects.select_related("provider", "service", "country")
         .filter(
             service=service,
@@ -244,16 +252,74 @@ def resolve_offering(service_slug: str, country_code: str) -> ProviderService:
             is_enabled=True,
             is_available=True,
             provider__is_enabled=True,
+            provider__adapter_key__in=available_adapters(),
         )
         .order_by("provider__priority", "cost_amount")
-        .first()
     )
-    if offering is None:
+    if not offerings:
         raise ServiceUnavailable(
             "No numbers are available for that service and country right now.",
             code="NO_AVAILABILITY",
         )
-    return offering
+    return offerings
+
+
+def purchasable_offering(service_slug: str, country_code: str) -> ProviderService:
+    """The offering to buy from, checked just before any money moves.
+
+    Each candidate must pass two checks: our prepaid balance at its provider
+    can pay for the number (apps/funding), and the provider has one in stock
+    right now. The first that passes wins; the rest are failover. A fallback
+    is only taken at or below the price of the preferred offering, because
+    that is the price the customer was shown.
+
+    When balances are what stopped us, the customer hears "temporarily
+    unavailable" and staff get the real reason.
+    """
+    from apps.funding import services as funding
+
+    candidates = candidate_offerings(service_slug, country_code)
+    blocked: list[tuple[ProviderService, funding.FundingCheck]] = []
+    last_error: ServiceUnavailable | None = None
+    ceiling = None
+
+    for index, offering in enumerate(candidates):
+        if index:
+            try:
+                if ceiling is None:
+                    ceiling = quote_for_offering(candidates[0]).customer_price
+                if quote_for_offering(offering).customer_price > ceiling:
+                    continue
+            except (ServiceUnavailable, ProviderError, ValueError):
+                continue
+            except Exception:
+                logger.exception("failover_quote_failed", extra={"offering": str(offering.pk)})
+                continue
+
+        check = funding.check_funding(offering)
+        if not check.ok:
+            blocked.append((offering, check))
+            continue
+        try:
+            confirm_live_availability(offering)
+        except ServiceUnavailable as exc:
+            last_error = exc
+            continue
+        if index:
+            logger.warning("order_failover", extra={
+                "from": candidates[0].provider.adapter_key,
+                "to": offering.provider.adapter_key, "service": offering.service.slug,
+            })
+        return offering
+
+    for offering, check in blocked:
+        funding.purchase_blocked(offering, check)
+    if blocked:
+        raise ServiceUnavailable(funding.CUSTOMER_UNAVAILABLE, code="TEMPORARILY_UNAVAILABLE")
+    raise last_error or ServiceUnavailable(
+        "No numbers are available for that service and country right now.",
+        code="NO_AVAILABILITY",
+    )
 
 
 def confirm_live_availability(offering: ProviderService) -> None:
@@ -332,10 +398,10 @@ def create_order(*, user, service_slug: str, country_code: str, idempotency_key:
     check_purchase_eligibility(user)
 
     # Everything the price depends on is re-derived here, never taken from the
-    # request: which offering, whether it is in stock right now, and what it
-    # costs. The client sends a service slug and a country code, nothing else.
-    offering = resolve_offering(service_slug, country_code)
-    confirm_live_availability(offering)
+    # request: which offering, whether our provider balance covers it, whether
+    # it is in stock right now, and what it costs. The client sends a service
+    # slug and a country code, nothing else.
+    offering = purchasable_offering(service_slug, country_code)
     priced = quote_for_offering(offering)
     price = priced.customer_price
 
@@ -453,6 +519,13 @@ def fulfil_order(order: Order) -> Order:
             "order_provider_create_failed",
             extra={"order": order.reference, "error": exc.__class__.__name__},
         )
+        try:
+            from apps.funding.services import note_provider_failure
+
+            note_provider_failure(order.provider, exc)
+        except Exception:
+            # Alerting must never stand between the customer and their refund.
+            logger.exception("provider_failure_alert_failed")
         return fail_order(order, reason="The provider could not supply a number.")
 
     if result.state == ProviderOrderState.FAILED:

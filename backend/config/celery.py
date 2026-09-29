@@ -39,6 +39,12 @@ app.conf.beat_schedule = {
         "task": "apps.catalog.tasks.sync_provider_catalog",
         "schedule": crontab(minute=15, hour="*/3"),
     },
+    # Our prepaid balance at each provider: read it, grade it, alert staff.
+    # One getBalance call per provider every two minutes.
+    "sync-provider-balances": {
+        "task": "apps.funding.tasks.sync_provider_balances",
+        "schedule": 120.0,
+    },
     "reconcile-wallets": {
         "task": "apps.wallet.tasks.reconcile_wallets",
         "schedule": crontab(minute=30, hour=2),

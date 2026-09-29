@@ -561,6 +561,14 @@ def approve_replacement(issue, *, admin, reason: str, request=None) -> Verificat
 
     # Raises if the service is no longer sold in that country.
     offering = resolve_offering(original.service.slug, original.country.code)
+    # A replacement is free to the customer but not to us: it is bought from
+    # our provider balance like any other number. Staff see the real reason.
+    from apps.funding.services import check_funding
+
+    funding = check_funding(offering)
+    if not funding.ok:
+        raise ServiceUnavailable(f"No replacement possible right now: {funding.reason}",
+                                 code="PROVIDER_BALANCE_LOW")
     priced = quote_for_offering(offering)
     source = paying_order(issue)
 

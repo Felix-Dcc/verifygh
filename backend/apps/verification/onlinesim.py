@@ -63,6 +63,7 @@ from django.conf import settings
 from apps.common.errors import ProviderError, ServiceUnavailable
 from apps.verification.base import (
     AvailabilityDTO,
+    BalanceDTO,
     CodeDTO,
     ProviderCountryDTO,
     ProviderOrderDTO,
@@ -310,6 +311,14 @@ class OnlineSimProvider(VerificationProvider):
             return payload
 
         code = str(flag or "")[:60]
+        error = ProviderError(
+            self.ERROR_MESSAGES.get(code)
+            or "The verification provider could not complete that request."
+        )
+        # Kept on the exception for staff alerting (apps/funding); the message
+        # the customer can see stays generic.
+        error.provider_code = code
+        error.operational = code in self.OPERATIONAL_ERRORS
         if code in self.OPERATIONAL_ERRORS:
             # Ours to fix - an empty upstream balance or a blocked account stops
             # every order, so it must be loud rather than look like bad luck.
@@ -318,10 +327,7 @@ class OnlineSimProvider(VerificationProvider):
         else:
             logger.warning("onlinesim_error", extra={"path": path, "provider_code": code})
 
-        raise ProviderError(
-            self.ERROR_MESSAGES.get(code)
-            or "The verification provider could not complete that request."
-        )
+        raise error
 
     def _get(self, path: str, params: dict | None = None):
         return self._check(self._request(path, params), path)
@@ -680,15 +686,30 @@ class OnlineSimProvider(VerificationProvider):
 
     # -- health ----------------------------------------------------------
 
+    supports_balance = True
+
+    def get_balance(self) -> BalanceDTO:
+        """`getBalance`: `balance` is spendable, `zbalance` is frozen.
+
+        Documented as the way to "check the balance of the profile to top it up
+        when needed". It is read-only: OnlineSim has no API that adds money,
+        so topping up stays a manual payment on their website.
+        """
+        payload = self._get(self.PATH_BALANCE)
+        if not isinstance(payload, dict) or payload.get("balance") in (None, ""):
+            raise ProviderError("The verification provider did not report a balance.")
+        return BalanceDTO(
+            available=_decimal(payload.get("balance"), Decimal("0")),
+            frozen=_decimal(payload.get("zbalance"), Decimal("0")),
+            currency=self._currency(),
+        )
+
     def account_balance(self) -> Decimal | None:
-        """Our balance with the provider. None when it cannot be read."""
+        """Our spendable balance with the provider. None when it cannot be read."""
         try:
-            payload = self._get(self.PATH_BALANCE)
+            return self.get_balance().available
         except (ProviderError, ServiceUnavailable):
             return None
-        if not isinstance(payload, dict):
-            return None
-        return _decimal(payload.get("balance"), Decimal("0"))
 
     def health_check(self) -> bool:
         """Cheapest authenticated call there is: read the balance."""

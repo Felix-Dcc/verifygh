@@ -30,6 +30,7 @@ from django.utils import timezone
 from apps.common.errors import ProviderError
 from apps.verification.base import (
     AvailabilityDTO,
+    BalanceDTO,
     CodeDTO,
     ProviderCountryDTO,
     ProviderOrderDTO,
@@ -42,6 +43,9 @@ logger = logging.getLogger("verifygh.provider.mock")
 
 CACHE_PREFIX = "mockprov:"
 CACHE_TTL = 60 * 60 * 6
+
+#: The mock account balance, in USD, unless a test sets one with set_balance().
+MOCK_BALANCE = Decimal("1000.00")
 
 #: Tests set this to force a scenario. None means "pick by weight".
 FORCE_SCENARIO: str | None = None
@@ -178,6 +182,14 @@ class MockVerificationProvider(VerificationProvider):
         existing_id = cache.get(f"{CACHE_PREFIX}idem:{idempotency_key}")
         if existing_id:
             return self.get_order_status(existing_id)
+
+        balance = cache.get(f"{CACHE_PREFIX}balance:{self.key}")
+        if balance not in (None, "error") and Decimal(str(balance)) < self.get_pricing(
+                service_code, country_code):
+            error = ProviderError("Verification is temporarily unavailable.")
+            error.provider_code = "WARNING_LOW_BALANCE"
+            error.operational = True
+            raise error
 
         scenario = _pick_scenario()
 
@@ -324,6 +336,17 @@ class MockVerificationProvider(VerificationProvider):
     def release_retry_after_seconds(self, service_code: str) -> int:
         return 1
 
+    # -- our account ------------------------------------------------------
+
+    supports_balance = True
+
+    def get_balance(self) -> BalanceDTO:
+        state = cache.get(f"{CACHE_PREFIX}balance:{self.key}")
+        if state == "error":
+            raise ProviderError("The verification provider did not report a balance.")
+        available = Decimal(str(state)) if state is not None else MOCK_BALANCE
+        return BalanceDTO(available=available, frozen=Decimal("0"), currency="USD")
+
     def health_check(self) -> bool:
         return True
 
@@ -346,6 +369,19 @@ def _next_forced_number() -> str | None:
     number, rest = queue[0], queue[1:]
     cache.set(f"{CACHE_PREFIX}forced_numbers", rest, CACHE_TTL)
     return number
+
+
+def set_balance(value, key: str = "mock") -> None:
+    """Set the mock account balance (a number), "error" to fail the read, or None to reset.
+
+    A balance below an offering's cost also makes `create_order` fail the way
+    OnlineSim does, with WARNING_LOW_BALANCE. `key` is the adapter key, so a
+    test can give a second mock adapter a balance of its own.
+    """
+    if value is None:
+        cache.delete(f"{CACHE_PREFIX}balance:{key}")
+    else:
+        cache.set(f"{CACHE_PREFIX}balance:{key}", str(value), CACHE_TTL)
 
 
 def force_scenario(name: str | None) -> None:
