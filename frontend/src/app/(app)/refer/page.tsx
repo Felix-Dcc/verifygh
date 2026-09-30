@@ -12,6 +12,7 @@ import {
   Card,
   EmptyState,
   Input,
+  LoadError,
   Section,
   Skeleton,
   StatusBadge,
@@ -49,8 +50,12 @@ function useCopy() {
 }
 
 export default function ReferPage() {
-  const { data, isLoading } = useSWR<MyReferral>("/referrals/me/");
-  const { data: history } = useSWR<{ results: ReferralHistoryItem[] }>("/referrals/history/");
+  const { data, isLoading, error, mutate } = useSWR<MyReferral>("/referrals/me/");
+  const {
+    data: history,
+    error: historyError,
+    mutate: retryHistory,
+  } = useSWR<{ results: ReferralHistoryItem[] }>("/referrals/history/");
   const { copied, copy } = useCopy();
   const [canShare, setCanShare] = React.useState(false);
 
@@ -89,129 +94,139 @@ export default function ReferPage() {
         </Alert>
       ) : null}
 
-      <Card className="grid grid-cols-1 overflow-hidden md:grid-cols-5">
-        <div className="p-5 sm:p-6 md:col-span-3">
-          <h2 className="text-heading text-ink">
-            {bonus ? `Your friend gets ${bonus} to start` : "Invite a friend"}
-          </h2>
-          <p className="mt-1 text-sm text-ink-muted">
-            The credit lands in their wallet once they confirm their email address.
-          </p>
+      {error && !data ? (
+        <Card>
+          <LoadError what="your referral code" onRetry={() => mutate()} />
+        </Card>
+      ) : (
+        <>
+          <Card className="grid grid-cols-1 overflow-hidden md:grid-cols-5">
+            <div className="p-5 sm:p-6 md:col-span-3">
+              <h2 className="text-heading text-ink">
+                {bonus ? `Your friend gets ${bonus} to start` : "Invite a friend"}
+              </h2>
+              <p className="mt-1 text-sm text-ink-muted">
+                The credit lands in their wallet once they confirm their email address.
+              </p>
 
-          <div className="mt-5">
-            <p className="text-label text-ink-muted">Your code</p>
-            {isLoading ? (
-              <Skeleton className="mt-2 h-11 w-48" />
-            ) : (
-              <div className="mt-1.5 flex flex-wrap items-center gap-3">
-                <span className="code select-all text-title font-semibold tracking-widest text-ink">
-                  {data?.code}
-                </span>
-                <Button
-                  variant="secondary"
-                  size="sm"
-                  onClick={() => data && copy(data.code, "code")}
-                  icon={
-                    copied === "code" ? <CheckIcon className="h-4 w-4" /> : <CopyIcon className="h-4 w-4" />
-                  }
-                >
-                  {copied === "code" ? "Copied" : "Copy code"}
-                </Button>
+              <div className="mt-5">
+                <p className="text-label text-ink-muted">Your code</p>
+                {isLoading ? (
+                  <Skeleton className="mt-2 h-11 w-48" />
+                ) : (
+                  <div className="mt-1.5 flex flex-wrap items-center gap-3">
+                    <span className="code select-all text-title font-semibold tracking-widest text-ink">
+                      {data?.code}
+                    </span>
+                    <Button
+                      variant="secondary"
+                      size="sm"
+                      onClick={() => data && copy(data.code, "code")}
+                      icon={
+                        copied === "code" ? <CheckIcon className="h-4 w-4" /> : <CopyIcon className="h-4 w-4" />
+                      }
+                    >
+                      {copied === "code" ? "Copied" : "Copy code"}
+                    </Button>
+                  </div>
+                )}
               </div>
-            )}
-          </div>
 
-          <div className="mt-5">
-            <label htmlFor="share-url" className="text-label text-ink-muted">
-              Your link
-            </label>
-            {isLoading ? (
-              <Skeleton className="mt-2 h-11 w-full max-w-md" />
-            ) : (
-              <div className="mt-1.5 flex gap-2">
-                <Input
-                  id="share-url"
-                  readOnly
-                  value={data?.share_url ?? ""}
-                  onFocus={(event) => event.target.select()}
-                  className="text-sm text-ink-soft"
-                />
-                <Button
-                  variant="secondary"
-                  onClick={() => data && copy(data.share_url, "link")}
-                  icon={
-                    copied === "link" ? <CheckIcon className="h-4 w-4" /> : <CopyIcon className="h-4 w-4" />
-                  }
-                  className="shrink-0"
-                >
-                  {copied === "link" ? "Copied" : "Copy link"}
-                </Button>
+              <div className="mt-5">
+                <label htmlFor="share-url" className="text-label text-ink-muted">
+                  Your link
+                </label>
+                {isLoading ? (
+                  <Skeleton className="mt-2 h-11 w-full max-w-md" />
+                ) : (
+                  <div className="mt-1.5 flex gap-2">
+                    <Input
+                      id="share-url"
+                      readOnly
+                      value={data?.share_url ?? ""}
+                      onFocus={(event) => event.target.select()}
+                      className="text-sm text-ink-soft"
+                    />
+                    <Button
+                      variant="secondary"
+                      onClick={() => data && copy(data.share_url, "link")}
+                      icon={
+                        copied === "link" ? <CheckIcon className="h-4 w-4" /> : <CopyIcon className="h-4 w-4" />
+                      }
+                      className="shrink-0"
+                    >
+                      {copied === "link" ? "Copied" : "Copy link"}
+                    </Button>
+                  </div>
+                )}
               </div>
-            )}
-          </div>
 
-          <div className="mt-5 flex flex-wrap gap-2">
-            <a
-              href={`https://wa.me/?text=${encodeURIComponent(message)}`}
-              target="_blank"
-              rel="noopener noreferrer"
-              className={buttonClasses({})}
-            >
-              <MessageIcon className="h-4 w-4" />
-              Share on WhatsApp
-            </a>
-            <a
-              href={`sms:?&body=${encodeURIComponent(message)}`}
-              className={buttonClasses({ variant: "secondary" })}
-            >
-              Send by SMS
-            </a>
-            {canShare ? (
-              <Button variant="secondary" onClick={share} icon={<ShareIcon className="h-4 w-4" />}>
-                More
-              </Button>
-            ) : null}
-          </div>
-        </div>
-
-        <div className="border-t border-line bg-sunken/50 p-5 sm:p-6 md:col-span-2 md:border-l md:border-t-0">
-          <h2 className="text-sm font-semibold text-ink">How it works</h2>
-          <ol className="mt-3 space-y-3">
-            {[
-              "Share your code or link with a friend.",
-              "They create an account and confirm their email address.",
-              `${bonus || "The bonus"} in promotional credit lands in their wallet.`,
-            ].map((step, index) => (
-              <li key={step} className="flex gap-3 text-sm text-ink-soft">
-                <span
-                  aria-hidden
-                  className="tabular flex h-6 w-6 shrink-0 items-center justify-center rounded-full border border-line bg-surface text-caption font-semibold text-ink-soft"
+              <div className="mt-5 flex flex-wrap gap-2">
+                <a
+                  href={`https://wa.me/?text=${encodeURIComponent(message)}`}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className={buttonClasses({})}
                 >
-                  {index + 1}
-                </span>
-                <span className="pt-0.5">{step}</span>
-              </li>
-            ))}
-          </ol>
-          <p className="mt-4 text-caption text-ink-muted">
-            Promotional credit can be spent on any number. It cannot be withdrawn, transferred or
-            converted to cash, and one bonus is given per account.
-          </p>
-        </div>
-      </Card>
+                  <MessageIcon className="h-4 w-4" />
+                  Share on WhatsApp
+                </a>
+                <a
+                  href={`sms:?&body=${encodeURIComponent(message)}`}
+                  className={buttonClasses({ variant: "secondary" })}
+                >
+                  Send by SMS
+                </a>
+                {canShare ? (
+                  <Button variant="secondary" onClick={share} icon={<ShareIcon className="h-4 w-4" />}>
+                    More
+                  </Button>
+                ) : null}
+              </div>
+            </div>
 
-      <Card className="grid grid-cols-3 divide-x divide-line">
-        <Stat label="Joined and confirmed" value={data?.stats.successful} />
-        <Stat label="Waiting to confirm" value={data?.stats.pending} />
-        <Stat
-          label="Credit given to friends"
-          value={data ? cedis(data.stats.rewards_issued) : undefined}
-        />
-      </Card>
+            <div className="border-t border-line bg-sunken/50 p-5 sm:p-6 md:col-span-2 md:border-l md:border-t-0">
+              <h2 className="text-sm font-semibold text-ink">How it works</h2>
+              <ol className="mt-3 space-y-3">
+                {[
+                  "Share your code or link with a friend.",
+                  "They create an account and confirm their email address.",
+                  `${bonus || "The bonus"} in promotional credit lands in their wallet.`,
+                ].map((step, index) => (
+                  <li key={step} className="flex gap-3 text-sm text-ink-soft">
+                    <span
+                      aria-hidden
+                      className="tabular flex h-6 w-6 shrink-0 items-center justify-center rounded-full border border-line bg-surface text-caption font-semibold text-ink-soft"
+                    >
+                      {index + 1}
+                    </span>
+                    <span className="pt-0.5">{step}</span>
+                  </li>
+                ))}
+              </ol>
+              <p className="mt-4 text-caption text-ink-muted">
+                Promotional credit can be spent on any number. It cannot be withdrawn, transferred or
+                converted to cash, and one bonus is given per account.
+              </p>
+            </div>
+          </Card>
+
+          <Card className="grid grid-cols-3 divide-x divide-line">
+            <Stat label="Joined and confirmed" value={data?.stats.successful} />
+            <Stat label="Waiting to confirm" value={data?.stats.pending} />
+            <Stat
+              label="Credit given to friends"
+              value={data ? cedis(data.stats.rewards_issued) : undefined}
+            />
+          </Card>
+        </>
+      )}
 
       <Section title="Your invitations">
         <Card className="overflow-hidden">
-          {!history ? (
+          {historyError && !history ? (
+            <LoadError what="your invitations" onRetry={() => retryHistory()} />
+          ) : !history ? (
             <div className="space-y-2 p-4" aria-busy>
               <Skeleton className="h-12 w-full" />
               <Skeleton className="h-12 w-full" />

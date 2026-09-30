@@ -9,9 +9,9 @@ export function LegalHeader({
 }) {
   return (
     <header className="border-b border-line pb-6">
-      <h1 className="text-3xl font-semibold tracking-tight text-ink">{title}</h1>
+      <h1 className="text-display text-ink">{title}</h1>
       <p className="mt-2 text-sm text-ink-muted">Last updated {updated}</p>
-      <p className="mt-4 rounded-xl bg-canvas p-4 text-sm leading-relaxed text-ink-soft">
+      <p className="mt-4 rounded-lg bg-sunken p-4 text-sm leading-relaxed text-ink-soft">
         <span className="font-semibold text-ink">In short: </span>
         {summary}
       </p>

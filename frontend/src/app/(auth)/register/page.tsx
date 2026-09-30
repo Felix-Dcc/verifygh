@@ -130,10 +130,10 @@ export default function RegisterPage() {
   if (registeredEmail) {
     return (
       <Card className="flex flex-col items-center p-8 text-center">
-        <div className="flex h-12 w-12 items-center justify-center rounded-2xl bg-brand-50 text-brand-700">
+        <div className="flex h-12 w-12 items-center justify-center rounded-xl bg-brand-50 text-brand-700">
           <MailIcon className="h-6 w-6" />
         </div>
-        <h1 className="mt-4 text-xl font-semibold text-ink">Check your email</h1>
+        <h1 className="mt-4 text-title text-ink">Check your email</h1>
         <p className="mt-2 text-sm text-ink-muted">
           We&apos;ve sent a verification link to:
         </p>

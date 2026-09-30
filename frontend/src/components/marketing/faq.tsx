@@ -129,9 +129,8 @@ export function Faq() {
   return (
     <section id="faq" className="container-page scroll-mt-20 py-16 sm:py-20">
       <div className="mx-auto max-w-3xl">
-        <p className="text-sm font-semibold uppercase tracking-wide text-brand-600">FAQ</p>
-        <h2 className="mt-2 text-2xl font-semibold tracking-tight text-ink sm:text-3xl">
-          Questions people actually ask
+        <h2 className="text-2xl font-semibold tracking-tight text-ink sm:text-3xl">
+          Questions people ask
         </h2>
 
         <dl className="mt-8 divide-y divide-line border-y border-line">

@@ -160,6 +160,6 @@ Still open, deliberately:
 * **Dark mode** - out of scope; the tokens keep it possible.
 * **Active sessions list** - the backend has no sessions endpoint, and the redesign
   does not invent one. "Change password" still signs every other session out.
-* **Legal pages** still use the `verifygh.example` placeholder addresses; they need
-  the real support and privacy contacts.
+* ~~Legal pages used `verifygh.example` placeholder addresses~~ - fixed: every
+  contact now goes to `support@getverifygh.com` (privacy and abuse reports with a subject line).
 

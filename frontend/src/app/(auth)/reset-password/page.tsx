@@ -56,7 +56,7 @@ function ResetPasswordForm() {
   if (!token) {
     return (
       <Card className="p-6">
-        <h1 className="text-xl font-semibold text-ink">This link is not valid</h1>
+        <h1 className="text-title text-ink">This link is not valid</h1>
         <p className="mt-2 text-sm text-ink-muted">
           The reset link is missing its token. Request a new one and use the most recent email.
         </p>

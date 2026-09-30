@@ -16,6 +16,7 @@ import {
   CardHeader,
   EmptyState,
   Field,
+  LoadError,
   SegmentedControl,
   Skeleton,
   Textarea,
@@ -67,9 +68,17 @@ export default function AdminSystemPage() {
 /* ------------------------------------------------------------------ */
 
 function HealthTab() {
-  const { data, isLoading } = useSWR<AdminSystemHealth>("/admin/health/", {
+  const { data, isLoading, error, mutate } = useSWR<AdminSystemHealth>("/admin/health/", {
     refreshInterval: 30_000,
   });
+
+  if (error && !data) {
+    return (
+      <Card>
+        <LoadError what="system health" onRetry={() => mutate()} />
+      </Card>
+    );
+  }
 
   if (isLoading || !data) {
     return (
@@ -200,7 +209,7 @@ function ProviderCard({
       <div className="flex items-start justify-between gap-3">
         <div>
           <p className="text-sm text-ink-muted">{title}</p>
-          <p className="mt-0.5 text-lg font-semibold text-ink">{providerKey}</p>
+          <p className="mt-0.5 text-heading text-ink">{providerKey}</p>
         </div>
         <span
           className={cn(
@@ -264,7 +273,7 @@ function FlagsTab() {
   const [note, setNote] = React.useState("");
   const [busy, setBusy] = React.useState(false);
 
-  const { data, mutate } = useSWR<Paginated<SuspiciousActivity>>([
+  const { data, error, mutate } = useSWR<Paginated<SuspiciousActivity>>([
     "/admin/flags/",
     { resolved: showResolved ? "true" : "", page, page_size: 25 },
   ]);
@@ -307,7 +316,9 @@ function FlagsTab() {
       />
 
       <Card className="overflow-hidden">
-        {!data ? (
+        {error && !data ? (
+          <LoadError what="this list" onRetry={() => mutate()} />
+        ) : !data ? (
           <RowSkeletons />
         ) : flags.length === 0 ? (
           <EmptyState
@@ -414,7 +425,7 @@ function FlagsTab() {
 
 function AuditTab({ canView }: { canView: boolean }) {
   const [page, setPage] = React.useState(1);
-  const { data } = useSWR<Paginated<AuditLogEntry>>(
+  const { data, error, mutate } = useSWR<Paginated<AuditLogEntry>>(
     canView ? ["/admin/audit/", { page, page_size: 50 }] : null,
   );
 
@@ -429,7 +440,9 @@ function AuditTab({ canView }: { canView: boolean }) {
   return (
     <div className="space-y-4">
       <Card className="overflow-hidden">
-        {!data ? (
+        {error && !data ? (
+          <LoadError what="this list" onRetry={() => mutate()} />
+        ) : !data ? (
           <RowSkeletons />
         ) : data.results.length === 0 ? (
           <EmptyState icon={<FlagIcon />} title="Nothing logged yet" />
@@ -476,7 +489,7 @@ function AuditTab({ canView }: { canView: boolean }) {
 
 function ActionsTab({ canView }: { canView: boolean }) {
   const [page, setPage] = React.useState(1);
-  const { data } = useSWR<Paginated<AdminActionEntry>>(
+  const { data, error, mutate } = useSWR<Paginated<AdminActionEntry>>(
     canView ? ["/admin/admin-actions/", { page, page_size: 50 }] : null,
   );
 
@@ -496,7 +509,9 @@ function ActionsTab({ canView }: { canView: boolean }) {
       </Alert>
 
       <Card className="overflow-hidden">
-        {!data ? (
+        {error && !data ? (
+          <LoadError what="this list" onRetry={() => mutate()} />
+        ) : !data ? (
           <RowSkeletons />
         ) : data.results.length === 0 ? (
           <EmptyState icon={<ShieldIcon />} title="No privileged actions yet" />

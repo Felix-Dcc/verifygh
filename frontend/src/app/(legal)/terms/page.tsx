@@ -13,7 +13,7 @@ export default function TermsPage() {
     <>
       <LegalHeader
         title="Terms of Service"
-        updated="1 January 2026"
+        updated="30 September 2026"
         summary="You top up a wallet with Mobile Money and spend it on verification numbers we buy from an authorised provider on your behalf. Prices are in cedis and shown before you pay. If we cannot deliver, you get your money back automatically. You are responsible for how you use the numbers."
       />
 
@@ -35,7 +35,7 @@ export default function TermsPage() {
         <li>
           You are responsible for everything done through your account. Keep your password secret
           and tell us immediately at{" "}
-          <a href="mailto:support@verifygh.example">support@verifygh.example</a> if you think
+          <a href="mailto:support@getverifygh.com">support@getverifygh.com</a> if you think
           someone else has access.
         </li>
         <li>One person, one account. Accounts may not be shared, sold or transferred.</li>
@@ -194,7 +194,7 @@ export default function TermsPage() {
 
       <h2>13. Contact</h2>
       <p>
-        <a href="mailto:support@verifygh.example">support@verifygh.example</a>
+        <a href="mailto:support@getverifygh.com">support@getverifygh.com</a>
       </p>
     </>
   );

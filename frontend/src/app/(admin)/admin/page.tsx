@@ -10,6 +10,7 @@ import {
   Alert,
   Card,
   CardHeader,
+  LoadError,
   Section,
   SegmentedControl,
   Skeleton,
@@ -22,7 +23,12 @@ type Range = "7" | "14" | "30" | "90";
 export default function AdminOverviewPage() {
   const [range, setRange] = React.useState<Range>("14");
 
-  const { data: overview, isLoading } = useSWR<AdminOverview>("/admin/overview/", {
+  const {
+    data: overview,
+    isLoading,
+    error: overviewError,
+    mutate: retryOverview,
+  } = useSWR<AdminOverview>("/admin/overview/", {
     refreshInterval: 60_000,
   });
   const { data: charts } = useSWR<AdminCharts>(["/admin/charts/", { days: range }]);
@@ -76,7 +82,11 @@ export default function AdminOverviewPage() {
         </Alert>
       ) : null}
 
-      {isLoading || !overview ? (
+      {overviewError && !overview ? (
+        <Card>
+          <LoadError what="the overview figures" onRetry={() => retryOverview()} />
+        </Card>
+      ) : isLoading || !overview ? (
         <TileSkeletons />
       ) : (
         <>

@@ -19,6 +19,7 @@ import {
   EmptyState,
   Field,
   Input,
+  LoadError,
   SegmentedControl,
   Skeleton,
   StatusBadge,
@@ -68,7 +69,7 @@ export default function AdminNumberIssuesPage() {
     return () => window.clearTimeout(timer);
   }, [search]);
 
-  const { data, isLoading, mutate } = useSWR<Paginated<AdminNumberIssue>>([
+  const { data, isLoading, error, mutate } = useSWR<Paginated<AdminNumberIssue>>([
     "/admin/number-issues/",
     { status, search: debounced, page, page_size: 25 },
   ]);
@@ -113,6 +114,8 @@ export default function AdminNumberIssuesPage() {
       <Card className="overflow-hidden">
         {isLoading ? (
           <RowSkeletons />
+        ) : error && !data ? (
+          <LoadError what="the reports" onRetry={() => mutate()} />
         ) : issues.length === 0 ? (
           <EmptyState
             icon={<FlagIcon />}

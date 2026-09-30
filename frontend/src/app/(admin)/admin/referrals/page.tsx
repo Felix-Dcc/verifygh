@@ -15,6 +15,7 @@ import {
   EmptyState,
   Field,
   Input,
+  LoadError,
   SegmentedControl,
   Skeleton,
   StatusBadge,
@@ -50,7 +51,7 @@ export default function AdminReferralsPage() {
   }, [search]);
 
   const key = ["/admin/referrals/", { status, search: debounced, page, page_size: 25 }] as const;
-  const { data, isLoading, mutate } = useSWR<Paginated<AdminReferral>>(key);
+  const { data, isLoading, error, mutate } = useSWR<Paginated<AdminReferral>>(key);
   const { data: analytics, mutate: refreshAnalytics } =
     useSWR<ReferralAnalytics>("/admin/referrals-analytics/");
 
@@ -116,6 +117,8 @@ export default function AdminReferralsPage() {
               <Skeleton key={row} className="h-12 w-full" />
             ))}
           </div>
+        ) : error && !data ? (
+          <LoadError what="the referrals" onRetry={() => mutate()} />
         ) : referrals.length === 0 ? (
           <EmptyState
             icon={<GiftIcon />}

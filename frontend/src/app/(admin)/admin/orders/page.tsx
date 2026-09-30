@@ -18,6 +18,7 @@ import {
   EmptyState,
   Field,
   Input,
+  LoadError,
   SegmentedControl,
   Skeleton,
   StatusBadge,
@@ -62,7 +63,7 @@ export default function AdminOrdersPage() {
     return () => window.clearTimeout(timer);
   }, [search]);
 
-  const { data, isLoading, mutate } = useSWR<Paginated<AdminOrder>>([
+  const { data, isLoading, error, mutate } = useSWR<Paginated<AdminOrder>>([
     "/admin/orders/",
     { status, search: debounced, page, page_size: 25 },
   ]);
@@ -102,6 +103,8 @@ export default function AdminOrdersPage() {
       <Card className="overflow-hidden">
         {isLoading ? (
           <RowSkeletons />
+        ) : error && !data ? (
+          <LoadError what="the orders" onRetry={() => mutate()} />
         ) : orders.length === 0 ? (
           <EmptyState
             icon={<ReceiptIcon />}

@@ -25,6 +25,7 @@ import {
   EmptyState,
   Field,
   Input,
+  LoadError,
   Select,
   Skeleton,
   Textarea,
@@ -61,7 +62,7 @@ export function PricingSummaryCards({ summary }: { summary?: PricingSummary }) {
     return (
       <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-4">
         {Array.from({ length: 4 }).map((_, index) => (
-          <Skeleton key={index} className="h-24 rounded-2xl" />
+          <Skeleton key={index} className="h-24 rounded-xl" />
         ))}
       </div>
     );
@@ -171,7 +172,7 @@ export function PricingTable({
       ([, value]) => value !== "",
     ),
   );
-  const { data, isLoading } = useSWR<Paginated<PricingRow>>(["/admin/pricing/offerings/", params]);
+  const { data, isLoading, error, mutate } = useSWR<Paginated<PricingRow>>(["/admin/pricing/offerings/", params]);
   const rows = data?.results ?? [];
   const set = (key: keyof typeof filters, value: string) => {
     setFilters((current) => ({ ...current, [key]: value }));
@@ -234,6 +235,8 @@ export function PricingTable({
             <Skeleton key={index} className="h-8 w-full" />
           ))}
         </div>
+      ) : error && !data ? (
+        <LoadError what="the prices" onRetry={() => mutate()} />
       ) : rows.length === 0 ? (
         <EmptyState icon={<SearchIcon />} title="No prices match these filters" />
       ) : (
@@ -552,7 +555,7 @@ function Info({ label, value, hint }: { label: string; value: React.ReactNode; h
   return (
     <div className="rounded-lg bg-sunken px-3.5 py-3">
       <p className="text-xs text-ink-muted">{label}</p>
-      <p className="tabular mt-0.5 text-lg font-semibold text-ink">{value}</p>
+      <p className="tabular mt-0.5 text-heading text-ink">{value}</p>
       {hint ? <p className="text-xs text-ink-faint">{hint}</p> : null}
     </div>
   );

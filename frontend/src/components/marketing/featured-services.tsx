@@ -3,10 +3,9 @@
 import Link from "next/link";
 import useSWR from "swr";
 
-import { CountryFlag } from "@/components/country-flag";
 import { ServiceLogo } from "@/components/service-logo";
 import { ArrowRightIcon } from "@/components/icons";
-import { Badge, ButtonLink, Skeleton } from "@/components/ui/primitives";
+import { ButtonLink, Skeleton } from "@/components/ui/primitives";
 import { cedis } from "@/lib/format";
 import type { Service } from "@/lib/types";
 
@@ -25,100 +24,62 @@ export function FeaturedServices() {
     <section className="container-page py-16 sm:py-20" aria-labelledby="services-heading">
       <div className="flex flex-wrap items-end justify-between gap-4">
         <div className="max-w-xl">
-          <p className="text-sm font-semibold uppercase tracking-wide text-brand-600">
-            Supported services
-          </p>
           <h2
             id="services-heading"
-            className="mt-2 text-2xl font-semibold tracking-tight text-ink sm:text-3xl"
+            className="text-2xl font-semibold tracking-tight text-ink sm:text-3xl"
           >
-            Availability and prices, live
+            Services and today&apos;s prices
           </h2>
           <p className="mt-3 text-base text-ink-muted">
-            We show what our provider actually has in stock right now. Prices are in cedis and
-            include every fee - what you see is what leaves your wallet.
+            Live from our provider&apos;s stock. The price is what leaves your wallet.
           </p>
         </div>
         <ButtonLink href="/services" variant="secondary" icon={<ArrowRightIcon className="h-4 w-4" />}>
-          View all services
+          All services
         </ButtonLink>
       </div>
 
-      <div className="mt-8 grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-4">
-        {isLoading ? (
-          Array.from({ length: 8 }).map((_, index) => (
-            <div key={index} className="card p-4">
-              <div className="flex items-center gap-3">
-                <Skeleton className="h-11 w-11 rounded-xl" />
-                <div className="flex-1 space-y-2">
-                  <Skeleton className="h-3.5 w-24" />
-                  <Skeleton className="h-3 w-16" />
-                </div>
-              </div>
-              <Skeleton className="mt-4 h-4 w-20" />
+      {isLoading ? (
+        <div className="metric-group mt-8 grid-cols-1 sm:grid-cols-2 lg:grid-cols-4" aria-busy>
+          {Array.from({ length: 8 }).map((_, index) => (
+            <div key={index} className="flex items-center gap-3 bg-surface p-4">
+              <Skeleton className="h-9 w-9 rounded-lg" />
+              <Skeleton className="h-3.5 flex-1" />
+              <Skeleton className="h-3.5 w-16" />
             </div>
-          ))
-        ) : error || services.length === 0 ? (
-          <div className="card col-span-full p-6 text-center">
-            <p className="text-sm font-medium text-ink">
-              The catalogue is not available right now.
-            </p>
-            <p className="mt-1 text-sm text-ink-muted">
-              Supported services and prices appear here as soon as our provider connection is
-              live.
-            </p>
-          </div>
-        ) : (
-          services.map((service) => <FeaturedCard key={service.slug} service={service} />)
-        )}
-      </div>
+          ))}
+        </div>
+      ) : error || services.length === 0 ? (
+        <div className="card mt-8 p-6 text-center">
+          <p className="text-sm font-medium text-ink">The catalogue is not available right now.</p>
+          <p className="mt-1 text-sm text-ink-muted">
+            Services and prices appear here as soon as our provider connection is live.
+          </p>
+        </div>
+      ) : (
+        <ul className="metric-group mt-8 grid-cols-1 sm:grid-cols-2 lg:grid-cols-4">
+          {services.map((service) => (
+            <li key={service.slug} className="bg-surface">
+              <Link
+                href={`/services?service=${service.slug}`}
+                className="flex min-h-16 items-center gap-3 px-4 py-3 transition-colors hover:bg-sunken/60"
+              >
+                <ServiceLogo name={service.name} src={service.icon_url} slug={service.slug} size="sm" />
+                <span className="min-w-0 flex-1 truncate text-sm font-medium text-ink" title={service.name}>
+                  {service.name}
+                </span>
+                {service.available ? (
+                  <span className="tabular text-sm font-medium text-ink">
+                    {cedis(service.from_price)}
+                  </span>
+                ) : (
+                  <span className="text-caption text-ink-muted">Out of stock</span>
+                )}
+              </Link>
+            </li>
+          ))}
+        </ul>
+      )}
     </section>
-  );
-}
-
-function FeaturedCard({ service }: { service: Service }) {
-  // The featured endpoint sends a few available countries for the flags; the
-  // authoritative count is country_count, which covers the rest.
-  const flags = (service.countries ?? []).slice(0, 3);
-  const total = service.country_count;
-
-  return (
-    <Link
-      href={`/services?service=${service.slug}`}
-      className="card group p-4 transition-shadow hover:shadow-raised focus-visible:shadow-raised"
-    >
-      <div className="flex items-center gap-3">
-        <ServiceLogo name={service.name} src={service.icon_url} slug={service.slug} />
-        <div className="min-w-0 flex-1">
-          <p className="truncate text-sm font-semibold text-ink">{service.name}</p>
-          <p className="truncate text-xs text-ink-muted">
-            {total} {total === 1 ? "country" : "countries"}
-          </p>
-        </div>
-      </div>
-
-      <div className="mt-4 flex items-end justify-between gap-2">
-        <div>
-          <p className="text-2xs uppercase tracking-wide text-ink-faint">From</p>
-          <p className="tabular text-base font-semibold text-ink">
-            {cedis(service.from_price)}
-          </p>
-        </div>
-        <div className="flex items-center gap-1.5">
-          <span className="flex items-center gap-1" aria-hidden>
-            {flags.map((country) => (
-              <CountryFlag key={country.code} code={country.code} size="sm" />
-            ))}
-          </span>
-          {service.available ? (
-            <Badge tone="success" dot>
-              Available
-            </Badge>
-          ) : (
-            <Badge tone="neutral">Out of stock</Badge>
-          )}
-        </div>
-      </div>
-    </Link>
   );
 }

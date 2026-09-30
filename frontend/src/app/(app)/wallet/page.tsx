@@ -11,6 +11,7 @@ import {
   ButtonLink,
   Card,
   EmptyState,
+  LoadError,
   Section,
   Skeleton,
   StatusBadge,
@@ -20,14 +21,17 @@ import { cedis, formatDateTime } from "@/lib/format";
 import type { Paginated, Payment, Transaction, WalletSummary } from "@/lib/types";
 
 export default function WalletPage() {
-  const { data: summary, isLoading } = useSWR<WalletSummary>("/wallet/summary/");
-  const { data: transactions } = useSWR<Paginated<Transaction>>([
-    "/transactions/",
-    { page_size: 6 },
-  ]);
-  const { data: payments } = useSWR<Paginated<Payment>>(["/payments/", { page_size: 5 }]);
+  const {
+    data: summary,
+    isLoading,
+    error: summaryError,
+    mutate: retrySummary,
+  } = useSWR<WalletSummary>("/wallet/summary/");
+  const transactions = useSWR<Paginated<Transaction>>(["/transactions/", { page_size: 6 }]);
+  const payments = useSWR<Paginated<Payment>>(["/payments/", { page_size: 5 }]);
 
   const wallet = summary?.wallet;
+  const summaryFailed = Boolean(summaryError) && !summary;
   const hasPromo = Number(wallet?.promo_balance ?? 0) > 0;
 
   return (
@@ -49,6 +53,8 @@ export default function WalletPage() {
           <div className="mt-1.5 min-h-10">
             {isLoading ? (
               <Skeleton className="h-10 w-48" />
+            ) : summaryFailed ? (
+              <LoadError compact what="your balance" onRetry={() => retrySummary()} className="pt-2" />
             ) : (
               <Amount value={cedis(hasPromo ? wallet?.spendable : wallet?.balance)} />
             )}
@@ -94,9 +100,11 @@ export default function WalletPage() {
           }
         >
           <Card className="overflow-hidden">
-            {!transactions ? (
+            {transactions.error && !transactions.data ? (
+              <LoadError what="your transactions" onRetry={() => transactions.mutate()} />
+            ) : !transactions.data ? (
               <RowSkeletons />
-            ) : transactions.results.length === 0 ? (
+            ) : transactions.data.results.length === 0 ? (
               <EmptyState
                 icon={<WalletIcon />}
                 title="No transactions yet"
@@ -104,7 +112,7 @@ export default function WalletPage() {
               />
             ) : (
               <ul className="divide-y divide-line">
-                {transactions.results.map((entry) => (
+                {transactions.data.results.map((entry) => (
                   <TransactionRow key={entry.id} entry={entry} />
                 ))}
               </ul>
@@ -114,9 +122,11 @@ export default function WalletPage() {
 
         <Section title="Top-ups" description="Mobile Money payments into your wallet.">
           <Card className="overflow-hidden">
-            {!payments ? (
+            {payments.error && !payments.data ? (
+              <LoadError what="your top-ups" onRetry={() => payments.mutate()} />
+            ) : !payments.data ? (
               <RowSkeletons />
-            ) : payments.results.length === 0 ? (
+            ) : payments.data.results.length === 0 ? (
               <EmptyState
                 icon={<ReceiptIcon />}
                 title="No top-ups yet"
@@ -127,7 +137,7 @@ export default function WalletPage() {
               />
             ) : (
               <ul className="divide-y divide-line">
-                {payments.results.map((payment) => (
+                {payments.data.results.map((payment) => (
                   <li key={payment.id} className="flex items-center gap-3 px-4 py-3 sm:px-5">
                     <div className="min-w-0 flex-1">
                       <p className="text-sm text-ink">

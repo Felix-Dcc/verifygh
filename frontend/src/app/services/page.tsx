@@ -14,7 +14,7 @@ import { SiteFooter, SiteHeader } from "@/components/marketing/site-chrome";
  */
 export default function ServicesPage() {
   return (
-    <React.Suspense fallback={null}>
+    <React.Suspense fallback={<div className="min-h-dvh bg-canvas" />}>
       <ServicesRoute />
     </React.Suspense>
   );

@@ -16,6 +16,7 @@ import {
   Card,
   EmptyState,
   Input,
+  LoadError,
   SegmentedControl,
   Skeleton,
   StatusBadge,
@@ -39,7 +40,7 @@ const isFilter = (value: string | null): value is Filter =>
 export default function OrdersPage() {
   // useSearchParams needs a boundary, or the page cannot be prerendered.
   return (
-    <React.Suspense fallback={null}>
+    <React.Suspense fallback={<ListSkeleton />}>
       <Orders />
     </React.Suspense>
   );
@@ -64,7 +65,7 @@ function Orders() {
     return () => window.clearTimeout(timer);
   }, [search]);
 
-  const { data, isLoading } = useSWR<Paginated<OrderSummary>>([
+  const { data, isLoading, error, mutate } = useSWR<Paginated<OrderSummary>>([
     "/orders/",
     { filter: filter === "all" ? "" : filter, search: debouncedSearch, page, page_size: 20 },
   ]);
@@ -108,6 +109,8 @@ function Orders() {
       <Card className="overflow-hidden">
         {isLoading ? (
           <ListSkeleton />
+        ) : error && !data ? (
+          <LoadError what="your orders" onRetry={() => mutate()} />
         ) : orders.length === 0 ? (
           <EmptyState
             icon={<ReceiptIcon />}

@@ -10,7 +10,7 @@ import { CountryFlag } from "@/components/country-flag";
 import { SearchIcon, StarIcon } from "@/components/icons";
 import { AvailabilityLabel, TemporarilyUnavailableBadge } from "@/components/marketplace/availability";
 import { BuyDialog } from "@/components/marketplace/buy-dialog";
-import { Alert, Button, Card, EmptyState, Skeleton, cn } from "@/components/ui/primitives";
+import { Alert, Button, Card, EmptyState, LoadError, Skeleton, cn } from "@/components/ui/primitives";
 import { ServiceLogo } from "@/components/service-logo";
 import { useToast } from "@/components/ui/toast";
 import { ApiError, api } from "@/lib/api";
@@ -29,10 +29,11 @@ const PAGE_SIZE = 40;
 /**
  * SMS Verifications: find a service, pick a country, get a number.
  *
- * Built for speed on a phone: compact rows rather than cards, pinned services
- * first, then popular ones, then everything. Search runs on the server, so it
- * stays fast however large the catalogue grows, and every price, stock figure
- * and "popular" label comes from the backend - there is no catalogue here.
+ * Built for speed on a phone: compact rows rather than cards. Quick picks
+ * (the customer's recent services, then popular ones) sit above favourites and
+ * the full list, and nothing appears twice as a row. Search runs on the
+ * server, so it stays fast however large the catalogue grows, and every price,
+ * stock figure and "popular" rank comes from the backend.
  */
 export function Marketplace() {
   const router = useRouter();
@@ -58,7 +59,7 @@ export function Marketplace() {
   }, [search]);
 
   const { data: health } = useSWR<CatalogHealth>("/catalog/health/");
-  const { data: home, mutate: mutateHome } = useSWR<MarketHome>([
+  const { data: home, error: homeError, mutate: mutateHome } = useSWR<MarketHome>([
     "/marketplace/home/",
     country ? { country } : {},
   ]);
@@ -124,25 +125,33 @@ export function Marketplace() {
   }
 
   const searching = query.length > 0;
-  const countryInfo = home?.countries.find((entry) => entry.code === activeCountry);
   const pinned = (home?.pinned ?? []).filter((row) => isPinned(row));
-  const popular = home?.popular ?? [];
+  // The list needs a country, and the country comes from this request.
+  const homeFailed = Boolean(homeError) && !home && !activeCountry;
 
   // "Recently used": the customer's own last orders, one entry per service.
   const { data: recent } = useSWR<Paginated<OrderSummary>>(
     user ? ["/orders/", { page_size: 20 }] : null,
   );
-  const recentlyUsed = React.useMemo(() => {
-    const seen = new Set<string>();
+  // Quick picks: what this customer bought before, then what most people buy.
+  // One row of chips instead of a "Popular" list that repeated rows already in
+  // "All services".
+  const quickPicks = React.useMemo(() => {
+    // Favourites have their own list just below; they are not repeated here.
+    const seen = new Set<string>((home?.pinned ?? []).map((row) => row.slug));
     const out: { slug: string; name: string; icon: string }[] = [];
     for (const order of recent?.results ?? []) {
       if (seen.has(order.service_slug) || order.country_code !== activeCountry) continue;
       seen.add(order.service_slug);
       out.push({ slug: order.service_slug, name: order.service_name, icon: order.service_icon });
-      if (out.length === 6) break;
     }
-    return out;
-  }, [recent, activeCountry]);
+    for (const row of home?.popular ?? []) {
+      if (seen.has(row.slug) || row.temporarily_unavailable) continue;
+      seen.add(row.slug);
+      out.push({ slug: row.slug, name: row.name, icon: row.icon_url });
+    }
+    return out.slice(0, 6);
+  }, [recent, home?.popular, home?.pinned, activeCountry]);
 
   const rowProps = (row: MarketRow) => ({
     row,
@@ -175,21 +184,23 @@ export function Marketplace() {
           />
         </label>
         <div className="flex items-center gap-3">
-          <CountrySwitch
-            countries={home?.countries ?? []}
-            value={activeCountry}
-            onChange={changeCountry}
-          />
+          {homeFailed ? null : (
+            <CountrySwitch
+              countries={home?.countries ?? []}
+              value={activeCountry}
+              onChange={changeCountry}
+            />
+          )}
         </div>
       </div>
 
-      {!searching && recentlyUsed.length > 0 ? (
-        <section aria-labelledby="recent-heading">
-          <h2 id="recent-heading" className="mb-2 text-label text-ink-muted">
-            Recently used
+      {!searching && quickPicks.length > 0 ? (
+        <section aria-labelledby="quick-heading">
+          <h2 id="quick-heading" className="mb-2 text-label text-ink-muted">
+            Quick picks
           </h2>
           <div className="no-scrollbar -mx-4 flex gap-2 overflow-x-auto px-4 sm:mx-0 sm:flex-wrap sm:px-0">
-            {recentlyUsed.map((service) => (
+            {quickPicks.map((service) => (
               <button
                 key={service.slug}
                 type="button"
@@ -205,17 +216,9 @@ export function Marketplace() {
       ) : null}
 
       {!searching && pinned.length > 0 ? (
-        <ServiceList title="Favourites" count={pinned.length} countryName={countryInfo?.name}>
+        <ServiceList title="Favourites" count={pinned.length}>
           {pinned.map((row) => (
             <ServiceRow key={`pin-${row.slug}`} {...rowProps(row)} />
-          ))}
-        </ServiceList>
-      ) : null}
-
-      {!searching && popular.length > 0 ? (
-        <ServiceList title="Popular" countryName={countryInfo?.name}>
-          {popular.map((row) => (
-            <ServiceRow key={`pop-${row.slug}`} {...rowProps(row)} />
           ))}
         </ServiceList>
       ) : null}
@@ -223,17 +226,13 @@ export function Marketplace() {
       <ServiceList
         title={searching ? `Results for "${query}"` : "All services"}
         count={list.data ? total : undefined}
-        countryName={countryInfo?.name}
       >
-        {!list.data && !list.error ? (
+        {homeFailed ? (
+          <LoadError what="the services" onRetry={() => mutateHome()} />
+        ) : !list.data && !list.error ? (
           <RowSkeletons />
         ) : list.error ? (
-          <EmptyState
-            icon={<SearchIcon />}
-            title="We couldn't load the services"
-            description="Check your connection, then try again. Nothing has been charged."
-            action={<Button onClick={() => list.mutate()}>Try again</Button>}
-          />
+          <LoadError what="the services" onRetry={() => list.mutate()} />
         ) : rows.length === 0 ? (
           <EmptyState
             icon={<SearchIcon />}
@@ -322,25 +321,18 @@ function CountrySwitch({
 function ServiceList({
   title,
   count,
-  countryName,
   children,
 }: {
   title: string;
   count?: number;
-  countryName?: string;
   children: React.ReactNode;
 }) {
   return (
     <section>
-      <div className="mb-2 flex items-baseline justify-between gap-3">
-        <h2 className="text-label text-ink-muted">
-          {title}
-          {count !== undefined ? <span className="tabular ml-1.5 text-ink-faint">{count}</span> : null}
-        </h2>
-        {countryName ? (
-          <span className="hidden text-caption text-ink-faint sm:inline">Prices for {countryName}</span>
-        ) : null}
-      </div>
+      <h2 className="mb-2 text-label text-ink-muted">
+        {title}
+        {count !== undefined ? <span className="tabular ml-1.5 text-ink-faint">{count}</span> : null}
+      </h2>
       <Card className="divide-y divide-line overflow-hidden">{children}</Card>
     </section>
   );

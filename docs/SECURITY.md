@@ -319,5 +319,5 @@ customer's screenshot maps to a specific trace.
 
 ## Reporting a vulnerability
 
-Email **security@verifygh.example**. Please include reproduction steps and do not test
+Email **support@getverifygh.com** with "Security" in the subject. Please include reproduction steps and do not test
 against production balances. We aim to acknowledge within two business days.

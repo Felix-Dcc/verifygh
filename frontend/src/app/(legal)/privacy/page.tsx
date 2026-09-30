@@ -13,7 +13,7 @@ export default function PrivacyPage() {
     <>
       <LegalHeader
         title="Privacy Policy"
-        updated="1 January 2026"
+        updated="30 September 2026"
         summary="We collect what a payment, an order and a support conversation actually need - and not more. We never see your Mobile Money PIN, we never sell your data, and verification codes are never written to our logs."
       />
 
@@ -151,8 +151,8 @@ export default function PrivacyPage() {
       <p>
         Under Ghana&apos;s Data Protection Act, 2012 (Act 843) you can ask us to access, correct or
         delete your personal data, and to explain how we use it. Email{" "}
-        <a href="mailto:privacy@verifygh.example">privacy@verifygh.example</a> and we will respond
-        within the statutory period.
+        <a href="mailto:support@getverifygh.com?subject=Privacy%20request">support@getverifygh.com</a> with
+        &quot;Privacy request&quot; in the subject and we will respond within the statutory period.
       </p>
       <p>
         Some data cannot be deleted on request - financial records we are legally required to keep,
@@ -172,7 +172,7 @@ export default function PrivacyPage() {
 
       <h2>10. Contact</h2>
       <p>
-        <a href="mailto:privacy@verifygh.example">privacy@verifygh.example</a>
+        <a href="mailto:support@getverifygh.com">support@getverifygh.com</a>
       </p>
     </>
   );

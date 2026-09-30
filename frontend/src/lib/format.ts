@@ -16,10 +16,14 @@ const GHS = new Intl.NumberFormat("en-GH", {
 const CEDI = "GH₵ ";
 const MINUS = "−";
 
+/** Shown where an amount is missing - never "GH₵ 0.00", which would claim a
+ *  balance of zero when the truth is that it did not load. */
+export const NO_AMOUNT = "—";
+
 export function cedis(amount: string | number | null | undefined): string {
-  if (amount === null || amount === undefined || amount === "") return `${CEDI}0.00`;
+  if (amount === null || amount === undefined || amount === "") return NO_AMOUNT;
   const value = typeof amount === "string" ? Number.parseFloat(amount) : amount;
-  if (Number.isNaN(value)) return `${CEDI}0.00`;
+  if (Number.isNaN(value)) return NO_AMOUNT;
   return `${value < 0 ? MINUS : ""}${CEDI}${GHS.format(Math.abs(value))}`;
 }
 
@@ -52,9 +56,9 @@ const USD = new Intl.NumberFormat("en-US", {
 
 /** Provider costs (staff only): "$12.50", up to four decimals when they matter. */
 export function usd(amount: string | number | null | undefined): string {
-  if (amount === null || amount === undefined || amount === "") return "$0.00";
+  if (amount === null || amount === undefined || amount === "") return NO_AMOUNT;
   const value = typeof amount === "string" ? Number.parseFloat(amount) : amount;
-  return Number.isNaN(value) ? "$0.00" : USD.format(value);
+  return Number.isNaN(value) ? NO_AMOUNT : USD.format(value);
 }
 
 /** 0241234567 / +233241234567 -> "024 123 4567". */

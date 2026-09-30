@@ -32,7 +32,7 @@ export function SiteHeader() {
   return (
     <header className="sticky top-0 z-50 border-b border-line/80 bg-canvas/85 backdrop-blur-md">
       <div className="container-page flex h-16 items-center justify-between gap-4">
-        <Link href="/" aria-label="VerifyGH home" className="rounded-lg">
+        <Link href="/" aria-label="VerifyGH home" className="flex min-h-11 items-center rounded-lg">
           <Logo />
         </Link>
 
@@ -41,7 +41,7 @@ export function SiteHeader() {
             <Link
               key={link.href}
               href={link.href}
-              className="rounded-lg px-3 py-2 text-sm font-medium text-ink-soft transition-colors hover:bg-line/50 hover:text-ink"
+              className="rounded-lg px-3 py-2 text-sm font-medium text-ink-soft transition-colors hover:bg-sunken hover:text-ink"
             >
               {link.label}
             </Link>
@@ -73,7 +73,7 @@ export function SiteHeader() {
           aria-expanded={open}
           aria-controls="mobile-menu"
           aria-label={open ? "Close menu" : "Open menu"}
-          className="-mr-2 rounded-xl p-2.5 text-ink-soft transition-colors hover:bg-line/50 lg:hidden"
+          className="-mr-2 flex h-11 w-11 items-center justify-center rounded-lg text-ink-soft transition-colors hover:bg-sunken lg:hidden"
         >
           {open ? <CloseIcon /> : <MenuIcon />}
         </button>
@@ -90,7 +90,7 @@ export function SiteHeader() {
               key={link.href}
               href={link.href}
               onClick={() => setOpen(false)}
-              className="rounded-lg px-2 py-3 text-base font-medium text-ink-soft hover:bg-line/40"
+              className="rounded-lg px-2 py-3 text-base font-medium text-ink-soft hover:bg-sunken"
             >
               {link.label}
             </Link>
@@ -115,7 +115,7 @@ export function SiteHeader() {
                     setOpen(false);
                     void signOut();
                   }}
-                  className="mt-1 flex items-center justify-center gap-2 rounded-xl border border-line-strong px-4 py-2.5 text-sm font-medium text-ink-soft transition-colors hover:bg-canvas hover:text-ink"
+                  className="mt-1 flex items-center justify-center gap-2 rounded-lg border border-line-strong px-4 py-2.5 text-sm font-medium text-ink-soft transition-colors hover:bg-sunken/60 hover:text-ink"
                 >
                   <LogoutIcon className="h-4 w-4" />
                   Log out
@@ -153,7 +153,7 @@ const FOOTER_SECTIONS = [
     links: [
       { href: "/#faq", label: "FAQ" },
       { href: "/#security", label: "Security" },
-      { href: "mailto:support@verifygh.example", label: "Contact support" },
+      { href: "mailto:support@getverifygh.com", label: "Contact support" },
     ],
   },
   {
@@ -174,10 +174,8 @@ export function SiteFooter() {
           <div className="lg:col-span-1">
             <Logo />
             <p className="mt-3 max-w-xs text-sm text-ink-muted">
-              A Ghanaian payment and access layer for supported verification services. Pay with
-              MoMo. Verify with ease.
+              Verification numbers for customers in Ghana, paid for in cedis with Mobile Money.
             </p>
-            <div className="accent-rule mt-5 max-w-[7rem]" />
           </div>
 
           {FOOTER_SECTIONS.map((section) => (

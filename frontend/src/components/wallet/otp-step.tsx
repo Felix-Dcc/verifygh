@@ -70,11 +70,11 @@ export function OtpStep({
   return (
     <Card className="p-6 sm:p-8">
       <div className="flex flex-col items-center text-center">
-        <div className="flex h-14 w-14 items-center justify-center rounded-2xl bg-brand-50 text-brand-600">
-          <LockIcon className="h-7 w-7" />
+        <div className="flex h-12 w-12 items-center justify-center rounded-xl bg-brand-50 text-brand-600">
+          <LockIcon className="h-6 w-6" />
         </div>
 
-        <h2 className="mt-5 text-xl font-semibold text-ink">Enter the code we texted you</h2>
+        <h2 className="mt-5 text-title text-ink">Enter the code we texted you</h2>
         <p className="mt-2 max-w-sm text-sm text-ink-muted">
           To approve{" "}
           <span className="tabular font-semibold text-ink">{cedis(payment.amount)}</span>, enter
@@ -83,7 +83,7 @@ export function OtpStep({
         </p>
 
         {payment.instructions ? (
-          <p className="mt-4 max-w-sm rounded-xl bg-canvas px-4 py-3 text-sm text-ink-soft">
+          <p className="mt-4 max-w-sm rounded-lg bg-sunken px-4 py-3 text-sm text-ink-soft">
             {payment.instructions}
           </p>
         ) : null}
@@ -117,7 +117,7 @@ export function OtpStep({
             onChange={(event) => setCode(event.target.value.replace(/\D/g, ""))}
             placeholder="······"
             aria-describedby="otp-help"
-            className="tabular w-full rounded-xl border border-line-strong bg-surface px-4 py-3 text-center text-2xl font-semibold tracking-[0.4em] text-ink outline-none transition-colors placeholder:tracking-[0.3em] placeholder:text-ink-faint focus:border-brand-500 focus:ring-2 focus:ring-brand-200"
+            className="code h-14 w-full rounded-lg border border-line-strong bg-surface px-4 text-center text-title font-semibold tracking-widest text-ink transition-shadow placeholder:text-ink-faint focus:border-brand-500 focus:shadow-focus focus:outline-none"
           />
 
           <Button type="submit" size="lg" fullWidth loading={submitting} className="mt-4">

@@ -19,6 +19,7 @@ import {
   ButtonLink,
   Card,
   EmptyState,
+  LoadError,
   Section,
   Skeleton,
   StatusBadge,
@@ -41,7 +42,7 @@ import type {
  */
 export default function DashboardPage() {
   return (
-    <React.Suspense fallback={null}>
+    <React.Suspense fallback={<DashboardSkeleton />}>
       <Dashboard />
     </React.Suspense>
   );
@@ -69,20 +70,14 @@ function Dashboard() {
   const params = useSearchParams();
   const toast = useToast();
 
-  const { data: summary, isLoading: summaryLoading } = useSWR<WalletSummary>("/wallet/summary/");
+  const summary = useSWR<WalletSummary>("/wallet/summary/");
   const { data: activeOrders } = useSWR<OrderSummary[]>("/orders/active/", {
     // Active orders change on their own, so keep this fresh while the tab is open.
     refreshInterval: 15_000,
   });
-  const { data: recentOrders, isLoading: ordersLoading } = useSWR<Paginated<OrderSummary>>([
-    "/orders/",
-    { page_size: 5 },
-  ]);
-  const { data: recentTransactions, isLoading: txLoading } = useSWR<Paginated<Transaction>>([
-    "/transactions/",
-    { page_size: 4 },
-  ]);
-  const { data: market } = useSWR<MarketHome>("/marketplace/home/");
+  const recentOrders = useSWR<Paginated<OrderSummary>>(["/orders/", { page_size: 8 }]);
+  const recentTransactions = useSWR<Paginated<Transaction>>(["/transactions/", { page_size: 4 }]);
+  const market = useSWR<MarketHome>("/marketplace/home/");
 
   const [resending, setResending] = React.useState(false);
 
@@ -100,6 +95,9 @@ function Dashboard() {
 
   const firstName = user?.full_name?.split(" ")[0];
   const live = activeOrders ?? [];
+  // Orders already shown under "In progress" are not repeated below it.
+  const liveIds = new Set(live.map((order) => order.id));
+  const finished = (recentOrders.data?.results ?? []).filter((order) => !liveIds.has(order.id)).slice(0, 5);
 
   return (
     <div className="space-y-8">
@@ -156,15 +154,17 @@ function Dashboard() {
         </div>
       ) : null}
 
-      <div className="grid grid-cols-1 gap-4 lg:grid-cols-3">
-        <BalancePanel summary={summary} loading={summaryLoading} />
-        <AtAGlance summary={summary} loading={summaryLoading} emailVerified={user?.is_email_verified} />
-      </div>
+      <BalancePanel
+        summary={summary.data}
+        loading={summary.isLoading}
+        failed={Boolean(summary.error) && !summary.data}
+        onRetry={() => summary.mutate()}
+      />
 
       {live.length > 0 ? (
         <Section
           title="In progress"
-          description="Numbers waiting for their code. Open one to watch it live."
+          description="Open orders - waiting for a code, or with one to use. Open an order to see it live."
         >
           <Card className="overflow-hidden">
             <ul className="divide-y divide-line">
@@ -199,7 +199,7 @@ function Dashboard() {
       <div className="grid grid-cols-1 gap-8 lg:grid-cols-5 lg:gap-6">
         <Section
           className="lg:col-span-3"
-          title="Recent orders"
+          title={live.length > 0 ? "Earlier orders" : "Recent orders"}
           action={
             <Link href="/orders" className="link text-sm">
               All orders
@@ -207,20 +207,26 @@ function Dashboard() {
           }
         >
           <Card className="overflow-hidden">
-            {ordersLoading ? (
+            {recentOrders.isLoading ? (
               <RowSkeletons />
-            ) : (recentOrders?.results?.length ?? 0) === 0 ? (
-              <EmptyState
-                icon={<ReceiptIcon />}
-                title="No orders yet"
-                description="Your verification numbers will appear here, with their codes."
-                action={
-                  <ButtonLink href="/services" size="sm">Buy a number</ButtonLink>
-                }
-              />
+            ) : recentOrders.error && !recentOrders.data ? (
+              <LoadError what="your orders" onRetry={() => recentOrders.mutate()} />
+            ) : finished.length === 0 ? (
+              live.length > 0 ? (
+                <p className="px-5 py-6 text-sm text-ink-muted">
+                  Nothing finished yet - your orders in progress are above.
+                </p>
+              ) : (
+                <EmptyState
+                  icon={<ReceiptIcon />}
+                  title="No orders yet"
+                  description="Your verification numbers will appear here, with their codes."
+                  action={<ButtonLink href="/services" size="sm">Buy a number</ButtonLink>}
+                />
+              )
             ) : (
               <ul className="divide-y divide-line">
-                {recentOrders?.results.map((order) => (
+                {finished.map((order) => (
                   <OrderStatusRow key={order.id} order={order} />
                 ))}
               </ul>
@@ -229,7 +235,11 @@ function Dashboard() {
         </Section>
 
         <div className="space-y-8 lg:col-span-2">
-          <PopularServices market={market} />
+          <PopularServices
+            market={market.data}
+            failed={Boolean(market.error) && !market.data}
+            onRetry={() => market.mutate()}
+          />
 
           <Section
             title="Wallet activity"
@@ -240,9 +250,11 @@ function Dashboard() {
             }
           >
             <Card className="overflow-hidden">
-              {txLoading ? (
+              {recentTransactions.isLoading ? (
                 <RowSkeletons rows={3} />
-              ) : (recentTransactions?.results?.length ?? 0) === 0 ? (
+              ) : recentTransactions.error && !recentTransactions.data ? (
+                <LoadError what="your transactions" onRetry={() => recentTransactions.mutate()} />
+              ) : (recentTransactions.data?.results?.length ?? 0) === 0 ? (
                 <EmptyState
                   icon={<WalletIcon />}
                   title="No transactions yet"
@@ -250,7 +262,7 @@ function Dashboard() {
                 />
               ) : (
                 <ul className="divide-y divide-line">
-                  {recentTransactions?.results.map((entry) => (
+                  {recentTransactions.data?.results.map((entry) => (
                     <TransactionRow key={entry.id} entry={entry} />
                   ))}
                 </ul>
@@ -265,83 +277,61 @@ function Dashboard() {
 
 /* ------------------------------------------------------------------ */
 
-function BalancePanel({ summary, loading }: { summary: WalletSummary | undefined; loading: boolean }) {
+function BalancePanel({
+  summary,
+  loading,
+  failed,
+  onRetry,
+}: {
+  summary: WalletSummary | undefined;
+  loading: boolean;
+  failed: boolean;
+  onRetry: () => unknown;
+}) {
   const wallet = summary?.wallet;
   const promo = Number.parseFloat(wallet?.promo_balance ?? "0");
 
   return (
-    <Card className="flex flex-col justify-between gap-6 p-5 sm:p-6 lg:col-span-2">
-      <div>
+    <Card className="grid grid-cols-1 gap-6 p-5 sm:p-6 md:grid-cols-3">
+      <div className="md:col-span-2">
         <p className="text-sm text-ink-muted">Available balance</p>
         <div className="mt-1.5 min-h-10">
-          {loading ? <Skeleton className="h-10 w-48" /> : <Amount value={cedis(wallet?.balance)} />}
-        </div>
-        <p className="mt-1.5 text-caption text-ink-muted">
-          {wallet?.is_frozen ? (
-            <span className="font-medium text-danger-700">
-              This wallet is on hold. Contact support before buying or adding funds.
-            </span>
-          ) : promo > 0 ? (
-            <>Plus {cedis(wallet?.promo_balance)} promotional credit, used first.</>
+          {loading ? (
+            <Skeleton className="h-10 w-48" />
+          ) : failed ? (
+            <LoadError compact what="your balance" onRetry={onRetry} className="pt-2" />
           ) : (
-            <>
-              {cedis(wallet?.total_deposited)} added &middot; {cedis(wallet?.total_spent)} spent
-            </>
+            <Amount value={cedis(wallet?.balance)} />
           )}
-        </p>
-      </div>
-      <div className="flex flex-wrap items-center gap-2">
-        <ButtonLink href="/wallet/deposit">Add funds</ButtonLink>
-        <ButtonLink href="/services" variant="secondary">Buy a number</ButtonLink>
-        <div className="ml-auto hidden items-center gap-1 sm:flex">
-          <ButtonLink href="/orders" variant="ghost" size="sm">Orders</ButtonLink>
-          <ButtonLink href="/transactions" variant="ghost" size="sm">Transactions</ButtonLink>
+        </div>
+        {wallet?.is_frozen ? (
+          <p className="mt-1.5 text-caption font-medium text-danger-700">
+            This wallet is on hold. Contact support before buying or adding funds.
+          </p>
+        ) : promo > 0 ? (
+          <p className="mt-1.5 text-caption text-ink-muted">
+            Plus {cedis(wallet?.promo_balance)} promotional credit, used first.
+          </p>
+        ) : null}
+        <div className="mt-5 flex flex-wrap gap-2">
+          <ButtonLink href="/wallet/deposit">Add funds</ButtonLink>
+          <ButtonLink href="/services" variant="secondary">
+            Buy a number
+          </ButtonLink>
         </div>
       </div>
-    </Card>
-  );
-}
 
-function AtAGlance({
-  summary,
-  loading,
-  emailVerified,
-}: {
-  summary: WalletSummary | undefined;
-  loading: boolean;
-  emailVerified: boolean | undefined;
-}) {
-  const rows = [
-    {
-      label: "Waiting for a code",
-      value: String(summary?.active_orders ?? 0),
-      href: "/orders?filter=active",
-    },
-    { label: "Spent today", value: cedis(summary?.today_spending) },
-    { label: "Completed orders", value: String(summary?.successful_orders ?? 0) },
-  ];
-  return (
-    <Card className="p-5 sm:p-6">
-      <p className="text-sm text-ink-muted">At a glance</p>
-      <dl className="mt-3 divide-y divide-line">
-        {rows.map((row) => (
-          <div key={row.label} className="flex items-center justify-between gap-3 py-2.5">
-            <dt className="text-sm text-ink-soft">{row.label}</dt>
-            <dd className="tabular text-sm font-semibold text-ink">
-              {loading ? <Skeleton className="h-4 w-12" /> : row.value}
-            </dd>
-          </div>
-        ))}
-        <div className="flex items-center justify-between gap-3 py-2.5">
-          <dt className="text-sm text-ink-soft">Email</dt>
-          <dd className="text-sm">
-            {emailVerified ? (
-              <span className="font-medium text-success-700">Verified</span>
-            ) : (
-              <Link href="/account" className="font-medium text-warn-700 hover:underline">
-                Not verified
-              </Link>
-            )}
+      <dl className="grid grid-cols-2 gap-4 border-t border-line pt-5 md:grid-cols-1 md:content-center md:border-l md:border-t-0 md:pl-6 md:pt-0">
+        <div>
+          <dt className="text-caption text-ink-muted">Spent today</dt>
+          <dd className="tabular mt-0.5 text-heading text-ink">
+            {loading ? <Skeleton className="h-5 w-20" /> : cedis(summary?.today_spending)}
+          </dd>
+        </div>
+        <div>
+          <dt className="text-caption text-ink-muted">Completed orders</dt>
+          <dd className="tabular mt-0.5 text-heading text-ink">
+            {loading ? <Skeleton className="h-5 w-12" /> : (summary?.successful_orders ?? "—")}
           </dd>
         </div>
       </dl>
@@ -349,7 +339,15 @@ function AtAGlance({
   );
 }
 
-function PopularServices({ market }: { market: MarketHome | undefined }) {
+function PopularServices({
+  market,
+  failed,
+  onRetry,
+}: {
+  market: MarketHome | undefined;
+  failed: boolean;
+  onRetry: () => unknown;
+}) {
   const country = market?.country ?? "US";
   const rows = (market?.popular ?? []).slice(0, 5);
   return (
@@ -362,7 +360,9 @@ function PopularServices({ market }: { market: MarketHome | undefined }) {
       }
     >
       <Card className="overflow-hidden">
-        {!market ? (
+        {failed ? (
+          <LoadError what="the services" onRetry={onRetry} />
+        ) : !market ? (
           <RowSkeletons rows={4} />
         ) : rows.length === 0 ? (
           <EmptyState
@@ -412,5 +412,24 @@ function RowSkeletons({ rows = 4 }: { rows?: number }) {
         </li>
       ))}
     </ul>
+  );
+}
+
+function DashboardSkeleton() {
+  return (
+    <div className="space-y-8" aria-busy>
+      <div className="space-y-2">
+        <Skeleton className="h-7 w-56" />
+        <Skeleton className="h-4 w-40" />
+      </div>
+      <Card className="space-y-4 p-6">
+        <Skeleton className="h-4 w-32" />
+        <Skeleton className="h-10 w-48" />
+        <Skeleton className="h-11 w-60" />
+      </Card>
+      <Card className="overflow-hidden">
+        <RowSkeletons />
+      </Card>
+    </div>
   );
 }

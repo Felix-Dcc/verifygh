@@ -257,7 +257,9 @@ function SidebarLink({ item, badge }: { item: NavItem; badge?: number }) {
 /* ------------------------------------------------------------------ */
 
 function TopBar({ variant }: { variant: "user" | "admin" }) {
-  const { data: wallet, isLoading } = useSWR<Wallet>(variant === "user" ? "/wallet/" : null);
+  const { data: wallet, error: walletError, isLoading } = useSWR<Wallet>(
+    variant === "user" ? "/wallet/" : null,
+  );
   const { data: unread } = useSWR<{ count: number }>(
     variant === "user" ? "/notifications/unread/" : null,
     { refreshInterval: 60_000 },
@@ -285,16 +287,23 @@ function TopBar({ variant }: { variant: "user" | "admin" }) {
               <Link
                 href="/wallet"
                 className="flex min-h-11 items-center gap-2 rounded-lg px-2 transition-colors hover:bg-sunken sm:min-h-9"
-                aria-label={wallet ? `Wallet balance ${cedis(wallet.balance)}` : "Wallet"}
+                aria-label={
+                  wallet ? `Wallet balance ${cedis(wallet.balance)}` : walletError ? "Wallet - balance unavailable" : "Wallet"
+                }
               >
                 <span className="hidden text-caption text-ink-muted xl:inline">Balance</span>
                 {isLoading ? (
                   <Skeleton className="h-5 w-20" />
+                ) : walletError && !wallet ? (
+                  // Never a zero: a balance that did not load says so.
+                  <span className="text-sm text-ink-muted">Unavailable</span>
                 ) : (
                   <span className="tabular text-sm font-semibold text-ink">{cedis(wallet?.balance)}</span>
                 )}
               </Link>
-              <ButtonLink href="/wallet/deposit" size="sm" className="hidden sm:inline-flex">
+              {/* Secondary: every page has its own main action, and the top bar
+                  should not compete with it. */}
+              <ButtonLink href="/wallet/deposit" size="sm" variant="secondary" className="hidden sm:inline-flex">
                 Add funds
               </ButtonLink>
               <Link
@@ -319,7 +328,10 @@ function TopBar({ variant }: { variant: "user" | "admin" }) {
 /** Search from anywhere: lands on the marketplace with the query applied. */
 function ServiceSearch() {
   const router = useRouter();
+  const pathname = usePathname();
   const [query, setQuery] = React.useState("");
+  // The marketplace has its own search box; two on one screen is one too many.
+  if (pathname.startsWith("/services")) return <div className="flex-1" aria-hidden />;
   return (
     <form
       role="search"

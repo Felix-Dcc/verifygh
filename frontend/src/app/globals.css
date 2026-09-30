@@ -104,17 +104,6 @@
     );
   }
 
-  /* Ghana-inspired accent: a thin green/gold rule, used sparingly as a
-     section marker rather than as decoration. */
-  .accent-rule {
-    @apply h-px w-full;
-    background-image: linear-gradient(
-      90deg,
-      theme("colors.brand.500") 0%,
-      theme("colors.gold.500") 45%,
-      transparent 100%
-    );
-  }
 }
 
 @layer utilities {

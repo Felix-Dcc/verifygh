@@ -15,6 +15,7 @@ import {
   Button,
   ButtonLink,
   DescriptionList,
+  LoadError,
   Skeleton,
   cn,
 } from "@/components/ui/primitives";
@@ -47,7 +48,11 @@ export function BuyDialog({
   const toast = useToast();
   const { user } = useAuth();
 
-  const { data: detail } = useSWR<MarketServiceDetail>(
+  const {
+    data: detail,
+    error: detailError,
+    mutate: retryDetail,
+  } = useSWR<MarketServiceDetail>(
     open && serviceSlug ? `/marketplace/${serviceSlug}/` : null,
   );
 
@@ -149,7 +154,7 @@ export function BuyDialog({
     <Dialog
       open={open}
       onClose={onClose}
-      title={detail ? `Buy a ${detail.name} number` : "Buy a number"}
+      title="Buy a number"
       dismissible={!submitting}
       footer={
         !user ? (
@@ -169,7 +174,9 @@ export function BuyDialog({
         )
       }
     >
-      {!detail ? (
+      {detailError && !detail ? (
+        <LoadError what="this service" onRetry={() => retryDetail()} className="py-6" />
+      ) : !detail ? (
         <div className="space-y-3" aria-busy>
           <Skeleton className="h-10 w-full" />
           <Skeleton className="h-36 w-full rounded-xl" />
@@ -320,10 +327,9 @@ export function BuyDialog({
           ) : null}
 
           <p className="text-caption text-ink-muted">
-            You pay once, when the number is reserved. If no code arrives before it expires, the
-            full amount goes back to your wallet automatically. Numbers come from a shared pool and
-            may have been used before - if a service says one is already registered, report it from
-            the order screen.
+            If no code arrives before the number expires, the full amount returns to your wallet
+            automatically. Numbers can be reused ones - if a service says a number is taken, report
+            it from the order.
           </p>
         </div>
       )}

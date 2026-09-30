@@ -10,6 +10,7 @@ import {
   Card,
   EmptyState,
   Input,
+  LoadError,
   SegmentedControl,
   Skeleton,
   StatusBadge,
@@ -40,7 +41,7 @@ export default function AdminPaymentsPage() {
     return () => window.clearTimeout(timer);
   }, [search]);
 
-  const { data, isLoading } = useSWR<Paginated<AdminPayment>>([
+  const { data, isLoading, error, mutate } = useSWR<Paginated<AdminPayment>>([
     "/admin/payments/",
     { status, search: debounced, page, page_size: 25 },
   ]);
@@ -80,6 +81,8 @@ export default function AdminPaymentsPage() {
       <Card className="overflow-hidden">
         {isLoading ? (
           <RowSkeletons />
+        ) : error && !data ? (
+          <LoadError what="the payments" onRetry={() => mutate()} />
         ) : payments.length === 0 ? (
           <EmptyState
             icon={<WalletIcon />}

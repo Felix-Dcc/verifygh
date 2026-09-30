@@ -181,7 +181,7 @@ function ReportDialog({
                     "flex cursor-pointer items-start gap-3 rounded-xl border px-3.5 py-3 transition-colors",
                     reason === option.value
                       ? "border-brand-500 bg-brand-50"
-                      : "border-line hover:bg-canvas",
+                      : "border-line hover:bg-sunken/60",
                   )}
                 >
                   <input
@@ -202,7 +202,7 @@ function ReportDialog({
           </fieldset>
 
           {reason === "NUMBER_ALREADY_LINKED" ? (
-            <div className="space-y-3 rounded-xl border border-line bg-canvas p-4">
+            <div className="space-y-3 rounded-lg border border-line bg-sunken p-4">
               <p className="text-sm text-ink">
                 Did {order.service_name} ask you for an existing password instead of allowing you
                 to create an account?

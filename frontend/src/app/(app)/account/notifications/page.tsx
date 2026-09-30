@@ -22,7 +22,7 @@ import {
   UserIcon,
   WalletIcon,
 } from "@/components/icons";
-import { Button, Card, EmptyState, Skeleton, cn } from "@/components/ui/primitives";
+import { Button, Card, EmptyState, LoadError, Skeleton, cn } from "@/components/ui/primitives";
 import { api } from "@/lib/api";
 import { dayGroup, formatDateTime, formatTime, moneyText } from "@/lib/format";
 import type { Notification, Paginated } from "@/lib/types";
@@ -73,7 +73,7 @@ const GROUPS = ["Today", "Yesterday", "Earlier"] as const;
 
 export default function NotificationsPage() {
   const [page, setPage] = React.useState(1);
-  const { data, isLoading, mutate } = useSWR<Paginated<Notification>>([
+  const { data, isLoading, error, mutate } = useSWR<Paginated<Notification>>([
     "/notifications/",
     { page, page_size: 25 },
   ]);
@@ -141,6 +141,10 @@ export default function NotificationsPage() {
               </li>
             ))}
           </ul>
+        </Card>
+      ) : error && !data ? (
+        <Card>
+          <LoadError what="your notifications" onRetry={() => mutate()} />
         </Card>
       ) : notifications.length === 0 ? (
         <Card>

@@ -11,12 +11,14 @@ import {
   ButtonLink,
   Card,
   EmptyState,
+  LoadError,
   SegmentedControl,
   Skeleton,
 } from "@/components/ui/primitives";
 import {
   ENTRY_LABELS,
   TransactionAmount,
+  entryTitle,
   TransactionIcon,
   TransactionRow,
 } from "@/components/wallet/transaction-row";
@@ -47,7 +49,7 @@ export default function TransactionsPage() {
   const [filter, setFilter] = React.useState<Filter>("");
   const [page, setPage] = React.useState(1);
 
-  const { data, isLoading } = useSWR<Paginated<Transaction>>([
+  const { data, isLoading, error, mutate } = useSWR<Paginated<Transaction>>([
     "/transactions/",
     { entry_type: filter, page, page_size: 25 },
   ]);
@@ -81,6 +83,8 @@ export default function TransactionsPage() {
       <Card className="overflow-hidden">
         {isLoading ? (
           <TableSkeleton />
+        ) : error && !data ? (
+          <LoadError what="your transactions" onRetry={() => mutate()} />
         ) : entries.length === 0 ? (
           <EmptyState
             icon={<WalletIcon />}
@@ -138,7 +142,7 @@ export default function TransactionsPage() {
                         <TransactionIcon entry={entry} />
                         <div className="min-w-0">
                           <p className="flex max-w-sm items-center gap-2 text-ink">
-                            <span className="truncate">{entry.description}</span>
+                            <span className="truncate">{entryTitle(entry)}</span>
                             {entry.funds === "PROMO" ? (
                               <Badge tone="gold" className="shrink-0">
                                 Promo

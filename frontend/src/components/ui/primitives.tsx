@@ -587,6 +587,62 @@ export function EmptyState({
   );
 }
 
+/**
+ * What a section shows when its data did not load. It says so and offers a
+ * retry - never an empty state ("No orders yet") or a zero balance, which
+ * would state something untrue about the customer's money.
+ */
+export function LoadError({
+  what,
+  onRetry,
+  compact = false,
+  className,
+}: {
+  /** "your orders", "your balance" - finishes "We couldn't load ...". */
+  what: string;
+  onRetry?: () => unknown;
+  /** One line, for a small panel or a table cell. */
+  compact?: boolean;
+  className?: string;
+}) {
+  const [retrying, setRetrying] = React.useState(false);
+  async function retry() {
+    if (!onRetry) return;
+    setRetrying(true);
+    try {
+      await onRetry();
+    } finally {
+      setRetrying(false);
+    }
+  }
+
+  if (compact) {
+    return (
+      <p role="alert" className={cn("flex flex-wrap items-center gap-x-2 text-sm text-ink-muted", className)}>
+        We couldn&apos;t load {what}.
+        {onRetry ? (
+          <button type="button" onClick={retry} className="link min-h-11 sm:min-h-0" disabled={retrying}>
+            {retrying ? "Trying again…" : "Try again"}
+          </button>
+        ) : null}
+      </p>
+    );
+  }
+  return (
+    <div role="alert" className={cn("flex flex-col items-center px-6 py-10 text-center", className)}>
+      <p className="text-sm font-medium text-ink">We couldn&apos;t load {what}.</p>
+      <p className="mt-1 max-w-sm text-sm text-ink-muted">
+        Check your connection and try again. Nothing has changed on your account.
+      </p>
+      {onRetry ? (
+        <Button variant="secondary" size="sm" className="mt-4" loading={retrying} onClick={retry}>
+          Try again
+        </Button>
+      ) : null}
+    </div>
+  );
+}
+
 /* -------------------------------------------------------------------------
  * Segmented control (used for the order history filters)
  * ---------------------------------------------------------------------- */

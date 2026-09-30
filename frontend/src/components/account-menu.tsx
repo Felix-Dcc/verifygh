@@ -70,7 +70,7 @@ export function AccountMenu() {
         onClick={() => setOpen((value) => !value)}
         aria-expanded={open}
         aria-haspopup="menu"
-        className="flex items-center gap-2 rounded-xl border border-line-strong bg-surface py-1.5 pl-1.5 pr-2.5 text-sm font-medium text-ink transition-colors hover:bg-canvas"
+        className="flex items-center gap-2 rounded-lg border border-line-strong bg-surface py-1.5 pl-1.5 pr-2.5 text-sm font-medium text-ink transition-colors hover:bg-sunken/60"
       >
         <span
           aria-hidden
@@ -116,7 +116,7 @@ export function AccountMenu() {
                 href={link.href}
                 role="menuitem"
                 onClick={() => setOpen(false)}
-                className="flex items-center gap-2.5 px-4 py-2.5 text-sm text-ink-soft transition-colors hover:bg-canvas hover:text-ink"
+                className="flex items-center gap-2.5 px-4 py-2.5 text-sm text-ink-soft transition-colors hover:bg-sunken/60 hover:text-ink"
               >
                 <link.icon className="h-4 w-4 text-ink-faint" />
                 {link.label}
@@ -132,7 +132,7 @@ export function AccountMenu() {
                 setOpen(false);
                 void signOut();
               }}
-              className="flex w-full items-center gap-2.5 px-4 py-2.5 text-sm font-medium text-ink-soft transition-colors hover:bg-canvas hover:text-ink"
+              className="flex w-full items-center gap-2.5 px-4 py-2.5 text-sm font-medium text-ink-soft transition-colors hover:bg-sunken/60 hover:text-ink"
             >
               <LogoutIcon className="h-4 w-4 text-ink-faint" />
               Log out

@@ -71,7 +71,7 @@ aliases are pinned to 12px. Borders separate surfaces; shadows (`shadow-raised`,
 | `Button`, `Input`, `Select`, `Textarea`, `Checkbox`, `Field` | `ui/primitives.tsx` |
 | `ButtonLink` (a link styled as a button), `PasswordInput` (show/hide) | `ui/primitives.tsx` |
 | `Card`, `CardHeader`, `Section`, `DescriptionList`, `Amount` | `ui/primitives.tsx` |
-| `Badge`, `StatusBadge`, `Alert`, `EmptyState`, `Skeleton`, `SegmentedControl` | `ui/primitives.tsx` |
+| `Badge`, `StatusBadge`, `Alert`, `EmptyState`, `LoadError`, `Skeleton`, `SegmentedControl` | `ui/primitives.tsx` |
 | `Dialog`, `ConfirmDialog` | `ui/dialog.tsx` |
 | `Toast` | `ui/toast.tsx` |
 | `TransactionRow`, `TransactionIcon`, `TransactionAmount` | `components/wallet/transaction-row.tsx` |
@@ -81,6 +81,20 @@ aliases are pinned to 12px. Borders separate surfaces; shadows (`shadow-raised`,
 | Icons (one hand-drawn set, 1.7 stroke) | `components/icons.tsx` |
 
 ## Rules that are easy to break
+
+* **A request that failed says so.** Every data section handles its error with
+  `LoadError` ("We couldn't load your orders." + Try again) - never an empty
+  state, never an endless skeleton. A missing amount renders as "—"
+  (`cedis()` does this), never "GH₵ 0.00": a zero balance is a statement about
+  the customer's money.
+* **One primary button per screen.** The top bar's "Add funds" is secondary;
+  closing an order is secondary; the page's main action is the only solid green.
+* **Nothing twice.** A list that shows a row does not sit above another list
+  showing the same row (favourites vs. quick picks, in-progress vs. recent
+  orders); a panel does not repeat what its header already says.
+* **No template furniture on marketing pages:** no eyebrow labels over headings,
+  no grids of icon-tile cards, no gradient washes or blurred blobs, no stat
+  trios. Headings say something specific; illustrations are the real screens.
 
 * **An action that goes somewhere is a `ButtonLink`**, never `<Link><Button>`: a
   button inside a link is two tab stops and invalid HTML.

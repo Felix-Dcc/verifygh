@@ -14,7 +14,7 @@ export default function AcceptableUsePage() {
     <>
       <LegalHeader
         title="Acceptable Use Policy"
-        updated="1 January 2026"
+        updated="30 September 2026"
         summary="VerifyGH is a payment and access layer for legitimate verification needs. It is not a tool for fraud, impersonation, spam, evading bans, or getting around identity checks. Using it for any of those will get your account suspended and your access removed."
       />
 
@@ -152,8 +152,8 @@ export default function AcceptableUsePage() {
       <h2>6. Reporting abuse</h2>
       <p>
         If you believe VerifyGH is being used against this policy, email{" "}
-        <a href="mailto:abuse@verifygh.example">abuse@verifygh.example</a> with as much detail as
-        you can. We investigate every report.
+        <a href="mailto:support@getverifygh.com?subject=Abuse%20report">support@getverifygh.com</a> with &quot;Abuse
+        report&quot; in the subject and as much detail as you can. We investigate every report.
       </p>
 
       <h2>7. Changes</h2>

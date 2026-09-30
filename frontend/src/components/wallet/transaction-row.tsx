@@ -30,6 +30,16 @@ const ENTRY_ICONS: Record<LedgerEntryType, React.ComponentType<{ className?: str
   REFERRAL_BONUS: GiftIcon,
 };
 
+/**
+ * The ledger description without the reference the backend appends
+ * ("WhatsApp verification (VGH-4EG97L)" -> "WhatsApp verification"). In a
+ * list row the reference only gets truncated; the statement shows it in its
+ * own column.
+ */
+export function entryTitle(entry: Transaction): string {
+  return entry.description.replace(/\s*\(?VGH-[A-Z0-9-]+\)?\s*$/, "") || entry.description;
+}
+
 /** What kind of movement it was, at a glance: money in is green, the rest grey. */
 export function TransactionIcon({ entry }: { entry: Transaction }) {
   const Icon = ENTRY_ICONS[entry.entry_type] ?? ArrowRightIcon;
@@ -78,7 +88,7 @@ export function TransactionRow({
       <TransactionIcon entry={entry} />
       <div className="min-w-0 flex-1">
         <p className="flex min-w-0 items-center gap-2 text-sm text-ink">
-          <span className="truncate">{entry.description}</span>
+          <span className="truncate">{entryTitle(entry)}</span>
           {entry.funds === "PROMO" ? (
             <Badge tone="gold" className="shrink-0">
               Promo

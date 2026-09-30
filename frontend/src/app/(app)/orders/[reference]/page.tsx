@@ -19,6 +19,7 @@ import {
   Card,
   CardHeader,
   DescriptionList,
+  LoadError,
   Skeleton,
   StatusBadge,
   cn,
@@ -119,6 +120,20 @@ export default function OrderDetailPage() {
   }
 
   if (isLoading) return <OrderSkeleton />;
+
+  // Only a 404 means the order does not exist. Anything else - a dropped
+  // connection, a server error - must not tell someone who has just paid that
+  // their order is gone.
+  if (error && !order && !(error instanceof ApiError && error.status === 404)) {
+    return (
+      <div>
+        <PageHeader title="Order" back={{ href: "/orders", label: "All orders" }} />
+        <Card>
+          <LoadError what={`order ${reference}`} onRetry={() => mutate()} />
+        </Card>
+      </div>
+    );
+  }
 
   if (error || !order) {
     return (
@@ -246,9 +261,10 @@ export default function OrderDetailPage() {
                 <div className="flex flex-col gap-2 sm:flex-row">
                   {order.can_complete ? (
                     <Button
+                      variant="secondary"
                       loading={completing}
                       onClick={onComplete}
-                      icon={<CheckCircleIcon className="h-5 w-5" />}
+                      icon={<CheckCircleIcon className="h-4 w-4" />}
                       className="w-full sm:w-auto"
                     >
                       Mark as complete
@@ -291,16 +307,6 @@ export default function OrderDetailPage() {
               className="px-4 pb-1 sm:px-5"
               items={[
                 { label: "Reference", value: <span className="code">{order.reference}</span> },
-                { label: "Service", value: order.service_name },
-                {
-                  label: "Country",
-                  value: (
-                    <span className="inline-flex items-center gap-2">
-                      <CountryFlag code={order.country_code} size="sm" />
-                      {order.country_name}
-                    </span>
-                  ),
-                },
                 {
                   label: "Amount paid",
                   value: <span className="tabular">{cedis(order.price)}</span>,

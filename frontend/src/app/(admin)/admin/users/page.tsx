@@ -16,6 +16,7 @@ import {
   EmptyState,
   Field,
   Input,
+  LoadError,
   SegmentedControl,
   Select,
   Skeleton,
@@ -45,7 +46,7 @@ export default function AdminUsersPage() {
     return () => window.clearTimeout(timer);
   }, [search]);
 
-  const { data, isLoading, mutate } = useSWR<Paginated<AdminUser>>([
+  const { data, isLoading, error, mutate } = useSWR<Paginated<AdminUser>>([
     "/admin/users/",
     {
       search: debounced,
@@ -94,6 +95,8 @@ export default function AdminUsersPage() {
       <Card className="overflow-hidden">
         {isLoading ? (
           <RowSkeletons />
+        ) : error && !data ? (
+          <LoadError what="the users" onRetry={() => mutate()} />
         ) : users.length === 0 ? (
           <EmptyState
             icon={<UsersIcon />}

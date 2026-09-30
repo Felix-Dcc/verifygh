@@ -72,10 +72,10 @@ export function VerifyEmailFlow({ token }: { token: string }) {
   if (state === "success") {
     return (
       <Card className="flex flex-col items-center p-8 text-center">
-        <div className="flex h-12 w-12 items-center justify-center rounded-2xl bg-success-50 text-success-700">
+        <div className="flex h-12 w-12 items-center justify-center rounded-xl bg-success-50 text-success-700">
           <CheckCircleIcon className="h-6 w-6" />
         </div>
-        <h1 className="mt-4 text-xl font-semibold text-ink">Email verified successfully.</h1>
+        <h1 className="mt-4 text-title text-ink">Email verified successfully.</h1>
         <p className="mt-2 text-sm text-ink-muted">
           Your email has been verified. You can now use VerifyGH.
         </p>
@@ -102,10 +102,10 @@ export function VerifyEmailFlow({ token }: { token: string }) {
 
   return (
     <Card className="flex flex-col items-center p-8 text-center">
-      <div className="flex h-12 w-12 items-center justify-center rounded-2xl bg-warn-50 text-warn-700">
+      <div className="flex h-12 w-12 items-center justify-center rounded-xl bg-warn-50 text-warn-700">
         <AlertIcon className="h-6 w-6" />
       </div>
-      <h1 className="mt-4 text-xl font-semibold text-ink">{heading}</h1>
+      <h1 className="mt-4 text-title text-ink">{heading}</h1>
       <p className="mt-2 text-sm text-ink-muted">{detail}</p>
 
       <div className="mt-6 w-full">

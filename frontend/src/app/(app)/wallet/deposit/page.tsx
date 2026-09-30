@@ -15,6 +15,7 @@ import {
   DescriptionList,
   Field,
   Input,
+  LoadError,
   Select,
   Skeleton,
   Spinner,
@@ -30,7 +31,11 @@ import type { PaymentOptions, Payment as PaymentType, Wallet } from "@/lib/types
 const POLL_TIMEOUT_MS = 3 * 60 * 1000;
 
 export default function DepositPage() {
-  const { data: options } = useSWR<PaymentOptions>("/payments/options/");
+  const {
+    data: options,
+    error: optionsError,
+    mutate: retryOptions,
+  } = useSWR<PaymentOptions>("/payments/options/");
   const [payment, setPayment] = React.useState<PaymentType | null>(null);
 
   return (
@@ -44,7 +49,12 @@ export default function DepositPage() {
       {payment ? (
         <AwaitingApproval payment={payment} onStartOver={() => setPayment(null)} />
       ) : (
-        <DepositForm options={options} onStarted={setPayment} />
+        <DepositForm
+          options={options}
+          failed={Boolean(optionsError) && !options}
+          onRetry={() => retryOptions()}
+          onStarted={setPayment}
+        />
       )}
     </div>
   );
@@ -54,9 +64,13 @@ export default function DepositPage() {
 
 function DepositForm({
   options,
+  failed,
+  onRetry,
   onStarted,
 }: {
   options: PaymentOptions | undefined;
+  failed: boolean;
+  onRetry: () => unknown;
   onStarted: (payment: PaymentType) => void;
 }) {
   const { user } = useAuth();
@@ -108,6 +122,14 @@ function DepositForm({
       }
       setSubmitting(false);
     }
+  }
+
+  if (failed) {
+    return (
+      <Card>
+        <LoadError what="the payment options" onRetry={onRetry} />
+      </Card>
+    );
   }
 
   if (!options) {
