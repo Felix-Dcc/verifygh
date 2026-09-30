@@ -22,6 +22,18 @@
     --c-line: 227 232 229;
     --c-line-strong: 201 210 205;
     --c-primary: 11 100 70;
+    --c-band: 11 100 70;
+    --c-band-deep: 6 53 38;
+    /* The ramp from the band into the page: five steps between --c-band and
+       --c-canvas, eased (small steps in the dark greens, larger ones as it
+       pales) so no stop reads as a line. --c-wash is the palest green, for
+       sections that need a little separation without a boundary. */
+    --c-ramp-1: 22 116 83;
+    --c-ramp-2: 49 140 103;
+    --c-ramp-3: 101 173 141;
+    --c-ramp-4: 163 207 186;
+    --c-ramp-5: 216 235 225;
+    --c-wash: 236 244 239;
     --c-primary-hover: 9 79 55;
     --c-primary-active: 7 60 42;
     --c-brand-50: 237 246 242;
@@ -75,6 +87,14 @@
     --c-line: 36 45 41;
     --c-line-strong: 52 64 58;
     --c-primary: 24 126 88;
+    --c-band: 18 64 47;
+    --c-band-deep: 11 26 20;
+    --c-ramp-1: 17 57 42;
+    --c-ramp-2: 16 48 36;
+    --c-ramp-3: 14 38 29;
+    --c-ramp-4: 13 29 23;
+    --c-ramp-5: 12 21 18;
+    --c-wash: 14 23 19;
     --c-primary-hover: 27 134 93;
     --c-primary-active: 22 111 79;
     --c-brand-50: 15 36 27;
@@ -203,6 +223,175 @@
 
   .link {
     @apply font-medium text-brand-700 underline-offset-2 hover:underline;
+  }
+
+  /* Marketing section headings: one size and weight on every section, so the
+     homepage reads as one voice. Centre them with the intro when the section
+     below is centred; leave them left in two-column sections. */
+  .section-title {
+    @apply text-balance text-3xl font-bold tracking-tight text-ink sm:text-4xl;
+  }
+  /* ---- Atmosphere: how green meets the page ----------------------------
+     The homepage never changes colour at a line. The band fades into the
+     page through the ramp over a long distance, and sections that need
+     separation get a wash that fades in and out. White text only ever sits
+     on the solid band, never on the ramp. */
+
+  /* The hero: deeper green behind the headline, a faint light at the top
+     right, then the ramp into the page over the last --fade of the section.
+     A radial of page colour rises around the phone (--glow-x) so the edge of
+     the green curves up around it instead of running straight across. */
+  .atmosphere-hero {
+    --fade: 34rem;
+    --glow-x: 50%;
+    background:
+      radial-gradient(ellipse 70% 55% at 22% 0%, rgb(var(--c-band-deep) / 0.45), rgb(var(--c-band-deep) / 0) 70%),
+      radial-gradient(ellipse 45% 35% at 78% 6%, rgb(255 255 255 / 0.06), rgb(255 255 255 / 0) 70%),
+      radial-gradient(
+        ellipse 60% var(--fade) at var(--glow-x) 100%,
+        rgb(var(--c-canvas)) 0%,
+        rgb(var(--c-canvas) / 0.55) 45%,
+        rgb(var(--c-canvas) / 0) 100%
+      ),
+      linear-gradient(
+        180deg,
+        rgb(var(--c-band)) 0%,
+        rgb(var(--c-band)) calc(100% - var(--fade)),
+        rgb(var(--c-ramp-1)) calc(100% - var(--fade) * 0.9),
+        rgb(var(--c-ramp-2)) calc(100% - var(--fade) * 0.76),
+        rgb(var(--c-ramp-3)) calc(100% - var(--fade) * 0.62),
+        rgb(var(--c-ramp-4)) calc(100% - var(--fade) * 0.46),
+        rgb(var(--c-ramp-5)) calc(100% - var(--fade) * 0.28),
+        rgb(var(--c-canvas)) 100%
+      );
+  }
+  @media (min-width: 1024px) {
+    .atmosphere-hero {
+      --fade: 17rem;
+      --glow-x: 72%;
+    }
+  }
+  /* The hero's dot texture belongs to the green: it thins out as the ramp begins. */
+  .atmosphere-dots {
+    -webkit-mask-image: linear-gradient(180deg, #000 0%, #000 calc(100% - var(--fade)), transparent calc(100% - var(--fade) * 0.55));
+    mask-image: linear-gradient(180deg, #000 0%, #000 calc(100% - var(--fade)), transparent calc(100% - var(--fade) * 0.55));
+  }
+
+  /* A section set slightly apart: the palest green, faded in and out. */
+  .atmosphere-wash {
+    background: linear-gradient(
+      180deg,
+      rgb(var(--c-canvas)) 0%,
+      rgb(var(--c-wash)) 22%,
+      rgb(var(--c-wash)) 78%,
+      rgb(var(--c-canvas)) 100%
+    );
+  }
+
+  /* The close: the page ramps back up into the band over --fade-in, holds it
+     behind the text (deepest at the centre), then ramps down into the footer
+     (--c-surface) over --fade-out. Pad the content by at least each fade. */
+  .atmosphere-close {
+    --fade-in: 10rem;
+    --fade-out: 9rem;
+    background:
+      /* Mists of page colour at the middle of each edge: the green arrives
+         at the sides first, so the edge is a shallow curve, not a rule. */
+      radial-gradient(
+        ellipse 95% var(--fade-in) at 50% 0%,
+        rgb(var(--c-canvas) / 0.85) 0%,
+        rgb(var(--c-canvas) / 0.35) 45%,
+        rgb(var(--c-canvas) / 0) 100%
+      ),
+      radial-gradient(
+        ellipse 95% var(--fade-out) at 50% 100%,
+        rgb(var(--c-surface) / 0.85) 0%,
+        rgb(var(--c-surface) / 0.35) 45%,
+        rgb(var(--c-surface) / 0) 100%
+      ),
+      radial-gradient(ellipse 60% 35% at 50% 50%, rgb(var(--c-band-deep) / 0.3), rgb(var(--c-band-deep) / 0) 75%),
+      linear-gradient(
+        180deg,
+        rgb(var(--c-canvas)) 0,
+        rgb(var(--c-ramp-5)) calc(var(--fade-in) * 0.28),
+        rgb(var(--c-ramp-4)) calc(var(--fade-in) * 0.46),
+        rgb(var(--c-ramp-3)) calc(var(--fade-in) * 0.62),
+        rgb(var(--c-ramp-2)) calc(var(--fade-in) * 0.76),
+        rgb(var(--c-ramp-1)) calc(var(--fade-in) * 0.9),
+        rgb(var(--c-band)) var(--fade-in),
+        rgb(var(--c-band)) calc(100% - var(--fade-out)),
+        rgb(var(--c-ramp-1)) calc(100% - var(--fade-out) * 0.9),
+        rgb(var(--c-ramp-2)) calc(100% - var(--fade-out) * 0.76),
+        rgb(var(--c-ramp-3)) calc(100% - var(--fade-out) * 0.62),
+        rgb(var(--c-ramp-4)) calc(100% - var(--fade-out) * 0.46),
+        rgb(var(--c-ramp-5)) calc(100% - var(--fade-out) * 0.28),
+        rgb(var(--c-surface)) 100%
+      );
+  }
+  @media (min-width: 640px) {
+    .atmosphere-close {
+      --fade-in: 15rem;
+      --fade-out: 12rem;
+    }
+  }
+
+  /* A soft pale-green light behind a device (see Halo in device.tsx). */
+  .halo {
+    position: absolute;
+    pointer-events: none;
+    border-radius: 9999px;
+    background: radial-gradient(closest-side, rgb(var(--c-brand-100) / 0.95), rgb(var(--c-brand-100) / 0.35) 55%, rgb(var(--c-brand-100) / 0));
+  }
+
+  /* Reveal on scroll (Reveal in device.tsx): slow, upward, once. */
+  .reveal[data-reveal="hidden"] {
+    opacity: 0;
+    transform: translateY(28px);
+  }
+  .reveal[data-reveal="shown"] {
+    opacity: 1;
+    transform: none;
+    transition:
+      opacity 700ms ease-out,
+      transform 900ms cubic-bezier(0.16, 1, 0.3, 1);
+  }
+
+  /* Story motion: a step's progress bar, a notification dropping in from the
+     top of a screen, a tap on a list row. All of it stops under reduced motion. */
+  .story-progress {
+    animation: story-progress var(--story-interval, 4s) linear forwards;
+  }
+  .drop-in {
+    animation: drop-in 600ms cubic-bezier(0.16, 1, 0.3, 1) both;
+  }
+  .rise-in {
+    animation: rise-in 500ms cubic-bezier(0.16, 1, 0.3, 1) both;
+  }
+  .tap-ring {
+    animation: tap-ring 1.6s ease-out infinite;
+  }
+  @keyframes story-progress {
+    from { transform: scaleX(0); }
+    to { transform: scaleX(1); }
+  }
+  @keyframes drop-in {
+    from { opacity: 0; transform: translateY(-110%); }
+    to { opacity: 1; transform: none; }
+  }
+  @keyframes rise-in {
+    from { opacity: 0; transform: translateY(10px); }
+    to { opacity: 1; transform: none; }
+  }
+  @keyframes tap-ring {
+    0% { opacity: 0.55; transform: scale(0.6); }
+    70%, 100% { opacity: 0; transform: scale(1.5); }
+  }
+  @media (prefers-reduced-motion: reduce) {
+    .story-progress, .drop-in, .rise-in, .tap-ring { animation: none; }
+  }
+
+  .section-lead {
+    @apply mt-3 text-pretty text-base leading-relaxed text-ink-muted sm:text-lg;
   }
 
   .skeleton::after {

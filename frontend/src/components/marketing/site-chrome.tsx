@@ -168,9 +168,10 @@ const FOOTER_SECTIONS = [
   },
 ];
 
-export function SiteFooter() {
+/** `seamless`: the page above already fades into the footer's colour, so no rule. */
+export function SiteFooter({ seamless = false }: { seamless?: boolean }) {
   return (
-    <footer className="border-t border-line bg-surface">
+    <footer className={seamless ? "bg-surface" : "border-t border-line bg-surface"}>
       <div className="container-page py-12">
         <div className="grid grid-cols-1 gap-10 sm:grid-cols-2 lg:grid-cols-4">
           <div className="lg:col-span-1">

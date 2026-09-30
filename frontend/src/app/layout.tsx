@@ -18,7 +18,7 @@ const BRAND = process.env.NEXT_PUBLIC_BRAND_NAME ?? "VerifyGH";
  */
 const sans = IBM_Plex_Sans({
   subsets: ["latin"],
-  weight: ["400", "500", "600"],
+  weight: ["400", "500", "600", "700"],
   display: "swap",
   variable: "--font-sans",
 });

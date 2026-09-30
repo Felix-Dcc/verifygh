@@ -24,7 +24,9 @@ numbers (`.code`: slashed zero, tabular). Both are self-hosted by `next/font`.
 | Token | Size / line | Use |
 |---|---|---|
 | `text-figure` | 36/40, 600 | The one headline number (wallet balance) |
-| `text-display` | 30/36, 600 | Marketing headlines only |
+| Hero headline | 36-52, 700 | The homepage `<h1>` on the band only |
+| `.section-title` | 30-36, 700 | Marketing section headings (with `.section-lead` under them) |
+| `text-display` | 30/36, 600 | Other marketing headlines |
 | `text-title` | 22/30, 600 | Page titles (`PageHeader`) |
 | `text-heading` | 17/24, 600 | Section titles (`Section`), dialog titles |
 | `text-base` | 16/24 | Form inputs (iOS zooms anything smaller) |
@@ -52,6 +54,9 @@ not needed and should not appear.
 | `line`, `line-strong` | Borders and dividers |
 | `primary` (+ `-hover`, `-active`) | Filled primary buttons - white text on it |
 | `danger-solid` | Filled destructive buttons - white text on it |
+| `band`, `band-deep` | The green of the homepage hero and the closing call to action (`band-deep` deepens it behind headlines). White text only (`text-white`, `/80` for body, `/75` minimum for small print), buttons `onBand` and `onBandOutline` |
+| `ramp-1` ... `ramp-5` | The five steps from `band` into the page colour, eased so the pale end gets the most room. Only the `atmosphere-*` classes use them |
+| `wash` | The palest green: a section set slightly apart without a border |
 | `brand-*`, `success-*`, `warn-*`, `info-*`, `gold-*` | 50: tint backgrounds; 200: tint borders; 500: dots, rings, focus; 700: text on surfaces or tints |
 
 Why `primary` exists apart from `brand-600/700`: in dark mode a button fill must
@@ -71,9 +76,11 @@ follows the device live and re-checks whenever the tab comes back into view.
 
 ## Shape and elevation
 
-Radius: 8px (`rounded-lg`) for controls and badges; 10-12px (`rounded-xl`,
-`rounded-2xl`) for panels; `rounded-full` only for avatars and dots. `rounded-device`
-(2rem) is for phone mockups on marketing pages only. Larger
+Radius: buttons are pills (`rounded-full`, set once in `buttonClasses`), and
+so are chips and the homepage search; 8px (`rounded-lg`) for inputs, selects
+and badges; 10-12px (`rounded-xl`, `rounded-2xl`) for panels; `rounded-full`
+also for avatars, step numbers and dots. `rounded-device` (2rem) is for phone
+mockups on marketing pages only. Larger
 aliases are pinned to 12px. Borders separate surfaces; shadows (`shadow-raised`,
 `shadow-pop`) are only for things that float - menus, dialogs, toasts.
 
@@ -107,6 +114,8 @@ aliases are pinned to 12px. Borders separate surfaces; shadows (`shadow-raised`,
 | `ServiceLogo` | `components/service-logo.tsx` |
 | `CountryFlag` | `components/country-flag.tsx` |
 | `ThemeProvider`, `ThemeSwitcher`, `useTheme` | `components/theme.tsx` |
+| `Device` (the one phone), `StatusBar`, `AddressBar`, `BottomNav`, `Halo`, `ScreenStack`, `Reveal`, `useStory`, `useInView` | `components/marketing/device.tsx` |
+| Homepage sections: `Hero`, `ServicePicker`, `HowItWorks`, `PaymentSection`, `PricingSection`, `SecuritySection`, `Faq` | `components/marketing/` |
 | Illustrations (`PhoneMessageArt`, `StatementArt`, `WalletArt`, `BellArt`, `SearchArt`, `InviteArt`, `SupportArt`) | `components/illustrations.tsx` |
 | Icons (one hand-drawn set, 1.7 stroke) | `components/icons.tsx` |
 
@@ -123,8 +132,21 @@ aliases are pinned to 12px. Borders separate surfaces; shadows (`shadow-raised`,
   showing the same row (favourites vs. quick picks, in-progress vs. recent
   orders); a panel does not repeat what its header already says.
 * **No template furniture on marketing pages:** no eyebrow labels over headings,
-  no grids of icon-tile cards, no gradient washes or blurred blobs, no stat
-  trios. Headings say something specific; illustrations are the real screens.
+  no grids of icon-tile cards, no blurred blobs, glows or multi-colour
+  gradients, no stat trios. Headings say something specific; illustrations
+  are the real screens.
+* **The homepage never changes colour at a line.** It is one continuous
+  surface (`atmosphere-*` in `globals.css`): the hero's green ramps down into
+  the page over a long distance, curving up around the phone; Payment and
+  Security sit on a `wash` that fades in and out instead of bordered blocks;
+  the close ramps up out of the page and down into the footer, whose rule is
+  dropped there (`SiteFooter seamless`). Two limits: white text only ever sits
+  on the solid green - pad the content by at least each fade (`--fade`,
+  `--fade-in`, `--fade-out`) - and green stays one hue, never neon, never a
+  multi-colour gradient.
+* **Headings on the band set `text-white` themselves.** The base styles colour
+  every `h1`-`h3` with `text-ink`, so an inherited white is overridden and the
+  heading turns dark in light mode.
 
 * **An action that goes somewhere is a `ButtonLink`**, never `<Link><Button>`: a
   button inside a link is two tab stops and invalid HTML.
@@ -149,16 +171,49 @@ No stock photography and no raster images. Two kinds of picture, both drawn
 in code with theme tokens so they work in light and dark and weigh bytes, not
 megabytes:
 
-* **The product itself.** The homepage hero, the "How it works" steps and the
-  payment section show real screens as mockups - with live data where the
-  screen shows data (today's popular services and prices from
-  `/marketplace/home/`, the supported networks from `/payments/options/`). The
-  only invented values are an example order's number, from the 555 range
-  reserved for fiction, and its code, and the mockup says so.
+* **The product itself.** The homepage hero centres on a large, current
+  "Pro"-class phone drawn in CSS (titanium frame, thin bezel, island, side
+  keys - no photograph and no maker's name) showing the moment VerifyGH exists
+  for: the order screen as a WhatsApp code arrives on a US number. Around it
+  float the logos of services on sale today (popular first, from
+  `/marketplace/home/`), a wallet card with today's WhatsApp price, and under
+  it the real count of services. The hardware keeps its colours in both
+  themes; the screen follows the site's. The picker
+  below it is the live catalogue - popular first, searchable, each row opening
+  that service ready to buy. "How it works" and the payment section show real
+  screens as mockups, with live data where the screen shows data (prices, the
+  supported networks from `/payments/options/`). The only invented values are
+  an example order's number, from the 555 range reserved for fiction, and its
+  code.
 * **Illustrations** (`components/illustrations.tsx`), for empty states and
   help: 1.5px outlines in `line-strong`, one soft `brand-50` shape, one
   `brand-500` accent. Customer empty states use them (`EmptyState art=`); the
   admin console keeps compact icons.
+
+Every homepage section below the hero tells its point with the product, not
+with icons and paragraphs:
+
+* **How it works** is one order watched end to end: the steps drive a phone
+  through the marketplace, the buy sheet, the waiting order and the code
+  arriving (with the app's own toast), and a card beside the phone narrates
+  what just happened. Live service and price; invented balance, number, code.
+* **Mobile Money** is a top-up happening: Add funds filled in, the network's
+  own PIN prompt (a plain system dialog - not VerifyGH's screen), then
+  "Payment received" and the balance counting up. Networks, their number
+  prefixes and the quick amounts come from `/payments/options/`.
+* **Pricing** is one live price as a receipt (price, added at checkout
+  GH₵ 0.00, taken from your wallet) with the cedi sign set huge behind it and
+  today's other prices around it. The provider's cost is not public, so it is
+  described, never quantified.
+* **Security** is an annotated product shot: six numbered markers on an
+  account screen, each beside the protection that guards that part. Every
+  note is something the code does.
+* **FAQ** puts the Help screen on a phone with the first questions people ask
+  floating around it; tapping one opens its answer in the list beside it.
+
+Every phone is `Device` - one titanium-framed, current "Pro"-class phone drawn
+in CSS, never a photograph and never named - showing a real VerifyGH screen
+with the app's real labels.
 
 Service logos sit in one container everywhere (`ServiceLogo`): the squircle,
 a hairline outline, never stretched. Payment networks are named, not shown as
@@ -167,7 +222,18 @@ logos - their marks are not ours to use.
 ## Motion
 
 Fast and functional: 150-200ms, ease-out. Menus fade in; sheets slide up; the
-favourite star does one short damped pop. Nothing loops except live status dots.
+favourite star does one short damped pop; arrows in buttons nudge on hover.
+Nothing loops except live status dots and the slow 6s drift of floating
+logos, price tags and question bubbles (`animate-float`, on its own element so
+it never replaces a positioning transform).
+
+The homepage stories (`useStory`) step on their own only while their section
+is on screen, every 3-4s; choosing a step hands control to the reader and
+stops the stepping. Screens dissolve (`ScreenStack`: the new screen fades in
+over the old, never two half-screens blended). Sections fade up once as they
+scroll in (`Reveal`), never content already on screen at load. Under
+`prefers-reduced-motion` nothing moves: stories stay put (Mobile Money shows
+its outcome), reveals are skipped, and every animation is off.
 `prefers-reduced-motion` switches all of it off.
 
 ## Copy

@@ -93,7 +93,9 @@ export function Dialog({
   if (!open) return null;
 
   return (
-    <div className="fixed inset-0 z-[90] flex items-end justify-center sm:items-center">
+    // !m-0: dialogs render where they are used, often inside a space-y-*
+    // stack whose sibling margin would push the backdrop down the screen.
+    <div className="fixed inset-0 z-[90] !m-0 flex items-end justify-center sm:items-center">
       <div
         className="absolute inset-0 animate-fade-in bg-scrim/50 backdrop-blur-[2px]"
         onClick={dismissible ? onClose : undefined}

@@ -11,7 +11,15 @@ export { cn };
  * Button
  * ---------------------------------------------------------------------- */
 
-type ButtonVariant = "primary" | "secondary" | "ghost" | "danger" | "subtle";
+type ButtonVariant =
+  | "primary"
+  | "secondary"
+  | "ghost"
+  | "danger"
+  | "subtle"
+  // On the green band (homepage hero, closing call to action) only.
+  | "onBand"
+  | "onBandOutline";
 type ButtonSize = "sm" | "md" | "lg";
 
 const VARIANTS: Record<ButtonVariant, string> = {
@@ -24,6 +32,9 @@ const VARIANTS: Record<ButtonVariant, string> = {
     "bg-danger-solid text-white hover:bg-danger-solid/90 active:bg-danger-solid disabled:bg-danger-solid/50",
   subtle:
     "bg-brand-50 text-brand-700 hover:bg-brand-100 active:bg-brand-200 disabled:opacity-50",
+  onBand: "bg-white text-band-deep hover:bg-white/90 active:bg-white/80 disabled:opacity-60",
+  onBandOutline:
+    "border border-white/35 bg-transparent text-white hover:bg-white/10 active:bg-white/15 disabled:opacity-50",
 };
 
 const SIZES: Record<ButtonSize, string> = {
@@ -56,7 +67,8 @@ export function buttonClasses({
   className?: string;
 }) {
   return cn(
-    "inline-flex select-none items-center justify-center whitespace-nowrap rounded-lg font-medium",
+    // Pills: one shape for every action, distinct from the 8px inputs beside them.
+    "inline-flex select-none items-center justify-center whitespace-nowrap rounded-full font-medium",
     "transition-colors duration-150 ease-out disabled:cursor-not-allowed",
     VARIANTS[variant],
     SIZES[size],

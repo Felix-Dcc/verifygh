@@ -57,6 +57,9 @@ const config: Config = {
           hover: tone("primary-hover"),
           active: tone("primary-active"),
         },
+        // The green band behind the homepage hero and closing call to action:
+        // white text sits on it in both themes.
+        band: { DEFAULT: tone("band"), deep: tone("band-deep") },
         brand: scale("brand", [50, 100, 200, 300, 400, 500, 600, 700, 800, 900]),
         gold: scale("gold", [100, 300, 500, 700]),
         danger: { ...scale("danger", [50, 200, 500, 700]), solid: tone("danger-solid") },
@@ -141,6 +144,11 @@ const config: Config = {
           "70%": { transform: "scale(1.6)", opacity: "0" },
           "100%": { transform: "scale(1.6)", opacity: "0" },
         },
+        // Service logos around the homepage phone: a slow drift, never a bounce.
+        float: {
+          "0%, 100%": { transform: "translateY(0)" },
+          "50%": { transform: "translateY(-6px)" },
+        },
         // The favourite star: a short, damped pop, not a bounce.
         "pin-pop": {
           "0%": { transform: "scale(1)" },
@@ -154,6 +162,7 @@ const config: Config = {
         shimmer: "shimmer 1.6s infinite",
         "pulse-ring": "pulse-ring 1.8s cubic-bezier(0.24, 0, 0.38, 1) infinite",
         "pin-pop": "pin-pop 220ms cubic-bezier(0.16, 1, 0.3, 1)",
+        float: "float 6s ease-in-out infinite",
       },
     },
   },
