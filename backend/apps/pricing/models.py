@@ -56,6 +56,9 @@ class Rounding(models.TextChoices):
     NONE = "NONE", "No rounding"
     NEAREST_0_10 = "NEAREST_0_10", "Nearest 0.10"
     NEAREST_0_50 = "NEAREST_0_50", "Nearest 0.50"
+    #: Never below the calculated price: a cost increase too small to move
+    #: "nearest" rounding still reaches the customer price.
+    CEIL_0_50 = "CEIL_0_50", "Round up to 0.50"
     NEAREST_1_00 = "NEAREST_1_00", "Nearest 1.00"
     CEIL_1_00 = "CEIL_1_00", "Round up to 1.00"
 

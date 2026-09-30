@@ -100,11 +100,30 @@ def test_hybrid_markup(offering, exchange_rate):
         (Rounding.NEAREST_0_50, Decimal("14.50")),
         (Rounding.NEAREST_1_00, Decimal("14.00")),
         (Rounding.CEIL_1_00, Decimal("15.00")),
+        (Rounding.CEIL_0_50, Decimal("14.50")),
     ],
 )
 def test_rounding_modes(offering, exchange_rate, rounding, expected):
     rule = make_rule(rounding=rounding)
     assert quote_for_offering(offering, rule=rule).customer_price == expected
+
+
+@pytest.mark.parametrize(
+    ("calculated", "nearest", "up"),
+    [
+        (Decimal("10.21"), Decimal("10.00"), Decimal("10.50")),  # nearest would lose 0.21
+        (Decimal("10.50"), Decimal("10.50"), Decimal("10.50")),  # already on a step
+        (Decimal("10.51"), Decimal("10.50"), Decimal("11.00")),
+    ],
+)
+def test_rounding_up_never_charges_below_the_calculated_price(calculated, nearest, up):
+    from apps.common.money import round_to
+    from apps.pricing.engine import _ROUNDING_STEPS as ROUNDING_STEPS
+
+    step, ceiling = ROUNDING_STEPS[Rounding.CEIL_0_50]
+    assert round_to(calculated, step, ceiling=ceiling) == up
+    step, ceiling = ROUNDING_STEPS[Rounding.NEAREST_0_50]
+    assert round_to(calculated, step, ceiling=ceiling) == nearest
 
 
 def test_price_is_clamped_to_the_configured_floor_and_ceiling(offering, exchange_rate):

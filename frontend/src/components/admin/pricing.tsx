@@ -56,6 +56,7 @@ const ROUNDING = [
   ["NONE", "No rounding"],
   ["NEAREST_0_10", "Nearest 0.10"],
   ["NEAREST_0_50", "Nearest 0.50"],
+  ["CEIL_0_50", "Round up to 0.50"],
   ["NEAREST_1_00", "Nearest 1.00"],
   ["CEIL_1_00", "Round up to 1.00"],
 ] as const;

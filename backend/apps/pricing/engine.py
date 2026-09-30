@@ -51,6 +51,7 @@ _ROUNDING_STEPS: dict[str, tuple[Decimal, bool]] = {
     Rounding.NONE: (Decimal("0.01"), False),
     Rounding.NEAREST_0_10: (Decimal("0.10"), False),
     Rounding.NEAREST_0_50: (Decimal("0.50"), False),
+    Rounding.CEIL_0_50: (Decimal("0.50"), True),
     Rounding.NEAREST_1_00: (Decimal("1.00"), False),
     Rounding.CEIL_1_00: (Decimal("1.00"), True),
 }
