@@ -277,3 +277,18 @@ export const PinIcon = ({ className, filled }: IconProps & { filled?: boolean })
     <path d="M12 13.5V21" fill="none" />
   </svg>
 );
+
+export const HelpIcon = (p: IconProps) => (
+  <Svg {...p}>
+    <circle cx="12" cy="12" r="9" />
+    <path d="M9.6 9.4a2.5 2.5 0 0 1 4.8.9c0 1.7-2.4 2.2-2.4 3.7" />
+    <path d="M12 17.2h.01" />
+  </Svg>
+);
+
+export const TagIcon = (p: IconProps) => (
+  <Svg {...p}>
+    <path d="M3.5 12.1V4.5a1 1 0 0 1 1-1h7.6a1 1 0 0 1 .7.3l7.7 7.7a1 1 0 0 1 0 1.4l-7.6 7.6a1 1 0 0 1-1.4 0l-7.7-7.7a1 1 0 0 1-.3-.7Z" />
+    <path d="M8 8h.01" />
+  </Svg>
+);

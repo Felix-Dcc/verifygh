@@ -14,9 +14,17 @@
   }
 
   body {
-    @apply bg-canvas text-ink font-sans antialiased;
+    @apply bg-canvas text-sm text-ink font-sans antialiased;
     /* Prevents the horizontal scroll that kills a mobile layout. */
     overflow-x: hidden;
+    text-rendering: optimizeLegibility;
+  }
+
+  h1,
+  h2,
+  h3 {
+    @apply text-ink;
+    text-wrap: balance;
   }
 
   /* A visible focus ring is a feature, not a blemish. Only shown for keyboard
@@ -29,6 +37,14 @@
   .tabular {
     font-variant-numeric: tabular-nums;
     font-feature-settings: "tnum";
+  }
+
+  /* Codes, references and phone numbers: monospace, tabular, a slashed zero so
+     "O" and "0" cannot be confused when someone types a code by hand. */
+  .code {
+    @apply font-mono;
+    font-variant-numeric: tabular-nums slashed-zero;
+    font-feature-settings: "tnum", "zero";
   }
 
   @media (prefers-reduced-motion: reduce) {
@@ -48,8 +64,11 @@
     @apply mx-auto w-full max-w-6xl px-4 sm:px-6 lg:px-8;
   }
 
+  /* A bordered surface. Borders separate; shadows are for things that float
+     (menus, dialogs, toasts). Use a card only when a group needs a boundary -
+     sections and dividers carry most of the layout. */
   .card {
-    @apply rounded-2xl border border-line bg-surface shadow-card;
+    @apply rounded-xl border border-line bg-surface;
     /* Grid and flex items default to min-width:auto, which means a card
        refuses to shrink below its content and pushes the page wider than the
        viewport. Cards are containers, so they may always shrink. */
@@ -57,7 +76,11 @@
   }
 
   .skeleton {
-    @apply relative overflow-hidden rounded-lg bg-line/60;
+    @apply relative overflow-hidden rounded-md bg-line/60;
+  }
+
+  .link {
+    @apply font-medium text-brand-700 underline-offset-2 hover:underline;
   }
 
   .skeleton::after {

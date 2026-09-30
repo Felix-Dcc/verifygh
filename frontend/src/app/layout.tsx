@@ -1,10 +1,31 @@
 import type { Metadata, Viewport } from "next";
+import { IBM_Plex_Mono, IBM_Plex_Sans } from "next/font/google";
 import { headers } from "next/headers";
 
 import { Providers } from "./providers";
 import "./globals.css";
 
 const BRAND = process.env.NEXT_PUBLIC_BRAND_NAME ?? "VerifyGH";
+
+/**
+ * IBM Plex: precise, slightly technical, with clear figures for money - it reads
+ * as financial infrastructure rather than as a template. next/font downloads it
+ * at build time and serves it from our own origin, so there is no request to a
+ * font CDN and the CSP's font-src 'self' is unchanged. Mono is for codes,
+ * references and phone numbers.
+ */
+const sans = IBM_Plex_Sans({
+  subsets: ["latin"],
+  weight: ["400", "500", "600"],
+  display: "swap",
+  variable: "--font-sans",
+});
+const mono = IBM_Plex_Mono({
+  subsets: ["latin"],
+  weight: ["400", "500"],
+  display: "swap",
+  variable: "--font-mono",
+});
 
 /**
  * Every page renders per request, never at build time.
@@ -52,7 +73,7 @@ export const metadata: Metadata = {
     description: DESCRIPTION,
   },
   appleWebApp: { title: BRAND, capable: true, statusBarStyle: "default" },
-  keywords: ["Mobile Money", "Ghana", "MTN MoMo", "Telecel Cash", "verification", "GHS"],
+  keywords: ["Mobile Money", "Ghana", "MTN MoMo", "Telecel Cash", "verification", "GH₵"],
   robots: { index: true, follow: true },
   formatDetection: { telephone: false },
 };
@@ -71,12 +92,12 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
   headers().get("x-nonce");
 
   return (
-    <html lang="en-GH">
+    <html lang="en-GH" className={`${sans.variable} ${mono.variable}`}>
       <body className="min-h-dvh">
         {/* First stop for keyboard users, before the whole navigation. */}
         <a
           href="#main"
-          className="sr-only focus:not-sr-only focus:absolute focus:left-4 focus:top-4 focus:z-[100] focus:rounded-lg focus:bg-brand-600 focus:px-4 focus:py-2 focus:text-sm focus:font-medium focus:text-white"
+          className="sr-only focus:not-sr-only focus:absolute focus:left-4 focus:top-4 focus:z-50 focus:rounded-lg focus:bg-brand-600 focus:px-4 focus:py-2 focus:text-sm focus:font-medium focus:text-white"
         >
           Skip to content
         </a>

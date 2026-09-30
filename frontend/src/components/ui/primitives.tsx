@@ -25,8 +25,8 @@ const VARIANTS: Record<ButtonVariant, string> = {
   primary:
     "bg-brand-600 text-white hover:bg-brand-700 active:bg-brand-800 disabled:bg-brand-600/50",
   secondary:
-    "bg-surface text-ink border border-line-strong hover:bg-canvas active:bg-line/40 disabled:opacity-50",
-  ghost: "bg-transparent text-ink-soft hover:bg-line/40 active:bg-line/60 disabled:opacity-50",
+    "bg-surface text-ink border border-line-strong hover:bg-sunken active:bg-line/60 disabled:opacity-50",
+  ghost: "bg-transparent text-ink-soft hover:bg-sunken hover:text-ink active:bg-line/60 disabled:opacity-50",
   danger:
     "bg-danger-700 text-white hover:bg-danger-500 active:bg-danger-700 disabled:bg-danger-700/50",
   subtle:
@@ -64,8 +64,8 @@ export const Button = React.forwardRef<HTMLButtonElement, ButtonProps>(function 
       disabled={disabled || loading}
       aria-busy={loading || undefined}
       className={cn(
-        "inline-flex select-none items-center justify-center rounded-xl font-medium",
-        "transition-colors duration-150 disabled:cursor-not-allowed",
+        "inline-flex select-none items-center justify-center whitespace-nowrap rounded-lg font-medium",
+        "transition-colors duration-150 ease-out disabled:cursor-not-allowed",
         VARIANTS[variant],
         SIZES[size],
         fullWidth && "w-full",
@@ -162,9 +162,13 @@ export function Field({
 }) {
   return (
     <div className={cn("space-y-1.5", className)}>
-      <label htmlFor={htmlFor} className="block text-sm font-medium text-ink-soft">
+      <label htmlFor={htmlFor} className="block text-label text-ink-soft">
         {label}
-        {required ? <span className="ml-0.5 text-danger-500">*</span> : null}
+        {required ? (
+          <span className="ml-0.5 text-danger-700" aria-hidden>
+            *
+          </span>
+        ) : null}
       </label>
       {children}
       {error ? (
@@ -172,7 +176,7 @@ export function Field({
           {error}
         </p>
       ) : hint ? (
-        <p id={`${htmlFor}-hint`} className="text-sm text-ink-muted">
+        <p id={`${htmlFor}-hint`} className="text-caption text-ink-muted">
           {hint}
         </p>
       ) : null}
@@ -190,14 +194,14 @@ export const Input = React.forwardRef<HTMLInputElement, InputProps>(function Inp
   ref,
 ) {
   const base = cn(
-    "h-12 w-full bg-transparent text-base text-ink placeholder:text-ink-faint",
+    "h-11 w-full bg-transparent text-base text-ink placeholder:text-ink-faint",
     // 16px text: anything smaller makes iOS Safari zoom the page on focus.
     "focus:outline-none disabled:text-ink-muted",
     className,
   );
 
   const shell = cn(
-    "flex items-center rounded-xl border bg-surface transition-shadow",
+    "flex items-center rounded-lg border bg-surface transition-shadow",
     "focus-within:shadow-focus",
     invalid
       ? "border-danger-500"
@@ -229,7 +233,7 @@ export const Select = React.forwardRef<
       ref={ref}
       aria-invalid={invalid || undefined}
       className={cn(
-        "h-12 w-full appearance-none rounded-xl border bg-surface px-3.5 pr-10 text-base text-ink",
+        "h-11 w-full appearance-none rounded-lg border bg-surface px-3.5 pr-10 text-base text-ink",
         "bg-[url('data:image/svg+xml;utf8,<svg xmlns=%22http://www.w3.org/2000/svg%22 viewBox=%220 0 20 20%22 fill=%22none%22 stroke=%22%236B7A73%22 stroke-width=%221.6%22><path d=%22M6 8l4 4 4-4%22/></svg>')] bg-[length:20px_20px] bg-[right_0.75rem_center] bg-no-repeat",
         "transition-shadow focus:shadow-focus focus:outline-none",
         invalid ? "border-danger-500" : "border-line-strong focus:border-brand-500",
@@ -251,7 +255,7 @@ export const Textarea = React.forwardRef<
       ref={ref}
       aria-invalid={invalid || undefined}
       className={cn(
-        "w-full rounded-xl border bg-surface p-3.5 text-base text-ink placeholder:text-ink-faint",
+        "w-full rounded-lg border bg-surface p-3.5 text-base text-ink placeholder:text-ink-faint",
         "transition-shadow focus:shadow-focus focus:outline-none",
         invalid ? "border-danger-500" : "border-line-strong focus:border-brand-500",
         className,
@@ -300,7 +304,7 @@ export function Checkbox({
 type Tone = "neutral" | "brand" | "success" | "warn" | "danger" | "info";
 
 const TONES: Record<Tone, string> = {
-  neutral: "bg-line/60 text-ink-soft",
+  neutral: "bg-sunken text-ink-soft",
   brand: "bg-brand-50 text-brand-700",
   success: "bg-success-50 text-success-700",
   warn: "bg-warn-50 text-warn-700",
@@ -322,7 +326,7 @@ export function Badge({
   return (
     <span
       className={cn(
-        "inline-flex items-center gap-1.5 rounded-full px-2.5 py-1 text-xs font-medium",
+        "inline-flex items-center gap-1.5 whitespace-nowrap rounded-md px-2 py-0.5 text-caption font-medium",
         TONES[tone],
         className,
       )}
@@ -361,13 +365,43 @@ const STATUS_TONES: Record<string, Tone> = {
   ADJUSTMENT: "warn",
 };
 
+/** What each status is called on screen. Anything unlisted falls back to a
+ *  sentence-cased version of the enum. */
+const STATUS_LABELS: Record<string, string> = {
+  CREATED: "Created",
+  PAYMENT_PENDING: "Awaiting payment",
+  PROCESSING: "Getting number",
+  NUMBER_ASSIGNED: "Number ready",
+  WAITING_FOR_CODE: "Waiting for SMS",
+  CODE_RECEIVED: "Code received",
+  COMPLETED: "Completed",
+  EXPIRED: "Expired",
+  CANCELLED: "Cancelled",
+  FAILED: "Failed",
+  REFUNDED: "Refunded",
+  SUCCESS: "Successful",
+  PENDING: "Pending",
+  OPEN: "Open",
+  IN_REVIEW: "In review",
+  REPLACED: "Replaced",
+  REJECTED: "Rejected",
+  RESOLVED: "Resolved",
+  DEPOSIT: "Deposit",
+  PURCHASE: "Purchase",
+  REFUND: "Refund",
+  ADJUSTMENT: "Adjustment",
+};
+
+export function statusLabel(status: string): string {
+  if (STATUS_LABELS[status]) return STATUS_LABELS[status];
+  const text = status.replace(/_/g, " ").toLowerCase();
+  return text.charAt(0).toUpperCase() + text.slice(1);
+}
+
 export function StatusBadge({ status, className }: { status: string; className?: string }) {
   const tone = STATUS_TONES[status] ?? "neutral";
   const live = status === "WAITING_FOR_CODE" || status === "PROCESSING";
-  const label = status
-    .split("_")
-    .map((word) => word.charAt(0) + word.slice(1).toLowerCase())
-    .join(" ");
+  const label = statusLabel(status);
   return (
     <Badge tone={tone} className={className}>
       {live ? (
@@ -415,7 +449,7 @@ export function Alert({
   return (
     <div
       role={tone === "danger" ? "alert" : "status"}
-      className={cn("rounded-xl border p-4", TONES[tone], border[tone], className)}
+      className={cn("rounded-lg border px-4 py-3", TONES[tone], border[tone], className)}
     >
       <div className="flex items-start justify-between gap-3">
         <div className="min-w-0 text-sm">
@@ -442,15 +476,15 @@ export function EmptyState({
   className?: string;
 }) {
   return (
-    <div className={cn("flex flex-col items-center px-6 py-14 text-center", className)}>
+    <div className={cn("flex flex-col items-center px-6 py-12 text-center", className)}>
       {icon ? (
-        <div className="mb-4 flex h-12 w-12 items-center justify-center rounded-2xl bg-brand-50 text-brand-600">
+        <div className="mb-3 flex h-10 w-10 items-center justify-center rounded-lg border border-line bg-sunken text-ink-muted [&_svg]:h-5 [&_svg]:w-5">
           {icon}
         </div>
       ) : null}
-      <h3 className="text-base font-semibold text-ink">{title}</h3>
+      <h3 className="text-heading text-ink">{title}</h3>
       {description ? (
-        <p className="mt-1.5 max-w-sm text-sm text-ink-muted">{description}</p>
+        <p className="mt-1 max-w-sm text-sm text-ink-muted">{description}</p>
       ) : null}
       {action ? <div className="mt-5">{action}</div> : null}
     </div>
@@ -476,7 +510,7 @@ export function SegmentedControl<T extends string>({
     <div
       role="tablist"
       className={cn(
-        "no-scrollbar flex gap-1 overflow-x-auto rounded-xl bg-line/40 p-1",
+        "no-scrollbar flex gap-0.5 overflow-x-auto rounded-lg bg-sunken p-0.5",
         className,
       )}
     >
@@ -490,10 +524,10 @@ export function SegmentedControl<T extends string>({
             aria-selected={active}
             onClick={() => onChange(option.value)}
             className={cn(
-              "shrink-0 whitespace-nowrap rounded-lg px-3.5 py-2 text-sm font-medium transition-colors",
+              "shrink-0 whitespace-nowrap rounded-md px-3 py-1.5 text-sm font-medium transition-colors",
               active
-                ? "bg-surface text-ink shadow-card"
-                : "text-ink-muted hover:text-ink-soft",
+                ? "bg-surface text-ink shadow-card ring-1 ring-line"
+                : "text-ink-muted hover:text-ink",
             )}
           >
             {option.label}
@@ -506,5 +540,101 @@ export function SegmentedControl<T extends string>({
         );
       })}
     </div>
+  );
+}
+
+
+/* -------------------------------------------------------------------------
+ * Layout building blocks
+ *
+ * Most of the layout is sections and dividers, not cards. These keep the
+ * section rhythm identical on every page.
+ * ---------------------------------------------------------------------- */
+
+/** A page section: a quiet heading row, then its content. */
+export function Section({
+  title,
+  description,
+  action,
+  children,
+  className,
+}: {
+  title?: React.ReactNode;
+  description?: React.ReactNode;
+  action?: React.ReactNode;
+  children: React.ReactNode;
+  className?: string;
+}) {
+  return (
+    <section className={cn("min-w-0", className)}>
+      {title || action ? (
+        <div className="mb-3 flex items-end justify-between gap-3">
+          <div className="min-w-0">
+            {title ? <h2 className="text-heading text-ink">{title}</h2> : null}
+            {description ? <p className="mt-0.5 text-sm text-ink-muted">{description}</p> : null}
+          </div>
+          {action ? <div className="shrink-0">{action}</div> : null}
+        </div>
+      ) : null}
+      {children}
+    </section>
+  );
+}
+
+/** Label / value pairs: order details, review steps, receipts. */
+export function DescriptionList({
+  items,
+  className,
+}: {
+  items: { label: React.ReactNode; value: React.ReactNode; emphasis?: boolean }[];
+  className?: string;
+}) {
+  return (
+    <dl className={cn("divide-y divide-line", className)}>
+      {items.map((item, index) => (
+        <div key={index} className="flex items-baseline justify-between gap-4 py-2.5">
+          <dt className="text-sm text-ink-muted">{item.label}</dt>
+          <dd
+            className={cn(
+              "min-w-0 truncate text-right text-sm",
+              item.emphasis ? "font-semibold text-ink" : "text-ink-soft",
+            )}
+          >
+            {item.value}
+          </dd>
+        </div>
+      ))}
+    </dl>
+  );
+}
+
+/** Money as the point of a screen: symbol quieter than the figure. */
+export function Amount({
+  value,
+  className,
+  size = "figure",
+}: {
+  value: string;
+  className?: string;
+  size?: "figure" | "title";
+}) {
+  // value is already formatted ("GH₵ 1,250.00"): split the symbol off.
+  const match = value.match(/^([−+]?)(GH₵\u00A0)?(.*)$/);
+  const [, sign, symbol, figure] = match ?? ["", "", "", value];
+  return (
+    <span className={cn("tabular inline-flex items-baseline text-ink", className)}>
+      {sign}
+      {symbol ? (
+        <span
+          className={cn(
+            "mr-1 font-medium text-ink-muted",
+            size === "figure" ? "text-xl" : "text-base",
+          )}
+        >
+          GH₵
+        </span>
+      ) : null}
+      <span className={size === "figure" ? "text-figure" : "text-title"}>{figure}</span>
+    </span>
   );
 }

@@ -33,8 +33,13 @@ export function Marketplace() {
   const { user } = useAuth();
 
   const [country, setCountry] = React.useState(() => (params.get("country") ?? "").toUpperCase());
-  const [search, setSearch] = React.useState("");
-  const [query, setQuery] = React.useState("");
+  // ?q= comes from the search box in the top bar, from any page.
+  const [search, setSearch] = React.useState(() => params.get("q") ?? "");
+  const [query, setQuery] = React.useState(() => (params.get("q") ?? "").trim());
+  const incoming = params.get("q");
+  React.useEffect(() => {
+    if (incoming !== null) setSearch(incoming);
+  }, [incoming]);
   const [buying, setBuying] = React.useState<string | null>(params.get("service"));
   // Pins flip instantly and settle when the server answers.
   const [pinOverrides, setPinOverrides] = React.useState<Record<string, boolean>>({});

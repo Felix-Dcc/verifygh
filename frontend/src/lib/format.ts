@@ -6,19 +6,46 @@ const GHS = new Intl.NumberFormat("en-GH", {
   maximumFractionDigits: 2,
 });
 
-/** "25" -> "₵25.00". Amounts arrive as strings and stay exact. */
+/**
+ * Money is written one way everywhere: "GH₵ 1,250.00".
+ *
+ * GH₵ (not ₵ or GHS) because that is how Ghanaian banks and MoMo apps write
+ * it; a no-break space so the symbol never wraps away from the figure; always
+ * two decimals. Amounts arrive as strings and stay exact.
+ */
+const CEDI = "GH₵ ";
+const MINUS = "−";
+
 export function cedis(amount: string | number | null | undefined): string {
-  if (amount === null || amount === undefined || amount === "") return "₵0.00";
+  if (amount === null || amount === undefined || amount === "") return `${CEDI}0.00`;
   const value = typeof amount === "string" ? Number.parseFloat(amount) : amount;
-  if (Number.isNaN(value)) return "₵0.00";
-  return `₵${GHS.format(value)}`;
+  if (Number.isNaN(value)) return `${CEDI}0.00`;
+  return `${value < 0 ? MINUS : ""}${CEDI}${GHS.format(Math.abs(value))}`;
 }
 
-/** Signed, for ledger rows: "+₵50.00" / "-₵14.50". */
+/**
+ * Signed, for ledger rows: "+GH₵ 50.00" / "−GH₵ 14.50". A true minus sign, the
+ * width of the plus, so a column of signed amounts lines up - and the sign is
+ * there so the direction never depends on colour alone.
+ */
 export function signedCedis(amount: string | number, direction?: "CREDIT" | "DEBIT"): string {
   const value = typeof amount === "string" ? Number.parseFloat(amount) : amount;
   const negative = direction === "DEBIT" || value < 0;
-  return `${negative ? "−" : "+"}${cedis(Math.abs(value))}`;
+  return `${negative ? MINUS : "+"}${cedis(Math.abs(value))}`;
+}
+
+const USD = new Intl.NumberFormat("en-US", {
+  style: "currency",
+  currency: "USD",
+  minimumFractionDigits: 2,
+  maximumFractionDigits: 4,
+});
+
+/** Provider costs (staff only): "$12.50", up to four decimals when they matter. */
+export function usd(amount: string | number | null | undefined): string {
+  if (amount === null || amount === undefined || amount === "") return "$0.00";
+  const value = typeof amount === "string" ? Number.parseFloat(amount) : amount;
+  return Number.isNaN(value) ? "$0.00" : USD.format(value);
 }
 
 /** 0241234567 / +233241234567 -> "024 123 4567". */
