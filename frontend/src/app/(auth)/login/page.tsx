@@ -5,7 +5,7 @@ import { useRouter, useSearchParams } from "next/navigation";
 import * as React from "react";
 
 import { errorMessage, useAuth } from "@/components/auth-provider";
-import { Alert, Button, Card, Field, Input } from "@/components/ui/primitives";
+import { Alert, Button, Card, Field, Input, PasswordInput } from "@/components/ui/primitives";
 import { ApiError } from "@/lib/api";
 
 export default function LoginPage() {
@@ -59,7 +59,7 @@ function LoginForm() {
   return (
     <div>
       <div className="mb-6">
-        <h1 className="text-2xl font-semibold tracking-tight text-ink">Welcome back</h1>
+        <h1 className="text-title text-ink">Welcome back</h1>
         <p className="mt-1.5 text-sm text-ink-muted">
           Sign in to your VerifyGH wallet and orders.
         </p>
@@ -98,10 +98,9 @@ function LoginForm() {
 
           <div>
             <Field label="Password" htmlFor="password" error={fieldErrors.password} required>
-              <Input
+              <PasswordInput
                 id="password"
                 name="password"
-                type="password"
                 autoComplete="current-password"
                 required
                 value={password}

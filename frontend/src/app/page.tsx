@@ -212,7 +212,7 @@ function MomoExplainer() {
 
         <div className="card overflow-hidden">
           <div className="border-b border-line px-5 py-4">
-            <p className="text-sm font-semibold text-ink">Add money</p>
+            <p className="text-sm font-semibold text-ink">Add funds</p>
             <p className="text-xs text-ink-muted">Mobile Money - Ghana</p>
           </div>
           <div className="space-y-4 p-5">

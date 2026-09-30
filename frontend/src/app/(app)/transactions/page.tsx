@@ -5,7 +5,7 @@ import * as React from "react";
 import useSWR from "swr";
 
 import { PageHeader } from "@/components/app-shell";
-import { ArrowRightIcon, PlusIcon, WalletIcon } from "@/components/icons";
+import { PlusIcon, WalletIcon } from "@/components/icons";
 import {
   Badge,
   Button,
@@ -14,7 +14,13 @@ import {
   SegmentedControl,
   Skeleton,
 } from "@/components/ui/primitives";
-import { cedis, formatDateTime, relativeTime, signedCedis } from "@/lib/format";
+import {
+  ENTRY_LABELS,
+  TransactionAmount,
+  TransactionIcon,
+  TransactionRow,
+} from "@/components/wallet/transaction-row";
+import { cedis, formatDateTime } from "@/lib/format";
 import type { LedgerEntryType, Paginated, Transaction } from "@/lib/types";
 
 type Filter = "" | LedgerEntryType;
@@ -27,13 +33,14 @@ const FILTERS: { value: Filter; label: string }[] = [
   { value: "ADJUSTMENT", label: "Adjustments" },
 ];
 
-const TYPE_TONES: Record<string, "success" | "neutral" | "brand" | "warn"> = {
+const TYPE_TONES: Record<string, "success" | "neutral" | "brand" | "warn" | "gold"> = {
   DEPOSIT: "success",
   PURCHASE: "neutral",
   REFUND: "brand",
   ADJUSTMENT: "warn",
   WITHDRAWAL: "neutral",
   REVERSAL: "warn",
+  REFERRAL_BONUS: "gold",
 };
 
 export default function TransactionsPage() {
@@ -49,13 +56,14 @@ export default function TransactionsPage() {
   const pagination = data?.pagination;
 
   return (
-    <div className="space-y-4">
+    <div>
       <PageHeader
         title="Transactions"
         description="Every movement of money on your account, with a reference for each one."
         action={
-          <Link href="/wallet/deposit">
-            <Button icon={<PlusIcon className="h-5 w-5" />}>Add money</Button>
+          // The top bar carries "Add funds" from sm up; phones get it here.
+          <Link href="/wallet/deposit" className="sm:hidden">
+            <Button icon={<PlusIcon className="h-5 w-5" />}>Add funds</Button>
           </Link>
         }
       />
@@ -67,6 +75,7 @@ export default function TransactionsPage() {
           setFilter(value);
           setPage(1);
         }}
+        className="mb-4"
       />
 
       <Card className="overflow-hidden">
@@ -78,128 +87,97 @@ export default function TransactionsPage() {
             title={filter ? "Nothing of that type yet" : "No transactions yet"}
             description="Deposits, purchases, refunds and adjustments all show up here."
             action={
-              <Link href="/wallet/deposit">
-                <Button>Add money</Button>
-              </Link>
+              filter ? (
+                <Button
+                  variant="secondary"
+                  onClick={() => {
+                    setFilter("");
+                    setPage(1);
+                  }}
+                >
+                  Show everything
+                </Button>
+              ) : (
+                <Link href="/wallet/deposit">
+                  <Button>Add funds</Button>
+                </Link>
+              )
             }
           />
         ) : (
           <>
             <ul className="divide-y divide-line md:hidden">
               {entries.map((entry) => (
-                <li key={entry.id} className="flex items-start gap-3 px-4 py-3.5">
-                  <span
-                    className={
-                      entry.direction === "CREDIT"
-                        ? "mt-0.5 flex h-9 w-9 shrink-0 items-center justify-center rounded-xl bg-success-50 text-success-700"
-                        : "mt-0.5 flex h-9 w-9 shrink-0 items-center justify-center rounded-xl bg-line/60 text-ink-soft"
-                    }
-                  >
-                    {entry.direction === "CREDIT" ? (
-                      <PlusIcon className="h-4 w-4" />
-                    ) : (
-                      <ArrowRightIcon className="h-4 w-4" />
-                    )}
-                  </span>
-                  <div className="min-w-0 flex-1">
-                    <p className="text-sm font-medium text-ink">{entry.description}</p>
-                    <p className="tabular mt-0.5 text-xs text-ink-muted">{entry.reference}</p>
-                    <p className="mt-1 flex items-center gap-2 text-xs text-ink-faint">
-                      <Badge tone={TYPE_TONES[entry.entry_type] ?? "neutral"}>
-                        {entry.entry_type.charAt(0) + entry.entry_type.slice(1).toLowerCase()}
-                      </Badge>
-                      {relativeTime(entry.created_at)}
-                    </p>
-                  </div>
-                  <div className="shrink-0 text-right">
-                    <p
-                      className={
-                        entry.direction === "CREDIT"
-                          ? "tabular text-sm font-semibold text-success-700"
-                          : "tabular text-sm font-semibold text-ink"
-                      }
-                    >
-                      {signedCedis(entry.amount, entry.direction)}
-                    </p>
-                    <p className="tabular mt-0.5 text-xs text-ink-faint">
-                      {cedis(entry.balance_after)}
-                    </p>
-                  </div>
-                </li>
+                <TransactionRow key={entry.id} entry={entry} showBalance />
               ))}
             </ul>
 
-            <div className="hidden md:block">
-              <table className="w-full text-left text-sm">
-                <thead className="border-b border-line bg-canvas">
-                  <tr className="text-xs uppercase tracking-wide text-ink-muted">
-                    <th scope="col" className="px-5 py-3 font-medium">
-                      Date
-                    </th>
-                    <th scope="col" className="px-5 py-3 font-medium">
-                      Type
-                    </th>
-                    <th scope="col" className="px-5 py-3 font-medium">
-                      Description
-                    </th>
-                    <th scope="col" className="px-5 py-3 font-medium">
-                      Reference
-                    </th>
-                    <th scope="col" className="px-5 py-3 text-right font-medium">
-                      Amount
-                    </th>
-                    <th scope="col" className="px-5 py-3 text-right font-medium">
-                      Balance
-                    </th>
+            <table className="hidden w-full text-left text-sm md:table">
+              <thead className="border-b border-line bg-sunken text-caption text-ink-muted">
+                <tr>
+                  <th scope="col" className="px-5 py-2.5 font-medium">
+                    Description
+                  </th>
+                  <th scope="col" className="px-5 py-2.5 font-medium">
+                    Type
+                  </th>
+                  <th scope="col" className="px-5 py-2.5 font-medium">
+                    Date
+                  </th>
+                  <th scope="col" className="px-5 py-2.5 text-right font-medium">
+                    Amount
+                  </th>
+                  <th scope="col" className="px-5 py-2.5 text-right font-medium">
+                    Balance after
+                  </th>
+                </tr>
+              </thead>
+              <tbody className="divide-y divide-line">
+                {entries.map((entry) => (
+                  <tr key={entry.id} className="transition-colors hover:bg-sunken/60">
+                    <td className="px-5 py-3">
+                      <div className="flex items-center gap-3">
+                        <TransactionIcon entry={entry} />
+                        <div className="min-w-0">
+                          <p className="flex max-w-sm items-center gap-2 text-ink">
+                            <span className="truncate">{entry.description}</span>
+                            {entry.funds === "PROMO" ? (
+                              <Badge tone="gold" className="shrink-0">
+                                Promo
+                              </Badge>
+                            ) : null}
+                          </p>
+                          <p className="code text-caption text-ink-muted">{entry.reference}</p>
+                        </div>
+                      </div>
+                    </td>
+                    <td className="px-5 py-3">
+                      <Badge tone={TYPE_TONES[entry.entry_type] ?? "neutral"}>
+                        {ENTRY_LABELS[entry.entry_type] ?? entry.entry_type}
+                      </Badge>
+                    </td>
+                    <td className="whitespace-nowrap px-5 py-3 text-ink-muted">
+                      {formatDateTime(entry.created_at)}
+                    </td>
+                    <td className="px-5 py-3 text-right">
+                      <TransactionAmount entry={entry} />
+                    </td>
+                    <td className="tabular whitespace-nowrap px-5 py-3 text-right text-ink-muted">
+                      {cedis(entry.balance_after)}
+                    </td>
                   </tr>
-                </thead>
-                <tbody className="divide-y divide-line">
-                  {entries.map((entry) => (
-                    <tr key={entry.id} className="transition-colors hover:bg-canvas">
-                      <td className="whitespace-nowrap px-5 py-3.5 text-ink-muted">
-                        {formatDateTime(entry.created_at)}
-                      </td>
-                      <td className="px-5 py-3.5">
-                        <Badge tone={TYPE_TONES[entry.entry_type] ?? "neutral"}>
-                          {entry.entry_type.charAt(0) + entry.entry_type.slice(1).toLowerCase()}
-                        </Badge>
-                      </td>
-                      <td className="max-w-xs truncate px-5 py-3.5 text-ink">
-                        {entry.related_order_id ? (
-                          <span>{entry.description}</span>
-                        ) : (
-                          entry.description
-                        )}
-                      </td>
-                      <td className="tabular whitespace-nowrap px-5 py-3.5 text-ink-muted">
-                        {entry.reference}
-                      </td>
-                      <td
-                        className={
-                          entry.direction === "CREDIT"
-                            ? "tabular whitespace-nowrap px-5 py-3.5 text-right font-semibold text-success-700"
-                            : "tabular whitespace-nowrap px-5 py-3.5 text-right font-semibold text-ink"
-                        }
-                      >
-                        {signedCedis(entry.amount, entry.direction)}
-                      </td>
-                      <td className="tabular whitespace-nowrap px-5 py-3.5 text-right text-ink-muted">
-                        {cedis(entry.balance_after)}
-                      </td>
-                    </tr>
-                  ))}
-                </tbody>
-              </table>
-            </div>
+                ))}
+              </tbody>
+            </table>
           </>
         )}
       </Card>
 
       {pagination && pagination.pages > 1 ? (
-        <div className="flex items-center justify-between gap-3">
+        <div className="mt-4 flex items-center justify-between gap-3">
           <p className="text-sm text-ink-muted">
             Page {pagination.page} of {pagination.pages}
-            <span className="hidden sm:inline"> - {pagination.count} transactions</span>
+            <span className="hidden sm:inline"> &middot; {pagination.count} transactions</span>
           </p>
           <div className="flex gap-2">
             <Button
@@ -230,7 +208,7 @@ function TableSkeleton() {
     <ul className="divide-y divide-line">
       {Array.from({ length: 8 }).map((_, index) => (
         <li key={index} className="flex items-center gap-3 px-4 py-3.5 sm:px-5">
-          <Skeleton className="h-9 w-9 rounded-xl" />
+          <Skeleton className="h-9 w-9 rounded-lg" />
           <div className="flex-1 space-y-2">
             <Skeleton className="h-3.5 w-48" />
             <Skeleton className="h-3 w-28" />

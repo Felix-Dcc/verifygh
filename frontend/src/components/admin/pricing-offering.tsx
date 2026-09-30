@@ -3,6 +3,7 @@
 import * as React from "react";
 import useSWR from "swr";
 
+import { CountryFlag } from "@/components/country-flag";
 import { ServiceLogo } from "@/components/service-logo";
 import { Dialog } from "@/components/ui/dialog";
 import {
@@ -233,7 +234,14 @@ export function OfferingPricingDialog({
       open
       onClose={onClose}
       title={row ? `${row.service.name} | ${row.country.code} | ${row.provider.name}` : "Pricing"}
-      description={row ? `${row.country.flag} ${row.country.name}` : undefined}
+      description={
+        row ? (
+          <span className="inline-flex items-center gap-1.5">
+            <CountryFlag code={row.country.code} size="sm" />
+            {row.country.name}
+          </span>
+        ) : undefined
+      }
       size="lg"
     >
       {!data || !row ? (

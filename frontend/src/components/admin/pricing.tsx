@@ -270,7 +270,7 @@ function RuleEditor({
                 <option value="">Any country</option>
                 {sellable.map((country) => (
                   <option key={country.id} value={country.id}>
-                    {country.flag_emoji} {country.name}
+                    {country.name}
                   </option>
                 ))}
               </Select>

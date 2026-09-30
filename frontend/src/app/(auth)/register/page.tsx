@@ -12,7 +12,15 @@ import {
   useReferralInvite,
 } from "@/components/referral-invite";
 import { ResendVerification } from "@/components/resend-verification";
-import { Alert, Button, Card, Checkbox, Field, Input } from "@/components/ui/primitives";
+import {
+  Alert,
+  Button,
+  Card,
+  Checkbox,
+  Field,
+  Input,
+  PasswordInput,
+} from "@/components/ui/primitives";
 import { ApiError } from "@/lib/api";
 
 /**
@@ -154,7 +162,7 @@ export default function RegisterPage() {
   return (
     <div>
       <div className="mb-6">
-        <h1 className="text-2xl font-semibold tracking-tight text-ink">Create your account</h1>
+        <h1 className="text-title text-ink">Create your account</h1>
         <p className="mt-1.5 text-sm text-ink-muted">
           Free to create. You only pay when you buy a verification number.
         </p>
@@ -225,10 +233,9 @@ export default function RegisterPage() {
             hint={`At least ${MIN_PASSWORD_LENGTH} characters. A short phrase works well.`}
             required
           >
-            <Input
+            <PasswordInput
               id="password"
               name="new-password"
-              type="password"
               autoComplete="new-password"
               required
               minLength={MIN_PASSWORD_LENGTH}

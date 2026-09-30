@@ -7,13 +7,6 @@ const DOT: Record<Availability, string> = {
   UNAVAILABLE: "bg-danger-500",
 };
 
-/**
- * Stock as the provider reported it, and no more.
- *
- * A number appears only when the server sends one - it withholds counts that
- * look like a ceiling (some providers report 9999 for almost everything) - so the
- * words here never claim stock we were not told about.
- */
 /** A service we sell but cannot supply right now. Never says why. */
 export function TemporarilyUnavailableBadge({ className }: { className?: string }) {
   return (
@@ -23,6 +16,13 @@ export function TemporarilyUnavailableBadge({ className }: { className?: string 
   );
 }
 
+/**
+ * Stock as the provider reported it, and no more.
+ *
+ * A number appears only when the server sends one - it withholds counts that
+ * look like a ceiling (some providers report 9999 for almost everything) - so the
+ * words here never claim stock we were not told about.
+ */
 export function AvailabilityLabel({
   availability,
   count,
@@ -50,12 +50,12 @@ export function AvailabilityLabel({
   return (
     <span
       className={cn(
-        "inline-flex items-center gap-1.5 text-xs",
+        "inline-flex items-center gap-1.5 text-caption",
         availability === "UNAVAILABLE" ? "text-ink-faint" : "text-ink-soft",
         className,
       )}
     >
-      <span className={cn("h-2 w-2 shrink-0 rounded-full", DOT[availability])} aria-hidden />
+      <span className={cn("h-1.5 w-1.5 shrink-0 rounded-full", DOT[availability])} aria-hidden />
       {text}
     </span>
   );

@@ -7,15 +7,17 @@ import useSWR, { mutate as globalMutate } from "swr";
 
 import { PageHeader } from "@/components/app-shell";
 import { CheckCircleIcon, ClockIcon, CopyIcon } from "@/components/icons";
+import { CountryFlag } from "@/components/country-flag";
 import { OrderTimeline } from "@/components/orders/order-timeline";
-import { ServiceLogo } from "@/components/service-logo";
 import { ReportProblem } from "@/components/orders/report-problem";
+import { ServiceLogo } from "@/components/service-logo";
 import { ConfirmDialog } from "@/components/ui/dialog";
 import {
   Alert,
   Button,
   Card,
   CardHeader,
+  DescriptionList,
   Skeleton,
   StatusBadge,
   cn,
@@ -141,7 +143,7 @@ export default function OrderDetailPage() {
   const status = live?.status ?? order.status;
 
   return (
-    <div className="space-y-4">
+    <div className="space-y-6">
       <PageHeader
         title={order.service_name}
         icon={
@@ -155,10 +157,11 @@ export default function OrderDetailPage() {
         back={{ href: "/orders", label: "All orders" }}
         description={
           <span className="flex flex-wrap items-center gap-x-2 gap-y-1">
-            <span className="tabular font-medium text-ink-soft">{order.reference}</span>
+            <span className="code text-ink-soft">{order.reference}</span>
             <span aria-hidden>&middot;</span>
-            <span>
-              <span aria-hidden>{order.country_flag}</span> {order.country_name}
+            <span className="inline-flex items-center gap-1.5">
+              <CountryFlag code={order.country_code} size="sm" />
+              {order.country_name}
             </span>
             <span aria-hidden>&middot;</span>
             <span className="tabular">{cedis(order.price)}</span>
@@ -167,107 +170,110 @@ export default function OrderDetailPage() {
         action={<StatusBadge status={status} />}
       />
 
-      {status === "PROCESSING" ? (
-        <Alert tone="info" title="Reserving your number">
-          We are placing the order with our provider. This usually takes a few seconds.
-        </Alert>
-      ) : null}
+      <div className="space-y-3 empty:hidden">
+        {status === "PROCESSING" ? (
+          <Alert tone="info" title="Reserving your number">
+            We are placing the order with our provider. This usually takes a few seconds.
+          </Alert>
+        ) : null}
 
-      {order.refund_status === "COMPLETED" ? (
-        <Alert tone="brand" title="Refunded to your wallet">
-          {cedis(order.refund?.amount ?? order.price)} has been returned.{" "}
-          <Link href="/transactions" className="underline">
-            See the transaction
-          </Link>
-          .
-        </Alert>
-      ) : null}
+        {order.refund_status === "COMPLETED" ? (
+          <Alert tone="brand" title="Refunded to your wallet">
+            {cedis(order.refund?.amount ?? order.price)} has been returned.{" "}
+            <Link href="/transactions" className="underline">
+              See the transaction
+            </Link>
+            .
+          </Alert>
+        ) : null}
 
-      {order.replacement_for ? (
-        <Alert tone="info" title="Free replacement">
-          This number replaces one from order{" "}
-          <Link href={`/orders/${order.replacement_for}`} className="underline">
-            {order.replacement_for}
-          </Link>{" "}
-          that could not be used. There was no charge.
-        </Alert>
-      ) : null}
+        {order.replacement_for ? (
+          <Alert tone="info" title="Free replacement">
+            This number replaces one from order{" "}
+            <Link href={`/orders/${order.replacement_for}`} className="underline">
+              {order.replacement_for}
+            </Link>{" "}
+            that could not be used. There was no charge.
+          </Alert>
+        ) : null}
 
-      {order.reuse_of ? (
-        <Alert tone="info" title="Same number again">
-          This order reuses the number from order{" "}
-          <Link href={`/orders/${order.reuse_of}`} className="underline">
-            {order.reuse_of}
-          </Link>{" "}
-          for another code.
-        </Alert>
-      ) : null}
+        {order.reuse_of ? (
+          <Alert tone="info" title="Same number again">
+            This order reuses the number from order{" "}
+            <Link href={`/orders/${order.reuse_of}`} className="underline">
+              {order.reuse_of}
+            </Link>{" "}
+            for another code.
+          </Alert>
+        ) : null}
 
-      {order.failure_reason ? (
-        <Alert tone="warn" title="What happened">
-          {order.failure_reason}
-        </Alert>
-      ) : null}
+        {order.failure_reason ? (
+          <Alert tone="warn" title="What happened">
+            {order.failure_reason}
+          </Alert>
+        ) : null}
+      </div>
 
-      <div className="grid gap-4 lg:grid-cols-5">
+      <div className="grid gap-6 lg:grid-cols-5">
         <div className="space-y-4 lg:col-span-3">
-          <PhoneCard
-            serviceName={order.service_name}
-            serviceIcon={order.service_icon}
-            serviceSlug={order.service_slug}
-            phone={phone}
-            dialCode={order.country_dial_code}
-            status={status}
-            secondsLeft={secondsLeft}
-          />
-
-          <CodeCard
-            code={code}
-            allowed={live?.code_display_allowed ?? order.code_display_allowed}
-            status={status}
-            message={order.verification_message}
-          />
-
-          {order.can_reuse && order.reusable_until && order.reuse_price ? (
-            <ReuseCard
-              reference={order.reference}
-              until={order.reusable_until}
-              price={order.reuse_price}
-              onClosed={() => mutate()}
+          <Card className="overflow-hidden">
+            <NumberSection
+              serviceName={order.service_name}
+              phone={phone}
+              dialCode={order.country_dial_code}
+              countryName={order.country_name}
+              status={status}
+              secondsLeft={secondsLeft}
             />
-          ) : null}
 
-          {order.can_complete || order.can_cancel ? (
-            <Card className="p-4 sm:p-5">
-              <div className="flex flex-col gap-2 sm:flex-row">
-                {order.can_complete ? (
-                  <Button
-                    fullWidth
-                    loading={completing}
-                    onClick={onComplete}
-                    icon={<CheckCircleIcon className="h-5 w-5" />}
-                  >
-                    Mark as complete
-                  </Button>
-                ) : null}
-                {order.can_cancel ? (
-                  <Button
-                    variant="secondary"
-                    fullWidth
-                    onClick={() => setConfirmCancel(true)}
-                    disabled={cancelling}
-                  >
-                    Cancel and refund
-                  </Button>
-                ) : null}
+            <CodeSection
+              code={code}
+              allowed={live?.code_display_allowed ?? order.code_display_allowed}
+              status={status}
+              message={order.verification_message}
+            />
+
+            {order.can_reuse && order.reusable_until && order.reuse_price ? (
+              <ReuseSection
+                reference={order.reference}
+                until={order.reusable_until}
+                price={order.reuse_price}
+                onClosed={() => mutate()}
+              />
+            ) : null}
+
+            {order.can_complete || order.can_cancel ? (
+              <div className="border-t border-line px-5 py-4 sm:px-6">
+                <div className="flex flex-col gap-2 sm:flex-row">
+                  {order.can_complete ? (
+                    <Button
+                      loading={completing}
+                      onClick={onComplete}
+                      icon={<CheckCircleIcon className="h-5 w-5" />}
+                      className="w-full sm:w-auto"
+                    >
+                      Mark as complete
+                    </Button>
+                  ) : null}
+                  {order.can_cancel ? (
+                    <Button
+                      variant="secondary"
+                      onClick={() => setConfirmCancel(true)}
+                      disabled={cancelling}
+                      className="w-full sm:w-auto"
+                    >
+                      Cancel and refund
+                    </Button>
+                  ) : null}
+                </div>
+                <p className="mt-2.5 text-caption text-ink-muted">
+                  {order.can_complete
+                    ? "Marking complete closes the order. The number stops being useful once it expires either way."
+                    : "You can cancel until a code arrives, and get the full amount back. After that, the service has been delivered."}
+                </p>
               </div>
-              <p className="mt-3 text-xs text-ink-muted">
-                {order.can_complete
-                  ? "Marking complete closes the order. The number stops being useful once it expires either way."
-                  : "You can cancel until a verification code arrives. After that the service has been delivered."}
-              </p>
-            </Card>
-          ) : null}
+            ) : null}
+          </Card>
 
           <ReportProblem order={order} onReported={() => mutate()} />
         </div>
@@ -282,19 +288,39 @@ export default function OrderDetailPage() {
 
           <Card>
             <CardHeader title="Order details" />
-            <dl className="divide-y divide-line px-4 sm:px-5">
-              <Detail label="Reference" value={order.reference} mono />
-              <Detail label="Service" value={order.service_name} />
-              <Detail label="Country" value={`${order.country_flag} ${order.country_name}`} />
-              <Detail label="Amount paid" value={cedis(order.price)} mono />
-              <Detail label="Placed" value={formatDateTime(order.created_at)} />
-              {order.completed_at ? (
-                <Detail label="Closed" value={formatDateTime(order.completed_at)} />
-              ) : null}
-              {order.refund ? (
-                <Detail label="Refund reference" value={order.refund.reference} mono />
-              ) : null}
-            </dl>
+            <DescriptionList
+              className="px-4 pb-1 sm:px-5"
+              items={[
+                { label: "Reference", value: <span className="code">{order.reference}</span> },
+                { label: "Service", value: order.service_name },
+                {
+                  label: "Country",
+                  value: (
+                    <span className="inline-flex items-center gap-2">
+                      <CountryFlag code={order.country_code} size="sm" />
+                      {order.country_name}
+                    </span>
+                  ),
+                },
+                {
+                  label: "Amount paid",
+                  value: <span className="tabular">{cedis(order.price)}</span>,
+                  emphasis: true,
+                },
+                { label: "Placed", value: formatDateTime(order.created_at) },
+                ...(order.completed_at
+                  ? [{ label: "Closed", value: formatDateTime(order.completed_at) }]
+                  : []),
+                ...(order.refund
+                  ? [
+                      {
+                        label: "Refund reference",
+                        value: <span className="code">{order.refund.reference}</span>,
+                      },
+                    ]
+                  : []),
+              ]}
+            />
           </Card>
         </div>
       </div>
@@ -321,20 +347,22 @@ export default function OrderDetailPage() {
 
 /* ------------------------------------------------------------------ */
 
-function PhoneCard({
+/**
+ * The number, big enough to read off one screen and type on another, with the
+ * time it has left. The copy button gives the national digits.
+ */
+function NumberSection({
   serviceName,
-  serviceIcon,
-  serviceSlug,
   phone,
   dialCode,
+  countryName,
   status,
   secondsLeft,
 }: {
   serviceName: string;
-  serviceIcon: string;
-  serviceSlug: string;
   phone: string;
   dialCode: string;
+  countryName: string;
   status: string;
   secondsLeft: number;
 }) {
@@ -366,20 +394,33 @@ function PhoneCard({
 
   const running = remaining > 0 && ["NUMBER_ASSIGNED", "WAITING_FOR_CODE"].includes(status);
   const urgent = running && remaining < 120;
+  const dial = dialCode.startsWith("+") ? dialCode : `+${dialCode}`;
 
   return (
-    <Card className="p-4 sm:p-5">
-      <div className="flex items-center gap-2.5">
-        <ServiceLogo name={serviceName} src={serviceIcon} slug={serviceSlug} size="sm" />
-        <p className="text-xs uppercase tracking-wide text-ink-faint">
-          {serviceName} number
-        </p>
+    <div className="p-5 sm:p-6">
+      <div className="flex items-center justify-between gap-3">
+        <p className="text-label text-ink-muted">Your {serviceName} number</p>
+        {running ? (
+          <span
+            role="timer"
+            className={cn(
+              "inline-flex items-center gap-1.5 rounded-md px-2 py-1 text-caption",
+              urgent ? "bg-warn-50 text-warn-700" : "bg-sunken text-ink-soft",
+            )}
+          >
+            <ClockIcon className="h-3.5 w-3.5" />
+            <span>
+              <span className="tabular font-semibold">{countdown(remaining)}</span>
+              {urgent ? " - expires soon" : " left"}
+            </span>
+          </span>
+        ) : null}
       </div>
 
       {phone ? (
         <>
-          <div className="mt-2 flex flex-wrap items-center gap-3">
-            <p className="tabular select-all text-2xl font-semibold tracking-tight text-ink sm:text-3xl">
+          <div className="mt-2 flex flex-wrap items-center gap-x-4 gap-y-3">
+            <p className="tabular select-all text-display font-semibold text-ink">
               {groupInternational(phone, dialCode)}
             </p>
             <Button
@@ -390,40 +431,110 @@ function PhoneCard({
                 copied ? <CheckCircleIcon className="h-4 w-4" /> : <CopyIcon className="h-4 w-4" />
               }
             >
-              {copied ? "Copied" : "Copy"}
+              {copied ? "Copied" : "Copy number"}
             </Button>
           </div>
-          <p className="mt-2 text-sm text-ink-muted">
-            Choose {dialCode === "+1" || dialCode === "1" ? "United States (+1)" : "the country"} on
-            the service you are verifying with, then paste the number. Copy gives you the number
-            without the country code.
+          <p className="mt-2 text-caption text-ink-muted">
+            On {serviceName}, choose {countryName} ({dial}) and paste the number. Copy leaves out
+            the {dial}.
           </p>
         </>
       ) : (
-        <div className="mt-2 flex items-center gap-2 text-ink-muted">
-          <Skeleton className="h-8 w-52" />
-        </div>
+        <Skeleton className="mt-2 h-9 w-64" />
       )}
-
-      {running ? (
-        <div
-          className={cn(
-            "mt-4 flex items-center gap-2 rounded-xl px-3.5 py-2.5 text-sm",
-            urgent ? "bg-warn-50 text-warn-700" : "bg-line/50 text-ink-soft",
-          )}
-        >
-          <ClockIcon className="h-4 w-4" />
-          <span>
-            {urgent ? "Expires soon:" : "Number expires in"}{" "}
-            <span className="tabular font-semibold">{countdown(remaining)}</span>
-          </span>
-        </div>
-      ) : null}
-    </Card>
+    </div>
   );
 }
 
-function ReuseCard({
+/** Where the code lands - the one thing the customer is here for. */
+function CodeSection({
+  code,
+  allowed,
+  status,
+  message,
+}: {
+  code: string;
+  allowed: boolean;
+  status: string;
+  message: string;
+}) {
+  const toast = useToast();
+  const [copied, setCopied] = React.useState(false);
+
+  async function copy() {
+    const ok = await copyToClipboard(code);
+    if (ok) {
+      setCopied(true);
+      window.setTimeout(() => setCopied(false), 2000);
+    } else {
+      toast.error("Could not copy", "Select the code and copy it manually.");
+    }
+  }
+
+  if (!allowed) {
+    return (
+      <div className="border-t border-line p-5 sm:p-6">
+        <p className="text-label text-ink-muted">Verification code</p>
+        <p className="mt-2 text-sm text-ink-muted">
+          Our agreement with this provider does not permit relaying the message contents. The
+          order status above shows when a verification message has been delivered.
+        </p>
+      </div>
+    );
+  }
+
+  if (code) {
+    return (
+      <div className="border-t border-success-200 bg-success-50 p-5 sm:p-6" aria-live="polite">
+        <p className="text-label text-success-700">Verification code</p>
+        <div className="mt-2 flex flex-wrap items-center gap-x-4 gap-y-3">
+          <p className="code select-all text-figure font-semibold tracking-widest text-success-700">
+            {code}
+          </p>
+          <Button
+            size="sm"
+            variant="secondary"
+            onClick={copy}
+            icon={
+              copied ? <CheckCircleIcon className="h-4 w-4" /> : <CopyIcon className="h-4 w-4" />
+            }
+          >
+            {copied ? "Copied" : "Copy code"}
+          </Button>
+        </div>
+        {message ? (
+          <p className="mt-3 rounded-lg border border-success-200 bg-surface px-3 py-2 text-caption text-ink-soft">
+            {message}
+          </p>
+        ) : null}
+      </div>
+    );
+  }
+
+  const waiting = ["NUMBER_ASSIGNED", "WAITING_FOR_CODE", "PROCESSING"].includes(status);
+
+  return (
+    <div className="border-t border-line p-5 sm:p-6" aria-live="polite">
+      <p className="text-label text-ink-muted">Verification code</p>
+      {waiting ? (
+        <div className="mt-3 flex items-start gap-3">
+          <span className="relative mt-1.5 flex h-2.5 w-2.5 shrink-0" aria-hidden>
+            <span className="absolute inline-flex h-full w-full animate-pulse-ring rounded-full bg-brand-400" />
+            <span className="relative inline-flex h-2.5 w-2.5 rounded-full bg-brand-500" />
+          </span>
+          <p className="text-sm text-ink-soft">
+            Waiting for the SMS. The code appears here the moment it arrives - keep this page open,
+            or come back to it from Orders.
+          </p>
+        </div>
+      ) : (
+        <p className="mt-2 text-sm text-ink-muted">No verification code was received.</p>
+      )}
+    </div>
+  );
+}
+
+function ReuseSection({
   reference,
   until,
   price,
@@ -477,138 +588,38 @@ function ReuseCard({
   }
 
   return (
-    <Card className="p-4 sm:p-5">
-      <Button fullWidth variant="secondary" loading={busy} onClick={reuse}>
-        Use this number again for {cedis(price)} ({countdown(left)})
-      </Button>
-      <p className="mt-2 text-xs text-ink-muted">
-        Need another code on the same number - to sign in again, or for a second step? You can reuse it
-        for a short time after the code arrives. It is a new order, refunded automatically if no code
-        comes.
-      </p>
-    </Card>
-  );
-}
-
-function CodeCard({
-  code,
-  allowed,
-  status,
-  message,
-}: {
-  code: string;
-  allowed: boolean;
-  status: string;
-  message: string;
-}) {
-  const toast = useToast();
-  const [copied, setCopied] = React.useState(false);
-
-  async function copy() {
-    const ok = await copyToClipboard(code);
-    if (ok) {
-      setCopied(true);
-      window.setTimeout(() => setCopied(false), 2000);
-    } else {
-      toast.error("Could not copy", "Select the code and copy it manually.");
-    }
-  }
-
-  if (!allowed) {
-    return (
-      <Card className="p-4 sm:p-5">
-        <p className="text-xs uppercase tracking-wide text-ink-faint">Verification code</p>
-        <p className="mt-2 text-sm text-ink-muted">
-          Our agreement with this provider does not permit relaying the message contents. The
-          order status above shows when a verification message has been delivered.
+    <div className="flex flex-col gap-3 border-t border-line px-5 py-4 sm:flex-row sm:items-center sm:justify-between sm:px-6">
+      <div className="min-w-0">
+        <p className="text-sm font-medium text-ink">Need another code on this number?</p>
+        <p className="mt-0.5 text-caption text-ink-muted">
+          Available for <span className="tabular">{countdown(left)}</span>. It is a new order,
+          refunded automatically if no code comes.
         </p>
-      </Card>
-    );
-  }
-
-  if (code) {
-    return (
-      <Card className="border-success-200 bg-success-50 p-4 sm:p-5">
-        <p className="text-xs uppercase tracking-wide text-success-700">Verification code</p>
-        <div className="mt-2 flex flex-wrap items-center gap-3">
-          <p className="tabular select-all text-4xl font-semibold tracking-[0.2em] text-success-700">
-            {code}
-          </p>
-          <Button
-            size="sm"
-            variant="secondary"
-            onClick={copy}
-            icon={
-              copied ? <CheckCircleIcon className="h-4 w-4" /> : <CopyIcon className="h-4 w-4" />
-            }
-          >
-            {copied ? "Copied" : "Copy"}
-          </Button>
-        </div>
-        {message ? (
-          <p className="mt-3 rounded-lg bg-white/70 px-3 py-2 text-xs text-ink-soft">{message}</p>
-        ) : null}
-      </Card>
-    );
-  }
-
-  const waiting = ["NUMBER_ASSIGNED", "WAITING_FOR_CODE", "PROCESSING"].includes(status);
-
-  return (
-    <Card className="p-4 sm:p-5">
-      <p className="text-xs uppercase tracking-wide text-ink-faint">Verification code</p>
-      {waiting ? (
-        <div className="mt-3 flex items-center gap-3">
-          <span className="relative flex h-2.5 w-2.5" aria-hidden>
-            <span className="absolute inline-flex h-full w-full animate-pulse-ring rounded-full bg-brand-400" />
-            <span className="relative inline-flex h-2.5 w-2.5 rounded-full bg-brand-500" />
-          </span>
-          <p className="text-sm text-ink-soft">
-            Waiting for the verification code. It appears here the moment it arrives - you can
-            leave this page open.
-          </p>
-        </div>
-      ) : (
-        <p className="mt-2 text-sm text-ink-muted">No verification code was received.</p>
-      )}
-    </Card>
-  );
-}
-
-function Detail({
-  label,
-  value,
-  mono,
-}: {
-  label: string;
-  value: React.ReactNode;
-  mono?: boolean;
-}) {
-  return (
-    <div className="flex items-center justify-between gap-4 py-3">
-      <dt className="text-sm text-ink-muted">{label}</dt>
-      <dd className={cn("text-sm text-ink", mono && "tabular font-medium")}>{value}</dd>
+      </div>
+      <Button variant="secondary" loading={busy} onClick={reuse} className="w-full shrink-0 sm:w-auto">
+        Use again for {cedis(price)}
+      </Button>
     </div>
   );
 }
 
 function OrderSkeleton() {
   return (
-    <div className="space-y-4">
+    <div className="space-y-6" aria-busy>
       <div className="space-y-2">
         <Skeleton className="h-4 w-24" />
         <Skeleton className="h-7 w-48" />
       </div>
-      <div className="grid gap-4 lg:grid-cols-5">
-        <div className="space-y-4 lg:col-span-3">
-          <Card className="space-y-3 p-5">
-            <Skeleton className="h-3 w-24" />
-            <Skeleton className="h-9 w-56" />
-            <Skeleton className="h-10 w-full rounded-xl" />
-          </Card>
-          <Card className="space-y-3 p-5">
-            <Skeleton className="h-3 w-28" />
-            <Skeleton className="h-12 w-40" />
+      <div className="grid gap-6 lg:grid-cols-5">
+        <div className="lg:col-span-3">
+          <Card className="space-y-3 p-6">
+            <Skeleton className="h-3 w-32" />
+            <Skeleton className="h-9 w-64" />
+            <Skeleton className="h-3 w-full max-w-sm" />
+            <div className="border-t border-line pt-5">
+              <Skeleton className="h-3 w-28" />
+              <Skeleton className="mt-3 h-10 w-40" />
+            </div>
           </Card>
         </div>
         <div className="lg:col-span-2">

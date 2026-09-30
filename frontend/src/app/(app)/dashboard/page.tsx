@@ -7,38 +7,60 @@ import useSWR from "swr";
 
 import { PageHeader } from "@/components/app-shell";
 import { useAuth } from "@/components/auth-provider";
-import { ServiceLogo } from "@/components/service-logo";
-import {
-  ArrowRightIcon,
-  BoltIcon,
-  CheckCircleIcon,
-  ClockIcon,
-  GridIcon,
-  PlusIcon,
-  ReceiptIcon,
-  WalletIcon,
-} from "@/components/icons";
+import { CountryFlag } from "@/components/country-flag";
+import { ChevronRightIcon, ReceiptIcon, WalletIcon } from "@/components/icons";
 import { OrderStatusRow } from "@/components/orders/order-row";
+import { ServiceLogo } from "@/components/service-logo";
+import { TransactionRow } from "@/components/wallet/transaction-row";
 import {
   Alert,
+  Amount,
   Button,
   Card,
-  CardHeader,
   EmptyState,
+  Section,
   Skeleton,
   StatusBadge,
 } from "@/components/ui/primitives";
 import { useToast } from "@/components/ui/toast";
 import { api } from "@/lib/api";
-import { cedis, relativeTime, signedCedis } from "@/lib/format";
-import type { OrderSummary, Paginated, Transaction, WalletSummary } from "@/lib/types";
+import { cedis, groupInternational } from "@/lib/format";
+import type {
+  MarketHome,
+  OrderSummary,
+  Paginated,
+  Transaction,
+  WalletSummary,
+} from "@/lib/types";
 
+/**
+ * Home: where the money is, what is running, and the quickest way to the next
+ * number. Everything here is the customer's own data or the marketplace's real
+ * popularity - nothing is filled in to make the page look busy.
+ */
 export default function DashboardPage() {
   return (
     <React.Suspense fallback={null}>
       <Dashboard />
     </React.Suspense>
   );
+}
+
+const TODAY = new Intl.DateTimeFormat("en-GB", {
+  weekday: "long",
+  day: "numeric",
+  month: "long",
+  timeZone: "Africa/Accra",
+});
+
+function greeting(): string {
+  const hour = Number(
+    new Intl.DateTimeFormat("en-GB", { hour: "numeric", hour12: false, timeZone: "Africa/Accra" })
+      .format(new Date()),
+  );
+  if (hour < 12) return "Good morning";
+  if (hour < 17) return "Good afternoon";
+  return "Good evening";
 }
 
 function Dashboard() {
@@ -57,8 +79,9 @@ function Dashboard() {
   ]);
   const { data: recentTransactions, isLoading: txLoading } = useSWR<Paginated<Transaction>>([
     "/transactions/",
-    { page_size: 5 },
+    { page_size: 4 },
   ]);
+  const { data: market } = useSWR<MarketHome>("/marketplace/home/");
 
   const [resending, setResending] = React.useState(false);
 
@@ -78,209 +101,164 @@ function Dashboard() {
   const live = activeOrders ?? [];
 
   return (
-    <div className="space-y-5">
+    <div className="space-y-8">
       <PageHeader
-        title={firstName ? `Hello, ${firstName}` : "Your dashboard"}
-        description="Your wallet, your orders and everything in flight."
+        title={firstName ? `${greeting()}, ${firstName}` : greeting()}
+        description={TODAY.format(new Date())}
       />
 
-      {params.get("welcome") === "1" ? (
-        <Alert tone="brand" title="Welcome to VerifyGH">
-          Add money to your wallet to buy your first verification number.
-        </Alert>
-      ) : null}
+      {params.get("welcome") === "1" || user?.is_email_verified === false ||
+      user?.has_accepted_current_terms === false ? (
+        <div className="-mt-3 space-y-3">
+          {params.get("welcome") === "1" ? (
+            <Alert tone="brand" title="Welcome to VerifyGH">
+              Add funds to your wallet, then pick a service to get your first number.
+            </Alert>
+          ) : null}
 
-      {user && !user.is_email_verified ? (
-        <Alert
-          tone="warn"
-          title="Confirm your email to start buying"
-          action={
-            <Button size="sm" variant="secondary" loading={resending} onClick={resendVerification}>
-              Resend
-            </Button>
-          }
-        >
-          We sent a link to {user.email}. You can add money now, but purchases stay locked until
-          your address is confirmed.
-        </Alert>
-      ) : null}
-
-      {user?.has_accepted_current_terms === false ? (
-        <Alert
-          tone="warn"
-          title="Our terms have been updated"
-          action={
-            <Button
-              size="sm"
-              variant="secondary"
-              onClick={async () => {
-                await api.post("/auth/terms/accept/", { accepted: true });
-                await refresh();
-                toast.success("Thanks", "You are all set.");
-              }}
+          {user && !user.is_email_verified ? (
+            <Alert
+              tone="warn"
+              title="Confirm your email to start buying"
+              action={
+                <Button size="sm" variant="secondary" loading={resending} onClick={resendVerification}>
+                  Resend link
+                </Button>
+              }
             >
-              Accept
-            </Button>
-          }
-        >
-          Review and accept the current Terms and Acceptable Use Policy to keep buying.
-        </Alert>
+              We sent a link to {user.email}. You can add funds now; purchases unlock once the
+              address is confirmed.
+            </Alert>
+          ) : null}
+
+          {user?.has_accepted_current_terms === false ? (
+            <Alert
+              tone="warn"
+              title="Our terms have changed"
+              action={
+                <Button
+                  size="sm"
+                  variant="secondary"
+                  onClick={async () => {
+                    await api.post("/auth/terms/accept/", { accepted: true });
+                    await refresh();
+                    toast.success("Terms accepted", "You can keep buying.");
+                  }}
+                >
+                  Accept
+                </Button>
+              }
+            >
+              Review and accept the current Terms and Acceptable Use Policy to keep buying.
+            </Alert>
+          ) : null}
+        </div>
       ) : null}
-
-      <BalanceCard summary={summary} loading={summaryLoading} />
-
-      <QuickActions />
 
       <div className="grid gap-4 lg:grid-cols-3">
-        <StatCard
-          label="Today's spending"
-          value={cedis(summary?.today_spending)}
-          loading={summaryLoading}
-          icon={<BoltIcon className="h-5 w-5" />}
-        />
-        <StatCard
-          label="Successful orders"
-          value={String(summary?.successful_orders ?? 0)}
-          loading={summaryLoading}
-          icon={<CheckCircleIcon className="h-5 w-5" />}
-        />
-        <StatCard
-          label="Active orders"
-          value={String(summary?.active_orders ?? 0)}
-          loading={summaryLoading}
-          icon={<ClockIcon className="h-5 w-5" />}
-        />
+        <BalancePanel summary={summary} loading={summaryLoading} />
+        <AtAGlance summary={summary} loading={summaryLoading} emailVerified={user?.is_email_verified} />
       </div>
 
       {live.length > 0 ? (
-        <Card>
-          <CardHeader
-            title="In progress"
-            description="These orders are still running. Tap one to watch it live."
-          />
-          <ul className="mt-2 divide-y divide-line">
-            {live.map((order) => (
-              <li key={order.id}>
-                <Link
-                  href={`/orders/${order.reference}`}
-                  className="flex items-center gap-3 px-4 py-3.5 transition-colors hover:bg-canvas sm:px-5"
-                >
-                  <ServiceLogo name={order.service_name} src={order.service_icon} slug={order.service_slug} />
-                  <div className="min-w-0 flex-1">
-                    <p className="truncate text-sm font-medium text-ink">
-                      {order.service_name}{" "}
-                      <span className="text-ink-muted">{order.country_flag}</span>
-                    </p>
-                    <p className="tabular truncate text-xs text-ink-muted">
-                      {order.phone_number || "Assigning a number..."}
-                    </p>
-                  </div>
-                  <StatusBadge status={order.status} />
-                </Link>
-              </li>
-            ))}
-          </ul>
-        </Card>
-      ) : null}
-
-      <div className="grid gap-4 lg:grid-cols-2">
-        <Card>
-          <CardHeader
-            title="Recent orders"
-            action={
-              <Link
-                href="/orders"
-                className="text-sm font-medium text-brand-700 hover:underline"
-              >
-                View all
-              </Link>
-            }
-          />
-          {ordersLoading ? (
-            <RowSkeletons />
-          ) : (recentOrders?.results?.length ?? 0) === 0 ? (
-            <EmptyState
-              icon={<ReceiptIcon />}
-              title="No orders yet"
-              description="Buy your first verification number and it will show up here."
-              action={
-                <Link href="/services">
-                  <Button size="sm">Browse services</Button>
-                </Link>
-              }
-            />
-          ) : (
-            <ul className="mt-2 divide-y divide-line">
-              {recentOrders?.results.map((order) => (
-                <OrderStatusRow key={order.id} order={order} />
-              ))}
-            </ul>
-          )}
-        </Card>
-
-        <Card>
-          <CardHeader
-            title="Recent transactions"
-            action={
-              <Link
-                href="/transactions"
-                className="text-sm font-medium text-brand-700 hover:underline"
-              >
-                View all
-              </Link>
-            }
-          />
-          {txLoading ? (
-            <RowSkeletons />
-          ) : (recentTransactions?.results?.length ?? 0) === 0 ? (
-            <EmptyState
-              icon={<WalletIcon />}
-              title="No transactions yet"
-              description="Add money to your wallet to get started."
-              action={
-                <Link href="/wallet/deposit">
-                  <Button size="sm">Add money</Button>
-                </Link>
-              }
-            />
-          ) : (
-            <ul className="mt-2 divide-y divide-line">
-              {recentTransactions?.results.map((entry) => (
-                <li
-                  key={entry.id}
-                  className="flex items-center gap-3 px-4 py-3.5 sm:px-5"
-                >
-                  <span
-                    className={
-                      entry.direction === "CREDIT"
-                        ? "flex h-9 w-9 shrink-0 items-center justify-center rounded-xl bg-success-50 text-success-700"
-                        : "flex h-9 w-9 shrink-0 items-center justify-center rounded-xl bg-line/60 text-ink-soft"
-                    }
+        <Section
+          title="In progress"
+          description="Numbers waiting for their code. Open one to watch it live."
+        >
+          <Card className="overflow-hidden">
+            <ul className="divide-y divide-line">
+              {live.map((order) => (
+                <li key={order.id}>
+                  <Link
+                    href={`/orders/${order.reference}`}
+                    className="flex items-center gap-3 px-4 py-3 transition-colors hover:bg-sunken/60 sm:px-5"
                   >
-                    {entry.direction === "CREDIT" ? (
-                      <PlusIcon className="h-4 w-4" />
-                    ) : (
-                      <ArrowRightIcon className="h-4 w-4" />
-                    )}
-                  </span>
-                  <div className="min-w-0 flex-1">
-                    <p className="truncate text-sm font-medium text-ink">{entry.description}</p>
-                    <p className="text-xs text-ink-muted">{relativeTime(entry.created_at)}</p>
-                  </div>
-                  <span
-                    className={
-                      entry.direction === "CREDIT"
-                        ? "tabular shrink-0 text-sm font-semibold text-success-700"
-                        : "tabular shrink-0 text-sm font-semibold text-ink"
-                    }
-                  >
-                    {signedCedis(entry.amount, entry.direction)}
-                  </span>
+                    <ServiceLogo name={order.service_name} src={order.service_icon} slug={order.service_slug} />
+                    <div className="min-w-0 flex-1">
+                      <p className="flex items-center gap-2 text-sm font-medium text-ink">
+                        <span className="truncate">{order.service_name}</span>
+                        <CountryFlag code={order.country_code} size="sm" />
+                      </p>
+                      <p className="tabular truncate text-caption text-ink-muted">
+                        {order.phone_number
+                          ? groupInternational(order.phone_number, order.country_dial_code)
+                          : "Getting a number…"}
+                      </p>
+                    </div>
+                    <StatusBadge status={order.status} />
+                    <ChevronRightIcon className="h-4 w-4 shrink-0 text-ink-faint" />
+                  </Link>
                 </li>
               ))}
             </ul>
-          )}
-        </Card>
+          </Card>
+        </Section>
+      ) : null}
+
+      <div className="grid gap-8 lg:grid-cols-5 lg:gap-6">
+        <Section
+          className="lg:col-span-3"
+          title="Recent orders"
+          action={
+            <Link href="/orders" className="link text-sm">
+              All orders
+            </Link>
+          }
+        >
+          <Card className="overflow-hidden">
+            {ordersLoading ? (
+              <RowSkeletons />
+            ) : (recentOrders?.results?.length ?? 0) === 0 ? (
+              <EmptyState
+                icon={<ReceiptIcon />}
+                title="No orders yet"
+                description="Your verification numbers will appear here, with their codes."
+                action={
+                  <Link href="/services">
+                    <Button size="sm">Buy a number</Button>
+                  </Link>
+                }
+              />
+            ) : (
+              <ul className="divide-y divide-line">
+                {recentOrders?.results.map((order) => (
+                  <OrderStatusRow key={order.id} order={order} />
+                ))}
+              </ul>
+            )}
+          </Card>
+        </Section>
+
+        <div className="space-y-8 lg:col-span-2">
+          <PopularServices market={market} />
+
+          <Section
+            title="Wallet activity"
+            action={
+              <Link href="/transactions" className="link text-sm">
+                All transactions
+              </Link>
+            }
+          >
+            <Card className="overflow-hidden">
+              {txLoading ? (
+                <RowSkeletons rows={3} />
+              ) : (recentTransactions?.results?.length ?? 0) === 0 ? (
+                <EmptyState
+                  icon={<WalletIcon />}
+                  title="No transactions yet"
+                  description="Deposits, purchases and refunds will be listed here."
+                />
+              ) : (
+                <ul className="divide-y divide-line">
+                  {recentTransactions?.results.map((entry) => (
+                    <TransactionRow key={entry.id} entry={entry} />
+                  ))}
+                </ul>
+              )}
+            </Card>
+          </Section>
+        </div>
       </div>
     </div>
   );
@@ -288,107 +266,159 @@ function Dashboard() {
 
 /* ------------------------------------------------------------------ */
 
-function BalanceCard({
-  summary,
-  loading,
-}: {
-  summary: WalletSummary | undefined;
-  loading: boolean;
-}) {
+function BalancePanel({ summary, loading }: { summary: WalletSummary | undefined; loading: boolean }) {
   const wallet = summary?.wallet;
+  const promo = Number.parseFloat(wallet?.promo_balance ?? "0");
 
   return (
-    <div className="relative overflow-hidden rounded-2xl bg-brand-700 p-5 text-white shadow-raised sm:p-6">
-      <div
-        className="pointer-events-none absolute -right-10 -top-10 h-40 w-40 rounded-full bg-brand-500/30 blur-2xl"
-        aria-hidden
-      />
-      <div className="relative flex flex-wrap items-end justify-between gap-4">
-        <div>
-          <p className="text-sm text-brand-200">Wallet balance</p>
-          {loading ? (
-            <Skeleton className="mt-2 h-9 w-40 bg-white/20" />
-          ) : (
-            <p className="tabular mt-1 text-4xl font-semibold tracking-tight">
-              {cedis(wallet?.balance)}
-            </p>
-          )}
-          <p className="mt-1.5 text-xs text-brand-200">
-            {wallet?.is_frozen
-              ? "This wallet is on hold. Contact support."
-              : `${cedis(wallet?.total_deposited)} added in total`}
-          </p>
+    <Card className="flex flex-col justify-between gap-6 p-5 sm:p-6 lg:col-span-2">
+      <div>
+        <p className="text-sm text-ink-muted">Available balance</p>
+        <div className="mt-1.5 min-h-10">
+          {loading ? <Skeleton className="h-10 w-48" /> : <Amount value={cedis(wallet?.balance)} />}
         </div>
-        <Link href="/wallet/deposit">
-          <Button size="lg" variant="inverse" icon={<PlusIcon className="h-5 w-5" />}>
-            Add money
-          </Button>
-        </Link>
+        <p className="mt-1.5 text-caption text-ink-muted">
+          {wallet?.is_frozen ? (
+            <span className="font-medium text-danger-700">
+              This wallet is on hold. Contact support before buying or adding funds.
+            </span>
+          ) : promo > 0 ? (
+            <>Plus {cedis(wallet?.promo_balance)} promotional credit, used first.</>
+          ) : (
+            <>
+              {cedis(wallet?.total_deposited)} added &middot; {cedis(wallet?.total_spent)} spent
+            </>
+          )}
+        </p>
       </div>
-    </div>
-  );
-}
-
-function QuickActions() {
-  const actions = [
-    { href: "/services", label: "Buy verification", icon: <GridIcon className="h-5 w-5" /> },
-    { href: "/orders", label: "Orders", icon: <ReceiptIcon className="h-5 w-5" /> },
-    { href: "/transactions", label: "Transactions", icon: <WalletIcon className="h-5 w-5" /> },
-    { href: "/account", label: "Profile", icon: <CheckCircleIcon className="h-5 w-5" /> },
-  ];
-
-  return (
-    <div className="grid grid-cols-2 gap-3 sm:grid-cols-4">
-      {actions.map((action) => (
-        <Link
-          key={action.href}
-          href={action.href}
-          className="card flex flex-col items-start gap-2.5 p-4 transition-shadow hover:shadow-raised"
-        >
-          <span className="flex h-9 w-9 items-center justify-center rounded-xl bg-brand-50 text-brand-600">
-            {action.icon}
-          </span>
-          <span className="text-sm font-medium text-ink">{action.label}</span>
+      <div className="flex flex-wrap items-center gap-2">
+        <Link href="/wallet/deposit">
+          <Button>Add funds</Button>
         </Link>
-      ))}
-    </div>
-  );
-}
-
-function StatCard({
-  label,
-  value,
-  loading,
-  icon,
-}: {
-  label: string;
-  value: string;
-  loading: boolean;
-  icon: React.ReactNode;
-}) {
-  return (
-    <Card className="flex items-center gap-3.5 p-4">
-      <span className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-brand-50 text-brand-600">
-        {icon}
-      </span>
-      <div className="min-w-0">
-        <p className="text-xs text-ink-muted">{label}</p>
-        {loading ? (
-          <Skeleton className="mt-1.5 h-5 w-16" />
-        ) : (
-          <p className="tabular text-lg font-semibold text-ink">{value}</p>
-        )}
+        <Link href="/services">
+          <Button variant="secondary">Buy a number</Button>
+        </Link>
+        <div className="ml-auto hidden items-center gap-1 sm:flex">
+          <Link href="/orders">
+            <Button variant="ghost" size="sm">
+              Orders
+            </Button>
+          </Link>
+          <Link href="/transactions">
+            <Button variant="ghost" size="sm">
+              Transactions
+            </Button>
+          </Link>
+        </div>
       </div>
     </Card>
   );
 }
 
-function RowSkeletons() {
+function AtAGlance({
+  summary,
+  loading,
+  emailVerified,
+}: {
+  summary: WalletSummary | undefined;
+  loading: boolean;
+  emailVerified: boolean | undefined;
+}) {
+  const rows = [
+    {
+      label: "Waiting for a code",
+      value: String(summary?.active_orders ?? 0),
+      href: "/orders?filter=active",
+    },
+    { label: "Spent today", value: cedis(summary?.today_spending) },
+    { label: "Completed orders", value: String(summary?.successful_orders ?? 0) },
+  ];
   return (
-    <ul className="mt-2 divide-y divide-line">
-      {Array.from({ length: 4 }).map((_, index) => (
-        <li key={index} className="flex items-center gap-3 px-4 py-3.5 sm:px-5">
-          <Skeleton className="h-9 w-9 rounded-xl" />
+    <Card className="p-5 sm:p-6">
+      <p className="text-sm text-ink-muted">At a glance</p>
+      <dl className="mt-3 divide-y divide-line">
+        {rows.map((row) => (
+          <div key={row.label} className="flex items-center justify-between gap-3 py-2.5">
+            <dt className="text-sm text-ink-soft">{row.label}</dt>
+            <dd className="tabular text-sm font-semibold text-ink">
+              {loading ? <Skeleton className="h-4 w-12" /> : row.value}
+            </dd>
+          </div>
+        ))}
+        <div className="flex items-center justify-between gap-3 py-2.5">
+          <dt className="text-sm text-ink-soft">Email</dt>
+          <dd className="text-sm">
+            {emailVerified ? (
+              <span className="font-medium text-success-700">Verified</span>
+            ) : (
+              <Link href="/account" className="font-medium text-warn-700 hover:underline">
+                Not verified
+              </Link>
+            )}
+          </dd>
+        </div>
+      </dl>
+    </Card>
+  );
+}
+
+function PopularServices({ market }: { market: MarketHome | undefined }) {
+  const country = market?.country ?? "US";
+  const rows = (market?.popular ?? []).slice(0, 5);
+  return (
+    <Section
+      title="Popular services"
+      action={
+        <Link href="/services" className="link text-sm">
+          All services
+        </Link>
+      }
+    >
+      <Card className="overflow-hidden">
+        {!market ? (
+          <RowSkeletons rows={4} />
+        ) : rows.length === 0 ? (
+          <EmptyState
+            title="Nothing popular yet"
+            description="The most-bought services will show here. Browse everything on sale meanwhile."
+            action={
+              <Link href="/services">
+                <Button size="sm" variant="secondary">
+                  Browse services
+                </Button>
+              </Link>
+            }
+          />
+        ) : (
+          <ul className="divide-y divide-line">
+            {rows.map((row) => (
+              <li key={row.slug}>
+                <Link
+                  href={`/services?service=${encodeURIComponent(row.slug)}&country=${country}`}
+                  className="flex items-center gap-3 px-4 py-2.5 transition-colors hover:bg-sunken/60 sm:px-5"
+                >
+                  <ServiceLogo name={row.name} src={row.icon_url} slug={row.slug} size="sm" />
+                  <span className="min-w-0 flex-1 truncate text-sm font-medium text-ink">{row.name}</span>
+                  <span className="tabular text-sm text-ink-soft">
+                    {row.price && !row.temporarily_unavailable ? cedis(row.price) : "Unavailable"}
+                  </span>
+                  <ChevronRightIcon className="h-4 w-4 shrink-0 text-ink-faint" />
+                </Link>
+              </li>
+            ))}
+          </ul>
+        )}
+      </Card>
+    </Section>
+  );
+}
+
+function RowSkeletons({ rows = 4 }: { rows?: number }) {
+  return (
+    <ul className="divide-y divide-line" aria-hidden>
+      {Array.from({ length: rows }).map((_, index) => (
+        <li key={index} className="flex items-center gap-3 px-4 py-3 sm:px-5">
+          <Skeleton className="h-9 w-9 rounded-lg" />
           <div className="flex-1 space-y-2">
             <Skeleton className="h-3.5 w-32" />
             <Skeleton className="h-3 w-20" />

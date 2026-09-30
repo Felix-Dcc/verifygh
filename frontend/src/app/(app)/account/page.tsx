@@ -5,16 +5,24 @@ import * as React from "react";
 
 import { PageHeader } from "@/components/app-shell";
 import { errorMessage, useAuth } from "@/components/auth-provider";
-import { BellIcon, CheckCircleIcon, LockIcon, LogoutIcon, ShieldIcon } from "@/components/icons";
+import {
+  BellIcon,
+  CheckCircleIcon,
+  ChevronRightIcon,
+  LockIcon,
+  LogoutIcon,
+  ShieldIcon,
+} from "@/components/icons";
 import { ConfirmDialog } from "@/components/ui/dialog";
 import {
   Alert,
   Badge,
   Button,
   Card,
-  CardHeader,
   Field,
   Input,
+  PasswordInput,
+  cn,
 } from "@/components/ui/primitives";
 import { useToast } from "@/components/ui/toast";
 import { ApiError, api } from "@/lib/api";
@@ -87,40 +95,14 @@ export default function AccountPage() {
   if (!user) return null;
 
   return (
-    <div className="mx-auto max-w-2xl space-y-4">
-      <PageHeader title="Account" description="Your details, security and preferences." />
-
-      <Card className="p-5">
-        <div className="flex items-center gap-4">
-          <span className="flex h-14 w-14 shrink-0 items-center justify-center rounded-2xl bg-brand-100 text-lg font-semibold text-brand-700">
-            {(user.full_name || user.email).slice(0, 1).toUpperCase()}
-          </span>
-          <div className="min-w-0">
-            <p className="truncate text-base font-semibold text-ink">
-              {user.full_name || "Your account"}
-            </p>
-            <p className="truncate text-sm text-ink-muted">{user.email}</p>
-            <div className="mt-1.5 flex flex-wrap gap-1.5">
-              {user.is_email_verified ? (
-                <Badge tone="success" dot>
-                  Email confirmed
-                </Badge>
-              ) : (
-                <Badge tone="warn" dot>
-                  Email not confirmed
-                </Badge>
-              )}
-              {user.role !== "USER" ? <Badge tone="brand">{user.role}</Badge> : null}
-              <Badge tone="neutral">Joined {formatDate(user.created_at)}</Badge>
-            </div>
-          </div>
-        </div>
-      </Card>
+    <div className="mx-auto max-w-4xl">
+      <PageHeader title="Settings" description="Your details, security and preferences." />
 
       {!user.is_email_verified ? (
         <Alert
           tone="warn"
           title="Confirm your email address"
+          className="mb-6"
           action={
             <Button size="sm" variant="secondary" loading={resending} onClick={resendVerification}>
               Resend
@@ -131,142 +113,172 @@ export default function AccountPage() {
         </Alert>
       ) : null}
 
-      <Card>
-        <CardHeader title="Your details" description="Used on receipts and by support." />
-        <form onSubmit={saveProfile} className="space-y-4 p-4 pt-4 sm:p-5 sm:pt-4">
-          <Field label="Full name" htmlFor="full_name" error={profileErrors.full_name}>
-            <Input
-              id="full_name"
-              autoComplete="name"
-              value={profile.full_name}
-              onChange={(event) =>
-                setProfile((current) => ({ ...current, full_name: event.target.value }))
-              }
-              invalid={Boolean(profileErrors.full_name)}
-            />
-          </Field>
+      <div className="divide-y divide-line">
+        <SettingsSection title="Profile" description="Used on receipts and by support.">
+          <div className="flex items-center gap-4 border-b border-line p-5 sm:p-6">
+            <span
+              aria-hidden
+              className="flex h-12 w-12 shrink-0 items-center justify-center rounded-full bg-brand-100 text-heading text-brand-700"
+            >
+              {(user.full_name || user.email).slice(0, 1).toUpperCase()}
+            </span>
+            <div className="min-w-0">
+              <p className="truncate text-sm font-medium text-ink">{user.full_name || "Your account"}</p>
+              <p className="truncate text-caption text-ink-muted">{user.email}</p>
+              <div className="mt-1.5 flex flex-wrap gap-1.5">
+                {user.is_email_verified ? (
+                  <Badge tone="success" dot>
+                    Email confirmed
+                  </Badge>
+                ) : (
+                  <Badge tone="warn" dot>
+                    Email not confirmed
+                  </Badge>
+                )}
+                {user.role !== "USER" ? <Badge tone="brand">{user.role}</Badge> : null}
+                <Badge tone="neutral">Joined {formatDate(user.created_at)}</Badge>
+              </div>
+            </div>
+          </div>
 
-          <Field
-            label="Mobile Money number"
-            htmlFor="phone"
-            error={profileErrors.phone}
-            hint="Pre-filled when you add money."
-          >
-            <Input
-              id="phone"
-              type="tel"
-              inputMode="tel"
-              autoComplete="tel-national"
-              value={profile.phone}
-              onChange={(event) =>
-                setProfile((current) => ({ ...current, phone: event.target.value }))
-              }
-              invalid={Boolean(profileErrors.phone)}
-              placeholder="024 123 4567"
-              className="tabular"
-            />
-          </Field>
+          <form onSubmit={saveProfile} className="space-y-4 p-5 sm:p-6">
+            <Field label="Full name" htmlFor="full_name" error={profileErrors.full_name}>
+              <Input
+                id="full_name"
+                autoComplete="name"
+                value={profile.full_name}
+                onChange={(event) =>
+                  setProfile((current) => ({ ...current, full_name: event.target.value }))
+                }
+                invalid={Boolean(profileErrors.full_name)}
+              />
+            </Field>
 
-          <Field label="Email address" htmlFor="email" hint="Contact support to change this.">
-            <Input id="email" value={user.email} disabled />
-          </Field>
+            <Field
+              label="Mobile Money number"
+              htmlFor="phone"
+              error={profileErrors.phone}
+              hint="Filled in for you when you add funds."
+            >
+              <Input
+                id="phone"
+                type="tel"
+                inputMode="tel"
+                autoComplete="tel-national"
+                value={profile.phone}
+                onChange={(event) =>
+                  setProfile((current) => ({ ...current, phone: event.target.value }))
+                }
+                invalid={Boolean(profileErrors.phone)}
+                placeholder="024 123 4567"
+                className="tabular"
+              />
+            </Field>
 
-          <Button type="submit" loading={savingProfile}>
-            Save changes
-          </Button>
-        </form>
-      </Card>
+            <Field label="Email address" htmlFor="email" hint="Contact support to change this.">
+              <Input id="email" value={user.email} disabled />
+            </Field>
 
-      <Card>
-        <CardHeader
-          title="Password"
-          description="Changing it signs out every other session."
-        />
-        <form onSubmit={changePassword} className="space-y-4 p-4 pt-4 sm:p-5 sm:pt-4">
-          <Field
-            label="Current password"
-            htmlFor="current_password"
-            error={passwordErrors.current_password}
-            required
-          >
-            <Input
-              id="current_password"
-              type="password"
-              autoComplete="current-password"
-              required
-              value={passwords.current_password}
-              onChange={(event) =>
-                setPasswords((current) => ({ ...current, current_password: event.target.value }))
-              }
-              invalid={Boolean(passwordErrors.current_password)}
-            />
-          </Field>
+            <div className="flex justify-end">
+              <Button type="submit" loading={savingProfile}>
+                Save changes
+              </Button>
+            </div>
+          </form>
+        </SettingsSection>
 
-          <Field
-            label="New password"
-            htmlFor="new_password"
-            error={passwordErrors.new_password}
-            hint="At least 10 characters."
-            required
-          >
-            <Input
-              id="new_password"
-              type="password"
-              autoComplete="new-password"
-              required
-              minLength={10}
-              value={passwords.new_password}
-              onChange={(event) =>
-                setPasswords((current) => ({ ...current, new_password: event.target.value }))
-              }
-              invalid={Boolean(passwordErrors.new_password)}
-            />
-          </Field>
-
-          <Button type="submit" loading={savingPassword} icon={<LockIcon className="h-4 w-4" />}>
-            Change password
-          </Button>
-        </form>
-      </Card>
-
-      <Card>
-        <CardHeader title="More" />
-        <ul className="divide-y divide-line">
-          <AccountLink
-            href="/account/notifications"
-            icon={<BellIcon className="h-5 w-5" />}
-            label="Notifications"
-            description="Payment, order and security alerts."
-          />
-          <AccountLink
-            href="/acceptable-use"
-            icon={<ShieldIcon className="h-5 w-5" />}
-            label="Acceptable Use Policy"
-            description={
-              user.has_accepted_current_terms
-                ? `Accepted version ${user.accepted_terms_version}`
-                : "Action needed - please review and accept."
-            }
-          />
-          <AccountLink
-            href="/terms"
-            icon={<CheckCircleIcon className="h-5 w-5" />}
-            label="Terms of Service"
-            description="What you agree to when using VerifyGH."
-          />
-        </ul>
-      </Card>
-
-      <Card className="p-4 sm:p-5">
-        <Button
-          variant="secondary"
-          fullWidth
-          onClick={() => setConfirmSignOut(true)}
-          icon={<LogoutIcon className="h-5 w-5" />}
+        <SettingsSection
+          title="Security"
+          description="Changing your password signs out every other session."
         >
-          Sign out
-        </Button>
-      </Card>
+          <form onSubmit={changePassword} className="space-y-4 p-5 sm:p-6">
+            <Field
+              label="Current password"
+              htmlFor="current_password"
+              error={passwordErrors.current_password}
+              required
+            >
+              <PasswordInput
+                id="current_password"
+                autoComplete="current-password"
+                required
+                value={passwords.current_password}
+                onChange={(event) =>
+                  setPasswords((current) => ({ ...current, current_password: event.target.value }))
+                }
+                invalid={Boolean(passwordErrors.current_password)}
+              />
+            </Field>
+
+            <Field
+              label="New password"
+              htmlFor="new_password"
+              error={passwordErrors.new_password}
+              hint="At least 10 characters."
+              required
+            >
+              <PasswordInput
+                id="new_password"
+                autoComplete="new-password"
+                required
+                minLength={10}
+                value={passwords.new_password}
+                onChange={(event) =>
+                  setPasswords((current) => ({ ...current, new_password: event.target.value }))
+                }
+                invalid={Boolean(passwordErrors.new_password)}
+              />
+            </Field>
+
+            <div className="flex justify-end">
+              <Button type="submit" loading={savingPassword} icon={<LockIcon className="h-4 w-4" />}>
+                Change password
+              </Button>
+            </div>
+          </form>
+        </SettingsSection>
+
+        <SettingsSection title="Notifications and policies">
+          <ul className="divide-y divide-line">
+            <AccountLink
+              href="/account/notifications"
+              icon={<BellIcon className="h-4 w-4" />}
+              label="Notifications"
+              description="Payment, order and security alerts."
+            />
+            <AccountLink
+              href="/acceptable-use"
+              icon={<ShieldIcon className="h-4 w-4" />}
+              label="Acceptable Use Policy"
+              description={
+                user.has_accepted_current_terms
+                  ? `Accepted version ${user.accepted_terms_version}`
+                  : "Action needed - please review and accept."
+              }
+              attention={!user.has_accepted_current_terms}
+            />
+            <AccountLink
+              href="/terms"
+              icon={<CheckCircleIcon className="h-4 w-4" />}
+              label="Terms of Service"
+              description="What you agree to when using VerifyGH."
+            />
+          </ul>
+        </SettingsSection>
+
+        <SettingsSection title="Sign out" description="Your wallet and orders stay exactly as they are.">
+          <div className="p-5 sm:p-6">
+            <Button
+              variant="secondary"
+              onClick={() => setConfirmSignOut(true)}
+              icon={<LogoutIcon className="h-4 w-4" />}
+              className="w-full sm:w-auto"
+            >
+              Sign out
+            </Button>
+          </div>
+        </SettingsSection>
+      </div>
 
       <ConfirmDialog
         open={confirmSignOut}
@@ -280,34 +292,64 @@ export default function AccountPage() {
   );
 }
 
+/** A settings group: what it is on the left, the controls on the right. */
+function SettingsSection({
+  title,
+  description,
+  children,
+}: {
+  title: string;
+  description?: string;
+  children: React.ReactNode;
+}) {
+  return (
+    <section className="grid gap-4 py-8 first:pt-0 md:grid-cols-3 md:gap-8">
+      <div>
+        <h2 className="text-heading text-ink">{title}</h2>
+        {description ? <p className="mt-1 text-sm text-ink-muted">{description}</p> : null}
+      </div>
+      <Card className="overflow-hidden md:col-span-2">{children}</Card>
+    </section>
+  );
+}
+
 function AccountLink({
   href,
   icon,
   label,
   description,
+  attention = false,
 }: {
   href: string;
   icon: React.ReactNode;
   label: string;
   description: string;
+  attention?: boolean;
 }) {
   return (
     <li>
       <Link
         href={href}
-        className="flex items-center gap-3.5 px-4 py-3.5 transition-colors hover:bg-canvas sm:px-5"
+        className="flex min-h-14 items-center gap-3 px-5 py-3 transition-colors hover:bg-sunken/60 sm:px-6"
       >
-        <span className="flex h-9 w-9 shrink-0 items-center justify-center rounded-xl bg-brand-50 text-brand-600">
+        <span
+          aria-hidden
+          className="flex h-9 w-9 shrink-0 items-center justify-center rounded-lg bg-sunken text-ink-soft"
+        >
           {icon}
         </span>
         <span className="min-w-0 flex-1">
           <span className="block text-sm font-medium text-ink">{label}</span>
-          <span className="block truncate text-xs text-ink-muted">{description}</span>
+          <span
+            className={cn(
+              "block truncate text-caption",
+              attention ? "font-medium text-warn-700" : "text-ink-muted",
+            )}
+          >
+            {description}
+          </span>
         </span>
-        <svg viewBox="0 0 24 24" fill="none" className="h-4 w-4 shrink-0 text-ink-faint" aria-hidden>
-          <path d="M9.5 5.5l6.5 6.5-6.5 6.5" stroke="currentColor" strokeWidth="1.7"
-            strokeLinecap="round" strokeLinejoin="round" />
-        </svg>
+        <ChevronRightIcon className="h-4 w-4 shrink-0 text-ink-faint" />
       </Link>
     </li>
   );

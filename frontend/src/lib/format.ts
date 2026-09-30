@@ -153,6 +153,25 @@ export function formatTime(value: string | null | undefined): string {
   return TIME.format(new Date(value));
 }
 
+const DAY_KEY = new Intl.DateTimeFormat("en-CA", {
+  year: "numeric",
+  month: "2-digit",
+  day: "2-digit",
+  timeZone: "Africa/Accra",
+});
+
+/**
+ * "Today", "Yesterday" or "Earlier", by the calendar in Accra rather than by
+ * 24-hour windows - a 23:50 notification is yesterday's at 00:10.
+ */
+export function dayGroup(value: string): "Today" | "Yesterday" | "Earlier" {
+  const day = DAY_KEY.format(new Date(value));
+  const now = Date.now();
+  if (day === DAY_KEY.format(new Date(now))) return "Today";
+  if (day === DAY_KEY.format(new Date(now - 86_400_000))) return "Yesterday";
+  return "Earlier";
+}
+
 /** "2 minutes ago", "just now". Keeps an order list scannable. */
 export function relativeTime(value: string | null | undefined): string {
   if (!value) return "";

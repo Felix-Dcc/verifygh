@@ -34,9 +34,9 @@ const FAQ_ITEMS: { question: string; answer: React.ReactNode }[] = [
     question: "Can I use Telecel Cash or AT Money?",
     answer: (
       <>
-        Yes. Telecel Cash and AT Money are supported alongside MTN. We detect your network from
-        your number, so there is nothing extra to choose. The live list of supported networks is
-        always shown on the Add money screen.
+        Yes. Telecel Cash and AT Money are supported alongside MTN. We fill in your network from
+        your number, and you can change it if you have moved networks. The live list of supported
+        networks is always shown on the Add funds screen.
       </>
     ),
   },

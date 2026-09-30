@@ -26,8 +26,8 @@ function ServicesRoute() {
   const content = (
     <>
       <PageHeader
-        title="SMS Verifications"
-        description="Buy temporary verification numbers for popular online services. Prices in cedis, paid from your wallet."
+        title="Buy a number"
+        description="Pick a service to get a number that receives its verification code. Prices are in cedis and paid from your wallet."
       />
       <Marketplace />
     </>

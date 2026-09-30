@@ -113,7 +113,7 @@ export function Dialog({
       >
         {/* Grab handle: signals "this sheet can be dismissed" on touch. */}
         <div className="mx-auto mb-4 h-1 w-10 rounded-full bg-line-strong sm:hidden" aria-hidden />
-        <h2 id={titleId} className="text-lg font-semibold text-ink">
+        <h2 id={titleId} className="text-heading text-ink">
           {title}
         </h2>
         {description ? (

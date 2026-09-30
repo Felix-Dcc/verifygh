@@ -7,6 +7,7 @@ import useSWR, { mutate as globalMutate } from "swr";
 import { PageHeader } from "@/components/app-shell";
 import { useAuth } from "@/components/auth-provider";
 import { RefreshIcon } from "@/components/icons";
+import { CountryFlag } from "@/components/country-flag";
 import { ServiceLogo } from "@/components/service-logo";
 import { Dialog } from "@/components/ui/dialog";
 import {
@@ -479,9 +480,7 @@ function CountriesTab({ canManage }: { canManage: boolean }) {
         <ul className="mt-2 divide-y divide-line">
           {countries.map((country) => (
             <li key={country.id} className="flex items-center gap-3 px-4 py-3.5 sm:px-5">
-              <span className="text-xl" aria-hidden>
-                {country.flag_emoji}
-              </span>
+              <CountryFlag code={country.code} />
               <div className="min-w-0 flex-1">
                 <p className="text-sm font-medium text-ink">{country.name}</p>
                 <p className="tabular text-xs text-ink-muted">

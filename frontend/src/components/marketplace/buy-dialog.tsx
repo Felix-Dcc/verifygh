@@ -7,17 +7,18 @@ import useSWR, { mutate as globalMutate } from "swr";
 
 import { useAuth } from "@/components/auth-provider";
 import { AvailabilityLabel, TemporarilyUnavailableBadge } from "@/components/marketplace/availability";
+import { CountryFlag } from "@/components/country-flag";
 import { ServiceLogo } from "@/components/service-logo";
 import { Dialog } from "@/components/ui/dialog";
-import { Alert, Button, Skeleton, cn } from "@/components/ui/primitives";
+import { Alert, Button, DescriptionList, Skeleton, cn } from "@/components/ui/primitives";
 import { useToast } from "@/components/ui/toast";
 import { ApiError, api, newIdempotencyKey } from "@/lib/api";
 import { cedis } from "@/lib/format";
 import type { MarketServiceDetail, Order, Quote } from "@/lib/types";
 
 /**
- * The purchase screen: pick a country, see the price and your balance, get a
- * number.
+ * The purchase screen: pick a country, see the price, your balance and what is
+ * left after paying, then buy - with the amount written on the button.
  *
  * Nothing on it is decided here. The country options and their prices come
  * from the marketplace endpoint; the price shown before confirming comes from
@@ -50,7 +51,7 @@ export function BuyDialog({
   const [submitting, setSubmitting] = React.useState(false);
   const [blocker, setBlocker] = React.useState<{ code: string; message: string } | null>(null);
 
-  // One key per opening: a double tap on "Get number" buys one number, while
+  // One key per opening: a double tap on the buy button buys one number, while
   // reopening the dialog is a genuinely new purchase.
   const idempotencyKey = React.useRef(newIdempotencyKey());
 
@@ -130,12 +131,18 @@ export function BuyDialog({
   const insufficient =
     blocker?.code === "INSUFFICIENT_FUNDS" || quote?.sufficient_balance === false;
   const price = quote?.price ?? option?.price;
+  const balance = quote?.wallet_balance;
+  // Display only - the order endpoint does its own sums. Whole pesewas, so
+  // 35.00 - 8.50 never shows as 26.499999.
+  const pesewas = (amount: string) => Math.round(Number.parseFloat(amount) * 100);
+  const after = quote ? (pesewas(quote.wallet_balance) - pesewas(quote.price)) / 100 : null;
+  const choosing = (detail?.countries.length ?? 0) > 1;
 
   return (
     <Dialog
       open={open}
       onClose={onClose}
-      title="Get a verification number"
+      title={detail ? `Buy a ${detail.name} number` : "Buy a number"}
       dismissible={!submitting}
       footer={
         !user ? (
@@ -143,7 +150,7 @@ export function BuyDialog({
             href={`/login?next=${encodeURIComponent(`/services?service=${serviceSlug}`)}`}
             className="block"
           >
-            <Button fullWidth>Sign in to get a number</Button>
+            <Button fullWidth>Sign in to buy</Button>
           </Link>
         ) : (
           <DialogFooter
@@ -153,22 +160,26 @@ export function BuyDialog({
             onCancel={onClose}
             onConfirm={confirm}
             blockerCode={blocker?.code}
+            price={quote && purchasable ? quote.price : null}
           />
         )
       }
     >
       {!detail ? (
-        <div className="space-y-3">
-          <Skeleton className="h-12 w-full rounded-xl" />
-          <Skeleton className="h-24 w-full rounded-xl" />
+        <div className="space-y-3" aria-busy>
+          <Skeleton className="h-10 w-full" />
+          <Skeleton className="h-36 w-full rounded-xl" />
         </div>
       ) : (
-        <div className="space-y-4">
-          <div className="flex flex-col items-center gap-2 rounded-xl bg-canvas px-4 py-5 text-center">
-            <ServiceLogo name={detail.name} src={detail.icon_url} slug={detail.slug} size="lg" />
-            <div>
-              <p className="text-base font-semibold text-ink">{detail.name}</p>
-              <p className="text-xs text-ink-muted">SMS verification number</p>
+        <div className="space-y-5">
+          <div className="flex items-center gap-3">
+            <ServiceLogo name={detail.name} src={detail.icon_url} slug={detail.slug} />
+            <div className="min-w-0">
+              <p className="truncate text-sm font-medium text-ink">{detail.name}</p>
+              <p className="text-caption text-ink-muted">
+                One-time number for an SMS code
+                {quote?.ttl_minutes ? `, active for ${quote.ttl_minutes} minutes` : ""}
+              </p>
             </div>
           </div>
 
@@ -178,116 +189,141 @@ export function BuyDialog({
             </Alert>
           ) : null}
 
-          <fieldset>
-            <legend className="mb-2 text-sm font-medium text-ink">Country</legend>
-            <div
-              className={cn("grid gap-2", detail.countries.length > 1 ? "grid-cols-2" : "grid-cols-1")}
-              role="radiogroup"
-            >
-              {detail.countries.map((entry) => {
-                const selected = entry.code === country;
-                const unavailable =
-                  !entry.offered || entry.availability === "UNAVAILABLE" || entry.temporarily_unavailable;
-                return (
-                  <button
-                    key={entry.code}
-                    type="button"
-                    role="radio"
-                    aria-checked={selected}
-                    onClick={() => setCountry(entry.code)}
-                    className={cn(
-                      "flex min-h-[4.25rem] flex-col items-start justify-center rounded-xl border px-3.5 py-2.5 text-left transition-colors",
-                      selected
-                        ? "border-brand-600 bg-brand-50 ring-1 ring-brand-600"
-                        : "border-line hover:border-line-strong hover:bg-canvas",
-                    )}
-                  >
-                    <span className="flex items-center gap-1.5 text-sm font-medium text-ink">
-                      <span aria-hidden>{entry.flag_emoji}</span>
-                      {entry.name}
-                    </span>
-                    <span className="mt-0.5 text-xs text-ink-muted">
-                      {entry.temporarily_unavailable
-                        ? "Temporarily unavailable"
-                        : unavailable
-                          ? entry.offered
-                            ? "Unavailable right now"
-                            : "Not offered"
-                          : cedis(entry.price)}
-                    </span>
-                  </button>
-                );
-              })}
-            </div>
-          </fieldset>
+          {choosing ? (
+            <fieldset>
+              <legend className="mb-2 text-label text-ink">Country</legend>
+              <div className="grid grid-cols-2 gap-2" role="radiogroup">
+                {detail.countries.map((entry) => {
+                  const selected = entry.code === country;
+                  const unavailable =
+                    !entry.offered || entry.availability === "UNAVAILABLE" || entry.temporarily_unavailable;
+                  return (
+                    <button
+                      key={entry.code}
+                      type="button"
+                      role="radio"
+                      aria-checked={selected}
+                      onClick={() => setCountry(entry.code)}
+                      className={cn(
+                        "flex min-h-14 flex-col items-start justify-center rounded-lg border px-3 py-2 text-left transition-colors",
+                        selected
+                          ? "border-brand-600 bg-brand-50 ring-1 ring-brand-600"
+                          : "border-line hover:border-line-strong hover:bg-sunken",
+                      )}
+                    >
+                      <span className="flex items-center gap-2 text-sm font-medium text-ink">
+                        <CountryFlag code={entry.code} size="sm" />
+                        {entry.name}
+                      </span>
+                      <span className="tabular mt-0.5 text-caption text-ink-muted">
+                        {entry.temporarily_unavailable
+                          ? "Temporarily unavailable"
+                          : unavailable
+                            ? entry.offered
+                              ? "Unavailable right now"
+                              : "Not offered"
+                            : cedis(entry.price)}
+                      </span>
+                    </button>
+                  );
+                })}
+              </div>
+            </fieldset>
+          ) : null}
 
-          <dl className="space-y-2.5 rounded-xl border border-line bg-canvas p-3.5 text-sm">
-            <Row label="Availability">
-              {option && paused ? (
-                <TemporarilyUnavailableBadge />
-              ) : option ? (
-                <AvailabilityLabel
-                  availability={option.offered ? option.availability : "UNAVAILABLE"}
-                  count={option.available_count ?? null}
-                />
-              ) : (
-                <Skeleton className="h-4 w-20" />
-              )}
-            </Row>
-            <Row label="Price">
-              {loadingQuote ? (
-                <Skeleton className="h-4 w-16" />
-              ) : (
-                <span className="tabular text-base font-semibold text-ink">
-                  {purchasable && price ? cedis(price) : "-"}
-                </span>
-              )}
-            </Row>
-            {user ? (
-              <Row label="Wallet balance">
-                {loadingQuote ? (
-                  <Skeleton className="h-4 w-16" />
-                ) : (
-                  <span className={cn("tabular", insufficient ? "text-warn-700" : "text-ink-soft")}>
-                    {quote ? cedis(quote.wallet_balance) : "-"}
-                  </span>
-                )}
-              </Row>
-            ) : null}
-          </dl>
+          <div className="rounded-lg border border-line px-4">
+            <DescriptionList
+              items={[
+                ...(choosing
+                  ? []
+                  : [
+                      {
+                        label: "Country",
+                        value: option ? (
+                          <span className="inline-flex items-center gap-2">
+                            <CountryFlag code={option.code} size="sm" />
+                            {option.name}
+                          </span>
+                        ) : (
+                          <Skeleton className="h-4 w-24" />
+                        ),
+                      },
+                    ]),
+                {
+                  label: "Availability",
+                  value:
+                    option && paused ? (
+                      <TemporarilyUnavailableBadge />
+                    ) : option ? (
+                      <AvailabilityLabel
+                        availability={option.offered ? option.availability : "UNAVAILABLE"}
+                        count={option.available_count ?? null}
+                      />
+                    ) : (
+                      <Skeleton className="h-4 w-20" />
+                    ),
+                },
+                {
+                  label: "Number price",
+                  emphasis: true,
+                  value: loadingQuote ? (
+                    <Skeleton className="h-4 w-16" />
+                  ) : (
+                    <span className="tabular">{purchasable && price ? cedis(price) : "-"}</span>
+                  ),
+                },
+                ...(user && purchasable
+                  ? [
+                      {
+                        label: "Current balance",
+                        value: loadingQuote ? (
+                          <Skeleton className="h-4 w-16" />
+                        ) : (
+                          <span className="tabular">{balance ? cedis(balance) : "-"}</span>
+                        ),
+                      },
+                      {
+                        label: "After purchase",
+                        emphasis: true,
+                        value: loadingQuote ? (
+                          <Skeleton className="h-4 w-16" />
+                        ) : after === null ? (
+                          "-"
+                        ) : after < 0 ? (
+                          <span className="tabular text-warn-700">Short by {cedis(-after)}</span>
+                        ) : (
+                          <span className="tabular">{cedis(after)}</span>
+                        ),
+                      },
+                    ]
+                  : []),
+              ]}
+            />
+          </div>
 
           {quoteError ? (
-            <Alert tone="danger" title="Could not price this">
-              {quoteError}
+            <Alert tone="danger" title="We couldn't price this number">
+              {quoteError} Nothing was charged.
             </Alert>
           ) : null}
 
           {insufficient ? (
-            <Alert tone="warn" title="Your balance is insufficient.">
-              Add money to your wallet with Mobile Money, then come back.
+            <Alert tone="warn" title="Not enough in your wallet">
+              Add funds with Mobile Money, then come back to this number.
             </Alert>
           ) : blocker ? (
             <BlockerNotice code={blocker.code} message={blocker.message} email={user?.email} />
           ) : null}
 
-          <p className="text-xs leading-relaxed text-ink-muted">
-            The price is fixed when you tap Get number. If no code arrives before the number
-            expires, it is refunded to your wallet automatically. Numbers come from our
-            provider&apos;s shared pool and may have been used before - if a service treats one as
-            already registered, report it from your order screen.
+          <p className="text-caption text-ink-muted">
+            You pay once, when the number is reserved. If no code arrives before it expires, the
+            full amount goes back to your wallet automatically. Numbers come from a shared pool and
+            may have been used before - if a service says one is already registered, report it from
+            the order screen.
           </p>
         </div>
       )}
     </Dialog>
-  );
-}
-
-function Row({ label, children }: { label: string; children: React.ReactNode }) {
-  return (
-    <div className="flex items-center justify-between gap-4">
-      <dt className="text-ink-muted">{label}</dt>
-      <dd className="flex items-center">{children}</dd>
-    </div>
   );
 }
 
@@ -298,6 +334,7 @@ function DialogFooter({
   onCancel,
   onConfirm,
   blockerCode,
+  price,
 }: {
   insufficient: boolean;
   submitting: boolean;
@@ -305,6 +342,8 @@ function DialogFooter({
   onCancel: () => void;
   onConfirm: () => void;
   blockerCode?: string;
+  /** The quoted price, written on the button so the tap is never ambiguous. */
+  price: string | null;
 }) {
   if (insufficient) {
     return (
@@ -314,7 +353,7 @@ function DialogFooter({
         </Button>
         <Link href="/wallet/deposit" className="sm:w-auto">
           <Button fullWidth className="sm:w-auto">
-            Add money
+            Add funds
           </Button>
         </Link>
       </div>
@@ -342,7 +381,7 @@ function DialogFooter({
         Cancel
       </Button>
       <Button fullWidth className="sm:w-auto" onClick={onConfirm} loading={submitting} disabled={disabled}>
-        {submitting ? "Getting number" : "Get number"}
+        {submitting ? "Reserving your number" : price ? `Buy for ${cedis(price)}` : "Buy number"}
       </Button>
     </div>
   );

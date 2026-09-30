@@ -19,6 +19,8 @@ import { cn } from "@/lib/cn";
  */
 
 const SIZES = {
+  // Chips ("Recently used").
+  xs: "h-7 w-7",
   // Marketplace rows: 32px on phones, 36px from the small breakpoint up.
   sm: "h-8 w-8 sm:h-9 sm:w-9",
   md: "h-9 w-9",
@@ -26,7 +28,7 @@ const SIZES = {
   xl: "h-16 w-16",
 } as const;
 
-const PIXELS = { sm: 36, md: 36, lg: 48, xl: 64 } as const;
+const PIXELS = { xs: 28, sm: 36, md: 36, lg: 48, xl: 64 } as const;
 
 const warned = new Set<string>();
 

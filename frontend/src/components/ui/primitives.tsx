@@ -187,10 +187,12 @@ export function Field({
 export type InputProps = React.InputHTMLAttributes<HTMLInputElement> & {
   invalid?: boolean;
   prefix?: React.ReactNode;
+  /** Something inside the field on the right, like a show/hide button. */
+  suffix?: React.ReactNode;
 };
 
 export const Input = React.forwardRef<HTMLInputElement, InputProps>(function Input(
-  { className, invalid, prefix, ...props },
+  { className, invalid, prefix, suffix, ...props },
   ref,
 ) {
   const base = cn(
@@ -216,12 +218,44 @@ export const Input = React.forwardRef<HTMLInputElement, InputProps>(function Inp
       <input
         ref={ref}
         aria-invalid={invalid || undefined}
-        className={cn(base, prefix ? "px-2" : "px-3.5")}
+        className={cn(base, prefix ? "px-2" : "px-3.5", suffix && "pr-1")}
         {...props}
       />
+      {suffix ? <span className="flex shrink-0 self-stretch p-0.5">{suffix}</span> : null}
     </div>
   );
 });
+
+/**
+ * A password field that can be shown. Typing a password blind on a phone
+ * keyboard is how people end up resetting it; one tap lets them check.
+ */
+export const PasswordInput = React.forwardRef<HTMLInputElement, Omit<InputProps, "type" | "suffix">>(
+  function PasswordInput(props, ref) {
+    const [visible, setVisible] = React.useState(false);
+    return (
+      <Input
+        ref={ref}
+        {...props}
+        type={visible ? "text" : "password"}
+        autoCapitalize="none"
+        autoCorrect="off"
+        spellCheck={false}
+        suffix={
+          <button
+            type="button"
+            onClick={() => setVisible((value) => !value)}
+            aria-pressed={visible}
+            aria-label={visible ? "Hide password" : "Show password"}
+            className="min-w-14 rounded-md px-2 text-caption font-medium text-ink-muted transition-colors hover:bg-sunken hover:text-ink"
+          >
+            {visible ? "Hide" : "Show"}
+          </button>
+        }
+      />
+    );
+  },
+);
 
 
 export const Select = React.forwardRef<
@@ -301,7 +335,8 @@ export function Checkbox({
  * Badges
  * ---------------------------------------------------------------------- */
 
-type Tone = "neutral" | "brand" | "success" | "warn" | "danger" | "info";
+/** `gold` is for rewards only - promotional credit, referral bonuses. */
+type Tone = "neutral" | "brand" | "success" | "warn" | "danger" | "info" | "gold";
 
 const TONES: Record<Tone, string> = {
   neutral: "bg-sunken text-ink-soft",
@@ -310,6 +345,7 @@ const TONES: Record<Tone, string> = {
   warn: "bg-warn-50 text-warn-700",
   danger: "bg-danger-50 text-danger-700",
   info: "bg-info-50 text-info-700",
+  gold: "bg-gold-100 text-gold-700",
 };
 
 export function Badge({
@@ -445,6 +481,7 @@ export function Alert({
     warn: "border-warn-200",
     danger: "border-danger-200",
     info: "border-info-200",
+    gold: "border-gold-300",
   };
   return (
     <div
@@ -510,7 +547,7 @@ export function SegmentedControl<T extends string>({
     <div
       role="tablist"
       className={cn(
-        "no-scrollbar flex gap-0.5 overflow-x-auto rounded-lg bg-sunken p-0.5",
+        "no-scrollbar flex max-w-full gap-0.5 overflow-x-auto rounded-lg bg-sunken p-0.5 sm:w-fit",
         className,
       )}
     >
@@ -524,7 +561,7 @@ export function SegmentedControl<T extends string>({
             aria-selected={active}
             onClick={() => onChange(option.value)}
             className={cn(
-              "shrink-0 whitespace-nowrap rounded-md px-3 py-1.5 text-sm font-medium transition-colors",
+              "min-h-11 shrink-0 whitespace-nowrap rounded-md px-3 text-sm font-medium transition-colors sm:min-h-8",
               active
                 ? "bg-surface text-ink shadow-card ring-1 ring-line"
                 : "text-ink-muted hover:text-ink",

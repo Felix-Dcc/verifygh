@@ -6,15 +6,23 @@ import useSWR from "swr";
 import useSWRInfinite from "swr/infinite";
 
 import { useAuth } from "@/components/auth-provider";
-import { PinIcon, SearchIcon } from "@/components/icons";
+import { CountryFlag } from "@/components/country-flag";
+import { SearchIcon, StarIcon } from "@/components/icons";
 import { AvailabilityLabel, TemporarilyUnavailableBadge } from "@/components/marketplace/availability";
 import { BuyDialog } from "@/components/marketplace/buy-dialog";
-import { Alert, Button, Card, EmptyState, Input, Skeleton, cn } from "@/components/ui/primitives";
+import { Alert, Button, Card, EmptyState, Skeleton, cn } from "@/components/ui/primitives";
 import { ServiceLogo } from "@/components/service-logo";
 import { useToast } from "@/components/ui/toast";
 import { ApiError, api } from "@/lib/api";
 import { cedis } from "@/lib/format";
-import type { CatalogHealth, MarketHome, MarketPage, MarketRow } from "@/lib/types";
+import type {
+  CatalogHealth,
+  MarketHome,
+  MarketPage,
+  MarketRow,
+  OrderSummary,
+  Paginated,
+} from "@/lib/types";
 
 const PAGE_SIZE = 40;
 
@@ -117,110 +125,131 @@ export function Marketplace() {
 
   const searching = query.length > 0;
   const countryInfo = home?.countries.find((entry) => entry.code === activeCountry);
-  const countryLabel = countryInfo ? `${countryInfo.flag_emoji} ${countryInfo.name}` : "";
   const pinned = (home?.pinned ?? []).filter((row) => isPinned(row));
   const popular = home?.popular ?? [];
 
+  // "Recently used": the customer's own last orders, one entry per service.
+  const { data: recent } = useSWR<Paginated<OrderSummary>>(
+    user ? ["/orders/", { page_size: 20 }] : null,
+  );
+  const recentlyUsed = React.useMemo(() => {
+    const seen = new Set<string>();
+    const out: { slug: string; name: string; icon: string }[] = [];
+    for (const order of recent?.results ?? []) {
+      if (seen.has(order.service_slug) || order.country_code !== activeCountry) continue;
+      seen.add(order.service_slug);
+      out.push({ slug: order.service_slug, name: order.service_name, icon: order.service_icon });
+      if (out.length === 6) break;
+    }
+    return out;
+  }, [recent, activeCountry]);
+
+  const rowProps = (row: MarketRow) => ({
+    row,
+    pinned: isPinned(row),
+    onOpen: () => setBuying(row.slug),
+    onPin: () => togglePin(row),
+  });
+
   return (
-    <div className="space-y-4">
+    <div className="space-y-8">
       {health && !health.ready ? (
         <Alert tone="warn" title="The catalogue is not fully live yet">
           {health.exchange_rate_configured
             ? "Our provider connection is being set up. Prices and availability appear here as soon as it is."
-            : "Pricing is being configured. Nothing can be purchased until it is complete."}
+            : "Pricing is being configured. Nothing can be bought until it is complete."}
         </Alert>
       ) : null}
 
-      <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
-        <ChannelTabs voiceAvailable={Boolean(home?.voice_available)} />
-        <CountrySwitch
-          countries={home?.countries ?? []}
-          value={activeCountry}
-          onChange={changeCountry}
-        />
+      <div className="flex flex-col gap-3 sm:flex-row sm:items-center">
+        <label className="relative block flex-1">
+          <span className="sr-only">Search services</span>
+          <SearchIcon className="pointer-events-none absolute left-3.5 top-1/2 h-4 w-4 -translate-y-1/2 text-ink-faint" />
+          <input
+            type="search"
+            inputMode="search"
+            placeholder="Search - WhatsApp, TikTok, Gmail, Telegram…"
+            value={search}
+            onChange={(event) => setSearch(event.target.value)}
+            className="h-11 w-full rounded-lg border border-line-strong bg-surface pl-10 pr-3 text-base text-ink placeholder:text-ink-faint transition-shadow focus:border-brand-500 focus:shadow-focus focus:outline-none"
+          />
+        </label>
+        <div className="flex items-center gap-3">
+          <CountrySwitch
+            countries={home?.countries ?? []}
+            value={activeCountry}
+            onChange={changeCountry}
+          />
+        </div>
       </div>
 
-      <div className="relative">
-        <SearchIcon className="pointer-events-none absolute left-3.5 top-1/2 h-5 w-5 -translate-y-1/2 text-ink-faint" />
-        <Input
-          type="search"
-          inputMode="search"
-          aria-label="Search services"
-          placeholder="Search services..."
-          value={search}
-          onChange={(event) => setSearch(event.target.value)}
-          className="h-12 pl-11 text-base"
-        />
-      </div>
+      {!searching && recentlyUsed.length > 0 ? (
+        <section aria-labelledby="recent-heading">
+          <h2 id="recent-heading" className="mb-2 text-label text-ink-muted">
+            Recently used
+          </h2>
+          <div className="no-scrollbar -mx-4 flex gap-2 overflow-x-auto px-4 sm:mx-0 sm:flex-wrap sm:px-0">
+            {recentlyUsed.map((service) => (
+              <button
+                key={service.slug}
+                type="button"
+                onClick={() => setBuying(service.slug)}
+                className="flex h-10 shrink-0 items-center gap-2 rounded-lg border border-line bg-surface pl-1.5 pr-3 text-sm font-medium text-ink transition-colors hover:border-line-strong hover:bg-sunken"
+              >
+                <ServiceLogo name={service.name} src={service.icon} slug={service.slug} size="xs" />
+                {service.name}
+              </button>
+            ))}
+          </div>
+        </section>
+      ) : null}
 
       {!searching && pinned.length > 0 ? (
-        <Section title="Pinned" count={pinned.length}>
+        <ServiceList title="Favourites" count={pinned.length} countryName={countryInfo?.name}>
           {pinned.map((row) => (
-            <ServiceRow
-              key={`pin-${row.slug}`}
-              row={row}
-              pinned={isPinned(row)}
-              countryLabel={countryLabel}
-              onOpen={() => setBuying(row.slug)}
-              onPin={() => togglePin(row)}
-            />
+            <ServiceRow key={`pin-${row.slug}`} {...rowProps(row)} />
           ))}
-        </Section>
+        </ServiceList>
       ) : null}
 
       {!searching && popular.length > 0 ? (
-        <Section title="Popular" count={popular.length}>
+        <ServiceList title="Popular" countryName={countryInfo?.name}>
           {popular.map((row) => (
-            <ServiceRow
-              key={`pop-${row.slug}`}
-              row={row}
-              pinned={isPinned(row)}
-              countryLabel={countryLabel}
-              onOpen={() => setBuying(row.slug)}
-              onPin={() => togglePin(row)}
-            />
+            <ServiceRow key={`pop-${row.slug}`} {...rowProps(row)} />
           ))}
-        </Section>
+        </ServiceList>
       ) : null}
 
-      <Section
-        title={searching ? "Results" : "All services"}
+      <ServiceList
+        title={searching ? `Results for "${query}"` : "All services"}
         count={list.data ? total : undefined}
+        countryName={countryInfo?.name}
       >
         {!list.data && !list.error ? (
           <RowSkeletons />
         ) : list.error ? (
           <EmptyState
             icon={<SearchIcon />}
-            title="We could not load the services"
-            description="Check your connection and try again."
-            action={<Button onClick={() => list.mutate()}>Retry</Button>}
+            title="We couldn't load the services"
+            description="Check your connection, then try again. Nothing has been charged."
+            action={<Button onClick={() => list.mutate()}>Try again</Button>}
           />
         ) : rows.length === 0 ? (
           <EmptyState
             icon={<SearchIcon />}
-            title={searching ? `Nothing matches "${query}"` : "Nothing available here right now"}
+            title={searching ? `Nothing matches "${query}"` : "Nothing on sale here right now"}
             description={
               searching
-                ? "Try another name - for example Gmail, X or WhatsApp."
+                ? "Try another name - Gmail finds Google, X finds Twitter."
                 : (home?.countries.length ?? 0) > 1
                   ? "Try the other country, or check back shortly."
-                  : "Please check back shortly."
+                  : "Services come back as soon as numbers are available. Check back shortly."
             }
           />
         ) : (
-          rows.map((row) => (
-            <ServiceRow
-              key={row.slug}
-              row={row}
-              pinned={isPinned(row)}
-              countryLabel={countryLabel}
-              onOpen={() => setBuying(row.slug)}
-              onPin={() => togglePin(row)}
-            />
-          ))
+          rows.map((row) => <ServiceRow key={row.slug} {...rowProps(row)} />)
         )}
-      </Section>
+      </ServiceList>
 
       {hasMore ? (
         <div className="flex justify-center">
@@ -229,7 +258,7 @@ export function Marketplace() {
             loading={list.isValidating}
             onClick={() => list.setSize(list.size + 1)}
           >
-            Load more
+            Show more services
           </Button>
         </div>
       ) : null}
@@ -246,34 +275,6 @@ export function Marketplace() {
 
 /* ------------------------------------------------------------------ */
 
-function ChannelTabs({ voiceAvailable }: { voiceAvailable: boolean }) {
-  return (
-    <div className="inline-flex w-fit rounded-xl border border-line bg-surface p-1" role="tablist">
-      <button
-        type="button"
-        role="tab"
-        aria-selected
-        className="rounded-lg bg-brand-600 px-4 py-1.5 text-sm font-medium text-white"
-      >
-        SMS
-      </button>
-      <button
-        type="button"
-        role="tab"
-        aria-selected={false}
-        disabled
-        title={voiceAvailable ? "Voice verification is coming soon" : "Coming soon"}
-        className="flex cursor-not-allowed items-center gap-1.5 rounded-lg px-4 py-1.5 text-sm font-medium text-ink-faint"
-      >
-        Voice
-        <span className="rounded-md bg-line/70 px-1.5 py-0.5 text-2xs font-medium text-ink-muted">
-          Soon
-        </span>
-      </button>
-    </div>
-  );
-}
-
 function CountrySwitch({
   countries,
   value,
@@ -283,59 +284,62 @@ function CountrySwitch({
   value: string;
   onChange: (code: string) => void;
 }) {
-  if (countries.length === 0) return <Skeleton className="h-10 w-64 rounded-xl" />;
+  if (countries.length === 0) return <Skeleton className="h-11 w-44" />;
   if (countries.length === 1) {
-    // Nothing to switch between: just say where the numbers are from.
     const [only] = countries;
     return (
-      <p className="inline-flex items-center gap-2 rounded-xl border border-line bg-surface px-3.5 py-2 text-sm font-medium text-ink">
-        <span aria-hidden>{only.flag_emoji}</span>
+      <p className="flex h-11 items-center gap-2 rounded-lg border border-line bg-surface px-3 text-sm font-medium text-ink">
+        <CountryFlag code={only.code} />
         {only.name} numbers
       </p>
     );
   }
   return (
-    <div
-      className="grid w-full grid-cols-2 rounded-xl border border-line bg-surface p-1 sm:w-auto"
-      role="radiogroup"
-      aria-label="Country"
-    >
-      {countries.map((country) => (
-        <button
-          key={country.code}
-          type="button"
-          role="radio"
-          aria-checked={value === country.code}
-          onClick={() => onChange(country.code)}
-          className={cn(
-            "flex items-center justify-center gap-2 rounded-lg px-3.5 py-1.5 text-sm font-medium transition-colors",
-            value === country.code ? "bg-ink text-white" : "text-ink-soft hover:bg-canvas",
-          )}
-        >
-          <span aria-hidden>{country.flag_emoji}</span>
-          {country.name}
-        </button>
-      ))}
+    <div className="inline-flex rounded-lg bg-sunken p-0.5" role="radiogroup" aria-label="Country">
+      {countries.map((country) => {
+        const active = value === country.code;
+        return (
+          <button
+            key={country.code}
+            type="button"
+            role="radio"
+            aria-checked={active}
+            onClick={() => onChange(country.code)}
+            className={cn(
+              "flex h-10 items-center gap-2 rounded-md px-3 text-sm font-medium transition-colors",
+              active ? "bg-surface text-ink shadow-card ring-1 ring-line" : "text-ink-muted hover:text-ink",
+            )}
+          >
+            <CountryFlag code={country.code} size="sm" />
+            {country.name}
+          </button>
+        );
+      })}
     </div>
   );
 }
 
-function Section({
+function ServiceList({
   title,
   count,
+  countryName,
   children,
 }: {
   title: string;
   count?: number;
+  countryName?: string;
   children: React.ReactNode;
 }) {
   return (
     <section>
-      <div className="mb-1.5 flex items-baseline justify-between px-1">
-        <h2 className="text-2xs font-semibold uppercase tracking-[0.08em] text-ink-muted">
+      <div className="mb-2 flex items-baseline justify-between gap-3">
+        <h2 className="text-label text-ink-muted">
           {title}
+          {count !== undefined ? <span className="tabular ml-1.5 text-ink-faint">{count}</span> : null}
         </h2>
-        {count !== undefined ? <span className="text-2xs text-ink-faint">{count}</span> : null}
+        {countryName ? (
+          <span className="hidden text-caption text-ink-faint sm:inline">Prices for {countryName}</span>
+        ) : null}
       </div>
       <Card className="divide-y divide-line overflow-hidden">{children}</Card>
     </section>
@@ -345,62 +349,54 @@ function Section({
 function ServiceRow({
   row,
   pinned,
-  countryLabel,
   onOpen,
   onPin,
 }: {
   row: MarketRow;
   pinned: boolean;
-  countryLabel: string;
   onOpen: () => void;
   onPin: () => void;
 }) {
   const paused = Boolean(row.temporarily_unavailable);
   const unavailable = row.availability === "UNAVAILABLE" || row.unavailable_here || paused;
+  const [popping, setPopping] = React.useState(false);
+
   return (
-    <div className="group flex items-center gap-1 pr-1.5 transition-colors hover:bg-canvas">
+    <div className="group flex items-center gap-1 pr-1.5 transition-colors hover:bg-sunken/60">
       <button
         type="button"
         onClick={onOpen}
-        className="flex min-h-[3.5rem] min-w-0 flex-1 items-center gap-3 py-2 pl-3.5 text-left sm:pl-4"
+        className="flex min-h-14 min-w-0 flex-1 items-center gap-3 py-2 pl-4 text-left sm:pl-5"
       >
         <ServiceLogo name={row.name} src={row.icon_url} slug={row.slug} size="sm" />
         <span className="min-w-0 flex-1">
-          <span
-            className={cn(
-              "block truncate text-sm font-medium",
-              unavailable ? "text-ink-muted" : "text-ink",
-            )}
-          >
+          <span className={cn("block truncate text-sm font-medium", unavailable ? "text-ink-muted" : "text-ink")}>
             {row.name}
           </span>
+          <span className="mt-0.5 block sm:hidden">
+            {paused ? (
+              <TemporarilyUnavailableBadge />
+            ) : (
+              <AvailabilityLabel
+                availability={row.unavailable_here ? "UNAVAILABLE" : row.availability}
+                count={row.available_count}
+              />
+            )}
+          </span>
+        </span>
+        <span className="hidden w-40 shrink-0 sm:block">
           {paused ? (
-            <TemporarilyUnavailableBadge className="mt-0.5 sm:hidden" />
+            <TemporarilyUnavailableBadge />
           ) : (
             <AvailabilityLabel
               availability={row.unavailable_here ? "UNAVAILABLE" : row.availability}
               count={row.available_count}
-              className="sm:hidden"
             />
           )}
         </span>
-        <span className="hidden w-36 shrink-0 truncate text-xs text-ink-muted lg:block">
-          {countryLabel}
-        </span>
-        {paused ? (
-          <span className="hidden w-32 shrink-0 sm:inline-flex">
-            <TemporarilyUnavailableBadge />
-          </span>
-        ) : (
-          <AvailabilityLabel
-            availability={row.unavailable_here ? "UNAVAILABLE" : row.availability}
-            count={row.available_count}
-            className="hidden w-32 shrink-0 sm:inline-flex"
-          />
-        )}
         <span
           className={cn(
-            "tabular w-20 shrink-0 text-right text-sm font-semibold",
+            "tabular w-24 shrink-0 text-right text-sm font-semibold",
             unavailable ? "text-ink-faint" : "text-ink",
           )}
         >
@@ -409,15 +405,19 @@ function ServiceRow({
       </button>
       <button
         type="button"
-        onClick={onPin}
+        onClick={() => {
+          if (!pinned) setPopping(true);
+          onPin();
+        }}
+        onAnimationEnd={() => setPopping(false)}
         aria-pressed={pinned}
-        aria-label={pinned ? `Unpin ${row.name}` : `Pin ${row.name}`}
+        aria-label={pinned ? `Remove ${row.name} from favourites` : `Add ${row.name} to favourites`}
         className={cn(
-          "flex h-11 w-11 shrink-0 items-center justify-center rounded-lg transition-[color,transform] duration-150 active:scale-90",
-          pinned ? "text-brand-600" : "text-ink-faint hover:text-ink-soft",
+          "flex h-11 w-11 shrink-0 items-center justify-center rounded-lg transition-colors",
+          pinned ? "text-gold-500" : "text-ink-faint hover:text-ink-muted",
         )}
       >
-        <PinIcon filled={pinned} className="h-[1.1rem] w-[1.1rem]" />
+        <StarIcon filled={pinned} className={cn("h-5 w-5", popping && "animate-pin-pop")} />
       </button>
     </div>
   );
@@ -427,10 +427,11 @@ function RowSkeletons() {
   return (
     <>
       {Array.from({ length: 8 }).map((_, index) => (
-        <div key={index} className="flex min-h-[3.5rem] items-center gap-3 px-4">
+        <div key={index} className="flex min-h-14 items-center gap-3 px-4 sm:px-5" aria-hidden>
           <Skeleton className="h-8 w-8 rounded-lg" />
-          <Skeleton className="h-4 flex-1" />
-          <Skeleton className="h-4 w-14" />
+          <Skeleton className="h-3.5 flex-1 sm:max-w-40" />
+          <Skeleton className="hidden h-3 w-24 sm:block" />
+          <Skeleton className="h-4 w-16" />
         </div>
       ))}
     </>

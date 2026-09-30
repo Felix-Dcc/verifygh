@@ -5,13 +5,14 @@ import useSWR from "swr";
 import * as React from "react";
 
 import { PageHeader } from "@/components/app-shell";
-import { CheckIcon, CopyIcon, ShareIcon, UsersIcon } from "@/components/icons";
+import { CheckIcon, CopyIcon, MessageIcon, ShareIcon, UsersIcon } from "@/components/icons";
 import {
   Alert,
   Button,
   Card,
-  CardHeader,
   EmptyState,
+  Input,
+  Section,
   Skeleton,
   StatusBadge,
 } from "@/components/ui/primitives";
@@ -75,10 +76,10 @@ export default function ReferPage() {
   }
 
   return (
-    <div className="space-y-4">
+    <div className="space-y-8">
       <PageHeader
-        title="Refer & Earn"
-        description="Invite your friends to VerifyGH."
+        title="Refer friends"
+        description="Give a friend promotional credit when they join VerifyGH."
       />
 
       {data && !data.enabled ? (
@@ -87,24 +88,22 @@ export default function ReferPage() {
         </Alert>
       ) : null}
 
-      <div className="relative overflow-hidden rounded-2xl bg-brand-700 p-5 text-white shadow-raised sm:p-6">
-        <div
-          className="pointer-events-none absolute -right-12 -top-12 h-44 w-44 rounded-full bg-brand-500/30 blur-2xl"
-          aria-hidden
-        />
-        <div className="relative">
-          <p className="text-sm text-brand-200">
-            Your friend gets {bonus || "a bonus"} in promotional credit once they verify their
-            email.
+      <Card className="grid overflow-hidden md:grid-cols-5">
+        <div className="p-5 sm:p-6 md:col-span-3">
+          <h2 className="text-heading text-ink">
+            {bonus ? `Your friend gets ${bonus} to start` : "Invite a friend"}
+          </h2>
+          <p className="mt-1 text-sm text-ink-muted">
+            The credit lands in their wallet once they confirm their email address.
           </p>
 
           <div className="mt-5">
-            <p className="text-xs uppercase tracking-wide text-brand-200">Referral code</p>
+            <p className="text-label text-ink-muted">Your code</p>
             {isLoading ? (
-              <Skeleton className="mt-2 h-12 w-48 bg-white/20" />
+              <Skeleton className="mt-2 h-11 w-48" />
             ) : (
               <div className="mt-1.5 flex flex-wrap items-center gap-3">
-                <span className="tabular rounded-xl bg-white/10 px-4 py-2.5 text-2xl font-semibold tracking-[0.2em] sm:text-3xl">
+                <span className="code select-all text-title font-semibold tracking-widest text-ink">
                   {data?.code}
                 </span>
                 <Button
@@ -112,11 +111,7 @@ export default function ReferPage() {
                   size="sm"
                   onClick={() => data && copy(data.code, "code")}
                   icon={
-                    copied === "code" ? (
-                      <CheckIcon className="h-4 w-4" />
-                    ) : (
-                      <CopyIcon className="h-4 w-4" />
-                    )
+                    copied === "code" ? <CheckIcon className="h-4 w-4" /> : <CopyIcon className="h-4 w-4" />
                   }
                 >
                   {copied === "code" ? "Copied" : "Copy code"}
@@ -126,25 +121,27 @@ export default function ReferPage() {
           </div>
 
           <div className="mt-5">
-            <p className="text-xs uppercase tracking-wide text-brand-200">Referral link</p>
+            <label htmlFor="share-url" className="text-label text-ink-muted">
+              Your link
+            </label>
             {isLoading ? (
-              <Skeleton className="mt-2 h-10 w-full max-w-md bg-white/20" />
+              <Skeleton className="mt-2 h-11 w-full max-w-md" />
             ) : (
-              <div className="mt-1.5 flex flex-wrap items-center gap-3">
-                <code className="max-w-full overflow-x-auto rounded-lg bg-white/10 px-3 py-2 text-sm">
-                  {data?.share_url}
-                </code>
+              <div className="mt-1.5 flex gap-2">
+                <Input
+                  id="share-url"
+                  readOnly
+                  value={data?.share_url ?? ""}
+                  onFocus={(event) => event.target.select()}
+                  className="text-sm text-ink-soft"
+                />
                 <Button
                   variant="secondary"
-                  size="sm"
                   onClick={() => data && copy(data.share_url, "link")}
                   icon={
-                    copied === "link" ? (
-                      <CheckIcon className="h-4 w-4" />
-                    ) : (
-                      <CopyIcon className="h-4 w-4" />
-                    )
+                    copied === "link" ? <CheckIcon className="h-4 w-4" /> : <CopyIcon className="h-4 w-4" />
                   }
+                  className="shrink-0"
                 >
                   {copied === "link" ? "Copied" : "Copy link"}
                 </Button>
@@ -152,110 +149,111 @@ export default function ReferPage() {
             )}
           </div>
 
-          <div className="mt-6 flex flex-wrap gap-2">
-            <a
-              href={`https://wa.me/?text=${encodeURIComponent(message)}`}
-              target="_blank"
-              rel="noopener noreferrer"
-              className="inline-flex items-center gap-2 rounded-xl bg-[#25D366] px-4 py-2.5 text-sm font-semibold text-[#0b3d25] transition hover:brightness-105"
-            >
-              <ShareIcon className="h-4 w-4" />
-              Share on WhatsApp
+          <div className="mt-5 flex flex-wrap gap-2">
+            <a href={`https://wa.me/?text=${encodeURIComponent(message)}`} target="_blank" rel="noopener noreferrer">
+              <Button tabIndex={-1} icon={<MessageIcon className="h-4 w-4" />}>
+                Share on WhatsApp
+              </Button>
             </a>
-            <a
-              href={`sms:?&body=${encodeURIComponent(message)}`}
-              className="inline-flex items-center gap-2 rounded-xl bg-white/10 px-4 py-2.5 text-sm font-semibold text-white transition hover:bg-white/20"
-            >
-              Send by SMS
+            <a href={`sms:?&body=${encodeURIComponent(message)}`}>
+              <Button tabIndex={-1} variant="secondary">
+                Send by SMS
+              </Button>
             </a>
             {canShare ? (
-              <button
-                type="button"
-                onClick={share}
-                className="inline-flex items-center gap-2 rounded-xl bg-white/10 px-4 py-2.5 text-sm font-semibold text-white transition hover:bg-white/20"
-              >
-                <ShareIcon className="h-4 w-4" />
+              <Button variant="secondary" onClick={share} icon={<ShareIcon className="h-4 w-4" />}>
                 More
-              </button>
+              </Button>
             ) : null}
           </div>
         </div>
-      </div>
 
-      <div className="grid gap-3 sm:grid-cols-3">
-        <StatCard label="Successful referrals" value={data?.stats.successful} />
-        <StatCard label="Pending" value={data?.stats.pending} />
-        <StatCard
-          label="Credit earned by friends"
-          value={data ? cedis(data.stats.rewards_issued) : undefined}
-        />
-      </div>
-
-      <Card>
-        <CardHeader title="Your invitations" />
-        {!history ? (
-          <div className="space-y-2 p-4">
-            <Skeleton className="h-12 w-full" />
-            <Skeleton className="h-12 w-full" />
-          </div>
-        ) : history.results.length === 0 ? (
-          <EmptyState
-            icon={<UsersIcon />}
-            title="No invitations yet"
-            description="Share your link and your friends' sign-ups will appear here."
-          />
-        ) : (
-          <ul className="mt-2 divide-y divide-line">
-            {history.results.map((item, index) => (
-              <li
-                key={`${item.friend}-${index}`}
-                className="flex items-center justify-between gap-3 px-4 py-3.5 sm:px-5"
-              >
-                <div className="min-w-0">
-                  <p className="truncate text-sm font-medium text-ink">{item.friend}</p>
-                  <p className="text-xs text-ink-muted">
-                    Joined {relativeTime(item.created_at)}
-                  </p>
-                </div>
-                <div className="flex items-center gap-3">
-                  {item.reward_amount ? (
-                    <span className="tabular text-sm font-semibold text-brand-700">
-                      {cedis(item.reward_amount)}
-                    </span>
-                  ) : null}
-                  <StatusBadge status={item.status} />
-                </div>
+        <div className="border-t border-line bg-sunken/50 p-5 sm:p-6 md:col-span-2 md:border-l md:border-t-0">
+          <h2 className="text-sm font-semibold text-ink">How it works</h2>
+          <ol className="mt-3 space-y-3">
+            {[
+              "Share your code or link with a friend.",
+              "They create an account and confirm their email address.",
+              `${bonus || "The bonus"} in promotional credit lands in their wallet.`,
+            ].map((step, index) => (
+              <li key={step} className="flex gap-3 text-sm text-ink-soft">
+                <span
+                  aria-hidden
+                  className="tabular flex h-6 w-6 shrink-0 items-center justify-center rounded-full border border-line bg-surface text-caption font-semibold text-ink-soft"
+                >
+                  {index + 1}
+                </span>
+                <span className="pt-0.5">{step}</span>
               </li>
             ))}
-          </ul>
-        )}
+          </ol>
+          <p className="mt-4 text-caption text-ink-muted">
+            Promotional credit can be spent on any number. It cannot be withdrawn, transferred or
+            converted to cash, and one bonus is given per account.
+          </p>
+        </div>
       </Card>
 
-      <Card className="p-4 sm:p-5">
-        <h2 className="text-sm font-semibold text-ink">How it works</h2>
-        <ol className="mt-2 space-y-1.5 text-sm text-ink-muted">
-          <li>1. Share your code or link with a friend.</li>
-          <li>2. They create an account and verify their email address.</li>
-          <li>3. {bonus || "The bonus"} in promotional credit lands in their wallet.</li>
-        </ol>
-        <p className="mt-3 text-xs text-ink-muted">
-          Promotional credit can be spent on any verification. It cannot be withdrawn,
-          transferred or converted to cash, and one bonus is given per account.
-        </p>
+      <Card className="grid grid-cols-3 divide-x divide-line">
+        <Stat label="Joined and confirmed" value={data?.stats.successful} />
+        <Stat label="Waiting to confirm" value={data?.stats.pending} />
+        <Stat
+          label="Credit given to friends"
+          value={data ? cedis(data.stats.rewards_issued) : undefined}
+        />
       </Card>
+
+      <Section title="Your invitations">
+        <Card className="overflow-hidden">
+          {!history ? (
+            <div className="space-y-2 p-4" aria-busy>
+              <Skeleton className="h-12 w-full" />
+              <Skeleton className="h-12 w-full" />
+            </div>
+          ) : history.results.length === 0 ? (
+            <EmptyState
+              icon={<UsersIcon />}
+              title="No invitations yet"
+              description="Share your link and your friends' sign-ups will appear here."
+            />
+          ) : (
+            <ul className="divide-y divide-line">
+              {history.results.map((item, index) => (
+                <li
+                  key={`${item.friend}-${index}`}
+                  className="flex items-center justify-between gap-3 px-4 py-3 sm:px-5"
+                >
+                  <div className="min-w-0">
+                    <p className="truncate text-sm font-medium text-ink">{item.friend}</p>
+                    <p className="text-caption text-ink-muted">Joined {relativeTime(item.created_at)}</p>
+                  </div>
+                  <div className="flex shrink-0 items-center gap-3">
+                    {item.reward_amount ? (
+                      <span className="tabular text-sm font-medium text-gold-700">
+                        {cedis(item.reward_amount)}
+                      </span>
+                    ) : null}
+                    <StatusBadge status={item.status} />
+                  </div>
+                </li>
+              ))}
+            </ul>
+          )}
+        </Card>
+      </Section>
     </div>
   );
 }
 
-function StatCard({ label, value }: { label: string; value?: number | string }) {
+function Stat({ label, value }: { label: string; value?: number | string }) {
   return (
-    <Card className="p-4">
-      <p className="text-xs text-ink-muted">{label}</p>
+    <div className="min-w-0 p-4 sm:p-5">
+      <p className="text-caption text-ink-muted">{label}</p>
       {value === undefined ? (
-        <Skeleton className="mt-2 h-7 w-16" />
+        <Skeleton className="mt-2 h-6 w-16" />
       ) : (
-        <p className="tabular mt-1 text-2xl font-semibold text-ink">{value}</p>
+        <p className="tabular mt-1 truncate text-heading text-ink">{value}</p>
       )}
-    </Card>
+    </div>
   );
 }

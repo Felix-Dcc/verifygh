@@ -5,7 +5,7 @@ import { useRouter, useSearchParams } from "next/navigation";
 import * as React from "react";
 
 import { errorMessage } from "@/components/auth-provider";
-import { Alert, Button, Card, Field, Input } from "@/components/ui/primitives";
+import { Alert, Button, Card, Field, PasswordInput } from "@/components/ui/primitives";
 import { ApiError, api } from "@/lib/api";
 
 const MIN_PASSWORD_LENGTH = 10;
@@ -71,7 +71,7 @@ function ResetPasswordForm() {
   return (
     <div>
       <div className="mb-6">
-        <h1 className="text-2xl font-semibold tracking-tight text-ink">Choose a new password</h1>
+        <h1 className="text-title text-ink">Choose a new password</h1>
         <p className="mt-1.5 text-sm text-ink-muted">
           Once you save it, you will be signed out everywhere else.
         </p>
@@ -92,9 +92,8 @@ function ResetPasswordForm() {
             hint={`At least ${MIN_PASSWORD_LENGTH} characters.`}
             required
           >
-            <Input
+            <PasswordInput
               id="new_password"
-              type="password"
               autoComplete="new-password"
               required
               minLength={MIN_PASSWORD_LENGTH}
@@ -105,9 +104,8 @@ function ResetPasswordForm() {
           </Field>
 
           <Field label="Confirm new password" htmlFor="confirm" error={fieldErrors.confirm} required>
-            <Input
+            <PasswordInput
               id="confirm"
-              type="password"
               autoComplete="new-password"
               required
               value={confirm}

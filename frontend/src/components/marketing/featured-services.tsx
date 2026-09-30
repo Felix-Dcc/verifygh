@@ -3,6 +3,7 @@
 import Link from "next/link";
 import useSWR from "swr";
 
+import { CountryFlag } from "@/components/country-flag";
 import { ServiceLogo } from "@/components/service-logo";
 import { ArrowRightIcon } from "@/components/icons";
 import { Badge, Button, Skeleton } from "@/components/ui/primitives";
@@ -106,8 +107,10 @@ function FeaturedCard({ service }: { service: Service }) {
           </p>
         </div>
         <div className="flex items-center gap-1.5">
-          <span className="text-sm" aria-hidden>
-            {flags.map((country) => country.flag_emoji).join(" ")}
+          <span className="flex items-center gap-1" aria-hidden>
+            {flags.map((country) => (
+              <CountryFlag key={country.code} code={country.code} size="sm" />
+            ))}
           </span>
           {service.available ? (
             <Badge tone="success" dot>

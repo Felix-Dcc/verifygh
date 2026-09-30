@@ -13,6 +13,7 @@ import {
   providerMoney,
 } from "@/components/admin/pricing-offering";
 import { SearchIcon } from "@/components/icons";
+import { CountryFlag } from "@/components/country-flag";
 import { ServiceLogo } from "@/components/service-logo";
 import { Dialog } from "@/components/ui/dialog";
 import {
@@ -264,7 +265,10 @@ export function PricingTable({
                     </span>
                   </td>
                   <td className="whitespace-nowrap px-3 py-2.5 text-ink-soft">
-                    {row.country.flag} {row.country.code}
+                    <span className="inline-flex items-center gap-1.5">
+                      <CountryFlag code={row.country.code} size="sm" />
+                      {row.country.code}
+                    </span>
                   </td>
                   <td className="whitespace-nowrap px-3 py-2.5 text-ink-soft">
                     {row.provider.name}

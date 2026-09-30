@@ -292,3 +292,18 @@ export const TagIcon = (p: IconProps) => (
     <path d="M8 8h.01" />
   </Svg>
 );
+
+export const StarIcon = ({ className, filled }: IconProps & { filled?: boolean }) => (
+  <svg
+    viewBox="0 0 24 24"
+    fill={filled ? "currentColor" : "none"}
+    stroke="currentColor"
+    strokeWidth="1.7"
+    strokeLinecap="round"
+    strokeLinejoin="round"
+    className={className ?? "h-5 w-5"}
+    aria-hidden="true"
+  >
+    <path d="M12 3.6l2.47 5.01 5.53.8-4 3.9.94 5.5L12 16.21l-4.94 2.6.94-5.5-4-3.9 5.53-.8z" />
+  </svg>
+);

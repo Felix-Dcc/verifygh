@@ -48,7 +48,16 @@ const FLAGS: Record<string, React.ReactNode> = {
   ),
 };
 
-export function CountryFlag({ code, className }: { code: string | null | undefined; className?: string }) {
+export function CountryFlag({
+  code,
+  className,
+  size = "md",
+}: {
+  code: string | null | undefined;
+  className?: string;
+  /** md 24x16 for pickers; sm 20x14 inline beside text. */
+  size?: "sm" | "md";
+}) {
   const key = (code ?? "").toUpperCase();
   const flag = FLAGS[key];
   if (!flag) {
@@ -67,8 +76,13 @@ export function CountryFlag({ code, className }: { code: string | null | undefin
   return (
     <svg
       viewBox="0 0 24 16"
+      preserveAspectRatio="xMidYMid slice"
       aria-hidden
-      className={cn("inline-block h-4 w-6 shrink-0 overflow-hidden rounded-sm ring-1 ring-ink/10", className)}
+      className={cn(
+        "inline-block shrink-0 overflow-hidden rounded-sm ring-1 ring-ink/10",
+        size === "sm" ? "h-3.5 w-5" : "h-4 w-6",
+        className,
+      )}
     >
       {flag}
     </svg>
