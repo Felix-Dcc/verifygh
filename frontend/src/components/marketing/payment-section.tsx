@@ -4,10 +4,10 @@ import * as React from "react";
 import useSWR from "swr";
 
 import { CountryFlag } from "@/components/country-flag";
-import { ArrowLeftIcon, CheckCircleIcon, LockIcon, PlusIcon } from "@/components/icons";
+import { ArrowLeftIcon, CheckCircleIcon, GridIcon, LockIcon, PhoneIcon, PlusIcon, WalletIcon } from "@/components/icons";
 import { Skeleton, cn } from "@/components/ui/primitives";
 import { cedis, signedCedis } from "@/lib/format";
-import type { PaymentOptions } from "@/lib/types";
+import type { MarketHome, PaymentOptions } from "@/lib/types";
 
 import { BottomNav, Device, Halo, HomeIndicator, Reveal, ScreenStack, StatusBar, useInView, useStory } from "./device";
 
@@ -28,25 +28,13 @@ const STEP_MS = 3800;
 const EXAMPLE_PHONE = "024 123 4567";
 const EXAMPLE_START = 25;
 
-const LINES = [
-  {
-    title: "Enter an amount and your number",
-    body: "Type it the way you normally write it - 024 123 4567 works. Your network is filled in from the number.",
-  },
-  {
-    title: "Approve the prompt on your phone",
-    body: "Your network asks for your PIN in its own prompt. The PIN goes into your phone and never passes through VerifyGH.",
-  },
-  {
-    title: "Your balance goes up",
-    body: "Once the network confirms the payment, the money is in your wallet, ready to spend on numbers.",
-  },
-];
+/** Form, prompt, money received. */
+const STORY_STEPS = 3;
 
 export function PaymentSection() {
   const { data, error } = useSWR<PaymentOptions>("/payments/options/");
   const [ref, inView] = useInView<HTMLElement>();
-  const story = useStory(LINES.length, inView, STEP_MS);
+  const story = useStory(STORY_STEPS, inView, STEP_MS);
   // Under reduced motion, show where the story ends: the money arrived.
   const step = story.reduced ? 2 : story.index;
 
@@ -54,6 +42,9 @@ export function PaymentSection() {
   const amount =
     Number.parseFloat(quick.find((value) => Number.parseFloat(value) === 20) ?? quick[1] ?? "20") || 20;
   const network = data?.networks.find((entry) => entry.prefixes.includes(EXAMPLE_PHONE.slice(0, 3)));
+  const { data: home } = useSWR<MarketHome>("/marketplace/home/");
+  const prices = (home?.popular ?? []).map((row) => Number.parseFloat(row.price ?? "")).filter((value) => value > 0);
+  const cheapest = prices.length ? Math.min(...prices) : null;
 
   return (
     <section ref={ref} className="atmosphere-wash overflow-x-clip" aria-labelledby="momo-heading">
@@ -62,7 +53,7 @@ export function PaymentSection() {
       <div className="container-page grid grid-cols-1 gap-x-16 gap-y-8 py-16 sm:py-24 lg:grid-cols-2 lg:grid-rows-[1fr_auto_auto_1fr] lg:gap-y-6">
         <Reveal className="text-center lg:col-start-2 lg:row-start-2 lg:text-left">
           <h2 id="momo-heading" className="section-title">
-            Fund your wallet with the Mobile Money you already use
+            Fund your wallet with the Mobile Money you already use.
           </h2>
           <p className="section-lead mx-auto max-w-lg lg:mx-0">
             No card and no crypto. Top up in cedis from your MoMo wallet, then pay for numbers
@@ -135,47 +126,29 @@ export function PaymentSection() {
             </ul>
           </div>
 
-          {/* The same three moments the phone is showing, lit as it shows them. */}
-          <ol className="mt-8 space-y-1">
-            {LINES.map((line, index) => {
-              const active = !story.reduced && index === step;
-              const lit = active || story.reduced;
-              return (
-                <li key={line.title}>
-                  <button
-                    type="button"
-                    onClick={() => story.choose(index)}
-                    aria-current={active ? "step" : undefined}
-                    className={cn(
-                      "flex w-full gap-3.5 rounded-2xl px-2 py-2.5 text-left transition-colors",
-                      active ? "bg-surface shadow-card" : "hover:bg-surface/60",
-                    )}
-                  >
-                    <span
-                      className={cn(
-                        "tabular mt-0.5 flex h-6 w-6 shrink-0 items-center justify-center rounded-full text-2xs font-bold transition-colors",
-                        lit ? "bg-primary text-white" : "bg-line text-ink-muted",
-                      )}
-                    >
-                      {index + 1}
-                    </span>
-                    <span className="min-w-0">
-                      <span className={cn("block text-sm font-semibold", lit ? "text-ink" : "text-ink-soft")}>
-                        {line.title}
-                      </span>
-                      <span className="mt-0.5 block text-sm leading-relaxed text-ink-muted">{line.body}</span>
-                    </span>
-                  </button>
-                </li>
-              );
-            })}
-          </ol>
+          {/* Where the money goes - Mobile Money, your wallet, numbers - lit in
+              step with the phone: the same three moments, as a flow. */}
+          <MoneyFlow
+            step={step}
+            reduced={story.reduced}
+            onChoose={story.choose}
+            amount={amount}
+            networks={data?.networks.map((entry) => entry.label.replace(" Mobile Money", " MoMo"))}
+            cheapest={cheapest}
+          />
 
-          <p className="mt-6 flex items-start gap-2.5 text-sm text-ink-soft">
-            <LockIcon className="mt-0.5 h-4 w-4 shrink-0 text-brand-600" />
-            Payments are processed by Paystack. VerifyGH credits your wallet only after Paystack
-            confirms the payment.
-          </p>
+          <ul className="mt-6 space-y-2.5 text-sm text-ink-soft">
+            <li className="flex items-start gap-2.5">
+              <LockIcon className="mt-0.5 h-4 w-4 shrink-0 text-brand-600" />
+              Your PIN goes into your network&apos;s own prompt on your phone. It never passes
+              through VerifyGH.
+            </li>
+            <li className="flex items-start gap-2.5">
+              <CheckCircleIcon className="mt-0.5 h-4 w-4 shrink-0 text-brand-600" />
+              Payments are processed by Paystack, and your wallet is credited only after Paystack
+              confirms the payment.
+            </li>
+          </ul>
         </Reveal>
 
       </div>
@@ -419,5 +392,110 @@ function CountUp({
       {prefix}
       {value.toLocaleString("en-GH", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
     </>
+  );
+}
+
+/* ------------------------------------------------------------------------ */
+
+/**
+ * Mobile Money -> VerifyGH wallet -> numbers, as three nodes joined by lines
+ * the money runs along. Lit with the phone: the first node while the form is
+ * filled, the first line while the prompt is approved, the rest once the
+ * payment lands.
+ */
+function MoneyFlow({
+  step,
+  reduced,
+  onChoose,
+  amount,
+  networks,
+  cheapest,
+}: {
+  step: number;
+  reduced: boolean;
+  onChoose: (index: number) => void;
+  amount: number;
+  networks?: string[];
+  cheapest: number | null;
+}) {
+  const nodes = [
+    {
+      Icon: PhoneIcon,
+      title: "Mobile Money",
+      body: networks?.length ? networks.join(" · ") : "Your MoMo wallet",
+      chip: cedis(amount),
+      lit: reduced || step >= 0,
+    },
+    {
+      Icon: WalletIcon,
+      title: "Your VerifyGH wallet",
+      body: "Credited once your network confirms the payment",
+      chip: `${cedis(EXAMPLE_START + amount)} balance`,
+      lit: reduced || step === 2,
+    },
+    {
+      Icon: GridIcon,
+      title: "Numbers for any service",
+      body: cheapest !== null ? `Spend it on any service, from ${cedis(cheapest)}` : "Spend it on any service in the catalogue",
+      chip: "Ready to buy",
+      lit: reduced || step === 2,
+    },
+  ];
+  // Which line carries money right now: the first while the prompt is approved, the second once it lands.
+  const flowing = reduced ? -1 : step === 1 ? 0 : step === 2 ? 1 : -1;
+
+  return (
+    <ol className="mt-8" aria-label="Where the money goes">
+      {nodes.map((node, index) => (
+        <li key={node.title}>
+          <button
+            type="button"
+            onClick={() => onChoose(index === 0 ? 0 : 2)}
+            className={cn(
+              "flex w-full items-center gap-3.5 rounded-2xl border p-3 text-left transition-all duration-500",
+              node.lit
+                ? "border-line bg-surface shadow-card"
+                : "border-transparent bg-surface/40 opacity-70 hover:opacity-100",
+            )}
+          >
+            <span
+              className={cn(
+                "flex h-11 w-11 shrink-0 items-center justify-center rounded-xl transition-colors duration-500",
+                node.lit
+                  ? "bg-gradient-to-br from-[#0B63B6] to-[#137A4E] text-white shadow-[0_8px_20px_-8px_rgba(8,120,209,0.7)]"
+                  : "bg-sunken text-ink-muted",
+              )}
+            >
+              <node.Icon className="h-5 w-5" />
+            </span>
+            <span className="min-w-0 flex-1">
+              <span className="block text-sm font-semibold text-ink">{node.title}</span>
+              <span className="block text-caption leading-snug text-ink-muted">{node.body}</span>
+            </span>
+            <span className="tabular hidden shrink-0 rounded-full bg-sunken px-2.5 py-1 text-2xs font-semibold text-ink-soft sm:block">
+              {node.chip}
+            </span>
+          </button>
+
+          {index < nodes.length - 1 ? (
+            <svg aria-hidden viewBox="0 0 24 36" className="ml-[1.9rem] h-9 w-6 overflow-visible">
+              <defs>
+                <linearGradient id={`flow-${index}`} x1="0" y1="0" x2="0" y2="1">
+                  <stop offset="0" stopColor="#0878D1" />
+                  <stop offset="1" stopColor="#20B26B" />
+                </linearGradient>
+              </defs>
+              <line x1="12" y1="0" x2="12" y2="36" className="stroke-line-strong" strokeWidth="2" />
+              {flowing === index ? (
+                <>
+                  <line x1="12" y1="0" x2="12" y2="36" stroke={`url(#flow-${index})`} strokeWidth="6" opacity="0.25" />
+                  <line className="flow-dash" x1="12" y1="0" x2="12" y2="36" stroke={`url(#flow-${index})`} strokeWidth="2.5" strokeLinecap="round" />
+                </>
+              ) : null}
+            </svg>
+          ) : null}
+        </li>
+      ))}
+    </ol>
   );
 }

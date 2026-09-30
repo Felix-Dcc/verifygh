@@ -1,5 +1,5 @@
 import type { Metadata, Viewport } from "next";
-import { IBM_Plex_Mono, IBM_Plex_Sans } from "next/font/google";
+import { IBM_Plex_Mono, Inter } from "next/font/google";
 import { headers } from "next/headers";
 
 import { THEME_SCRIPT } from "@/lib/theme";
@@ -10,15 +10,15 @@ import "./globals.css";
 const BRAND = process.env.NEXT_PUBLIC_BRAND_NAME ?? "VerifyGH";
 
 /**
- * IBM Plex: precise, slightly technical, with clear figures for money - it reads
- * as financial infrastructure rather than as a template. next/font downloads it
- * at build time and serves it from our own origin, so there is no request to a
- * font CDN and the CSP's font-src 'self' is unchanged. Mono is for codes,
- * references and phone numbers.
+ * Inter for the interface: modern, highly legible at phone sizes, with true
+ * tabular figures for money. A variable font, so every weight is one file.
+ * latin-ext carries the cedi sign (U+20B5) - without it "GH₵" would fall back
+ * to a system font mid-word. IBM Plex Mono stays for codes, references and
+ * phone numbers. next/font serves both from our own origin, so the CSP's
+ * font-src 'self' is unchanged.
  */
-const sans = IBM_Plex_Sans({
-  subsets: ["latin"],
-  weight: ["400", "500", "600", "700"],
+const sans = Inter({
+  subsets: ["latin", "latin-ext"],
   display: "swap",
   variable: "--font-sans",
 });

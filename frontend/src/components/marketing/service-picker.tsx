@@ -5,12 +5,12 @@ import Link from "next/link";
 import useSWR from "swr";
 
 import { CountryFlag } from "@/components/country-flag";
-import { ArrowRightIcon, ChevronRightIcon, SearchIcon } from "@/components/icons";
+import { ArrowRightIcon, CheckIcon, ChevronRightIcon, SearchIcon } from "@/components/icons";
 import { AvailabilityLabel } from "@/components/marketplace/availability";
 import { ServiceLogo } from "@/components/service-logo";
 import { ButtonLink, Skeleton, cn } from "@/components/ui/primitives";
 import { cedis } from "@/lib/format";
-import type { MarketHome, MarketPage } from "@/lib/types";
+import type { MarketHome, MarketPage, MarketRow } from "@/lib/types";
 
 /** Rows shown on the homepage; the marketplace has the rest. */
 export const PICKER_SIZE = 8;
@@ -60,17 +60,22 @@ export function ServicePicker() {
   const failed = Boolean(homeError || error);
 
   return (
-    <section id="services" className="container-page scroll-mt-20 py-16 sm:py-24" aria-labelledby="picker-heading">
-      <div className="mx-auto max-w-2xl text-center">
-        <h2 id="picker-heading" className="section-title">
-          What do you need a number for?
-        </h2>
-        <p className="section-lead">
-          Today&apos;s prices and stock, straight from the catalogue. The price is exactly what
-          leaves your wallet.
-        </p>
+    <section id="services" className="scroll-mt-20 overflow-x-clip py-16 sm:py-24" aria-labelledby="picker-heading">
+      <div className="container-page">
+        <div className="mx-auto max-w-2xl text-center">
+          <h2 id="picker-heading" className="section-title">
+            Built for the way you verify.
+          </h2>
+          <p className="section-lead">
+            {home?.total ? `${home.total} services` : "Hundreds of services"} with today&apos;s prices and
+            stock, straight from the catalogue. Pick one and see exactly what leaves your wallet.
+          </p>
+        </div>
       </div>
 
+      <LogoMarquee rows={[...(home?.popular ?? []), ...(page?.results ?? [])]} />
+
+      <div className="container-page">
       <div className="card mx-auto mt-10 grid max-w-5xl grid-cols-1 overflow-hidden shadow-raised lg:grid-cols-5">
         {/* 1. Country */}
         <div className="border-b border-line bg-sunken/50 p-4 sm:p-6 lg:col-span-2 lg:border-b-0 lg:border-r">
@@ -202,7 +207,55 @@ export function ServicePicker() {
           ) : null}
         </div>
       </div>
+      </div>
     </section>
+  );
+}
+
+/**
+ * Services on sale today, drifting past in two rows that run opposite ways,
+ * each with a tick: the breadth of the catalogue at a glance. Pauses under
+ * the pointer; under reduced motion the rows simply sit still.
+ */
+function LogoMarquee({ rows }: { rows: MarketRow[] }) {
+  const seen = new Set<string>();
+  const logos = rows
+    .filter((row) => row.icon_url && !row.temporarily_unavailable && row.availability !== "UNAVAILABLE")
+    .filter((row) => (seen.has(row.slug) ? false : (seen.add(row.slug), true)));
+  if (logos.length < 6) return null;
+  const half = Math.ceil(logos.length / 2);
+  const lines = [logos.slice(0, half), logos.slice(half)];
+
+  return (
+    <div
+      aria-hidden
+      className="marquee-track relative mt-10 space-y-3 [mask-image:linear-gradient(90deg,transparent,#000_12%,#000_88%,transparent)]"
+    >
+      {lines.map((line, index) => (
+        <div key={index} className="flex overflow-hidden">
+          {/* Twice over, so the loop never shows a seam */}
+          <div
+            className={cn("flex shrink-0 gap-3 pr-3", index ? "marquee-reverse" : "marquee")}
+            style={{ ["--marquee-duration" as string]: `${line.length * 5}s` }}
+          >
+            {[...line, ...line, ...line, ...line].map((row, position) => (
+              <span
+                key={`${row.slug}-${position}`}
+                className="flex shrink-0 items-center gap-2.5 rounded-2xl border border-line bg-surface py-2 pl-2 pr-4 shadow-card"
+              >
+                <span className="relative">
+                  <ServiceLogo name={row.name} src={row.icon_url} slug={row.slug} size="sm" />
+                  <span className="absolute -bottom-1 -right-1 flex h-4 w-4 items-center justify-center rounded-full bg-success-500 text-white ring-2 ring-surface">
+                    <CheckIcon className="h-2.5 w-2.5" />
+                  </span>
+                </span>
+                <span className="whitespace-nowrap text-sm font-semibold text-ink">{row.name}</span>
+              </span>
+            ))}
+          </div>
+        </div>
+      ))}
+    </div>
   );
 }
 

@@ -18,8 +18,11 @@ base styles in `frontend/src/app/globals.css`, components in
 
 ## Type
 
-IBM Plex Sans for the interface, IBM Plex Mono for codes, references and phone
-numbers (`.code`: slashed zero, tabular). Both are self-hosted by `next/font`.
+Inter for the interface - a variable font, loaded with `latin-ext` so the cedi
+sign (₵) is Inter too, not a fallback glyph mid-word - and IBM Plex Mono for
+codes, references and phone numbers (`.code`: slashed zero, tabular). Both are
+self-hosted by `next/font`. Homepage headlines are extra-bold with tight
+tracking (-0.035em).
 
 | Token | Size / line | Use |
 |---|---|---|
@@ -54,8 +57,9 @@ not needed and should not appear.
 | `line`, `line-strong` | Borders and dividers |
 | `primary` (+ `-hover`, `-active`) | Filled primary buttons - white text on it |
 | `danger-solid` | Filled destructive buttons - white text on it |
-| `band`, `band-deep` | The green of the homepage hero and the closing call to action (`band-deep` deepens it behind headlines). White text only (`text-white`, `/80` for body, `/75` minimum for small print), buttons `onBand` and `onBandOutline` |
-| `ramp-1` ... `ramp-5` | The five steps from `band` into the page colour, eased so the pale end gets the most room. Only the `atmosphere-*` classes use them |
+| `navy`, `navy-deep`, `azure`, `aqua`, `leaf`, `leaf-light` | The homepage's night palette (hero, the privacy section, the close, the footer). Fixed in both themes. White text only on navy (`/75` for body, `/60` minimum for small print). "Use ours." and similar single phrases take `.text-dawn` (aqua into leaf) |
+| `dawn-1` ... `dawn-12` | The ramp from navy into the page: one smooth curve through deep blue, azure, aqua and mint, computed in OKLab (Catmull-Rom through those colours, eased with smoothstep so it leaves the navy and arrives at the page gently) and sampled into twelve evenly spaced steps. Evenly spaced samples of a smooth curve mean no stop changes the slope enough to be seen as a line, and OKLab keeps blue-into-green clean instead of grey. Deep all the way down in the dark theme. Only the `atmosphere-night*` classes use them; regenerate them rather than hand-editing one |
+| `band`, `band-deep` | The previous green band; kept for `onBand` buttons, which also sit on navy |
 | `wash` | The palest green: a section set slightly apart without a border |
 | `brand-*`, `success-*`, `warn-*`, `info-*`, `gold-*` | 50: tint backgrounds; 200: tint borders; 500: dots, rings, focus; 700: text on surfaces or tints |
 
@@ -115,7 +119,7 @@ aliases are pinned to 12px. Borders separate surfaces; shadows (`shadow-raised`,
 | `CountryFlag` | `components/country-flag.tsx` |
 | `ThemeProvider`, `ThemeSwitcher`, `useTheme` | `components/theme.tsx` |
 | `Device` (the one phone), `StatusBar`, `AddressBar`, `BottomNav`, `Halo`, `ScreenStack`, `Reveal`, `useStory`, `useInView` | `components/marketing/device.tsx` |
-| Homepage sections: `Hero`, `ServicePicker`, `HowItWorks`, `PaymentSection`, `PricingSection`, `SecuritySection`, `Faq` | `components/marketing/` |
+| Homepage sections: `Hero` + `PhoneOrbit`/`Stars` (`orbit.tsx`), `HowItWorks`, `ServicePicker`, `PaymentSection`, `PricingSection`, `PrivacySection`, `SecuritySection`, `ProductsSection`, `DashboardShowcase`, `Faq` | `components/marketing/` |
 | Illustrations (`PhoneMessageArt`, `StatementArt`, `WalletArt`, `BellArt`, `SearchArt`, `InviteArt`, `SupportArt`) | `components/illustrations.tsx` |
 | Icons (one hand-drawn set, 1.7 stroke) | `components/icons.tsx` |
 
@@ -135,18 +139,23 @@ aliases are pinned to 12px. Borders separate surfaces; shadows (`shadow-raised`,
   no grids of icon-tile cards, no blurred blobs, glows or multi-colour
   gradients, no stat trios. Headings say something specific; illustrations
   are the real screens.
-* **The homepage never changes colour at a line.** It is one continuous
-  surface (`atmosphere-*` in `globals.css`): the hero's green ramps down into
-  the page over a long distance, curving up around the phone; Payment and
-  Security sit on a `wash` that fades in and out instead of bordered blocks;
-  the close ramps up out of the page and down into the footer, whose rule is
-  dropped there (`SiteFooter seamless`). Two limits: white text only ever sits
-  on the solid green - pad the content by at least each fade (`--fade`,
-  `--fade-in`, `--fade-out`) - and green stays one hue, never neon, never a
-  multi-colour gradient.
-* **Headings on the band set `text-white` themselves.** The base styles colour
+* **The homepage never changes colour at a line.** It is one surface from
+  night to day and back (`atmosphere-*` in `globals.css`): the hero's navy
+  ramps down through blue, teal and green into the page (`atmosphere-night`);
+  the privacy section ramps up into navy and back down (`atmosphere-night-mid`);
+  the close ramps up into navy (`atmosphere-night-close`) and the footer stays
+  navy (`SiteFooter night`); lighter sections are set apart by a `wash`, never
+  a border. Nothing is laid over a ramp - glows and light stay inside the navy
+  - so the blends stay clean. White text only ever sits on the navy - pad the
+  content by at least each fade (`--fade`, `--fade-in`, `--fade-out`).
+* **Headings on navy set `text-white` themselves.** The base styles colour
   every `h1`-`h3` with `text-ink`, so an inherited white is overridden and the
   heading turns dark in light mode.
+* **The main homepage action is `dawn`** (blue into green, white text at 5:1
+  or better on both ends); inside the app, `primary` green stays the one
+  solid action.
+* **No testimonials until there are real ones.** Invented reviews - even
+  "demo" ones - would be presented to real visitors as customers' words.
 
 * **An action that goes somewhere is a `ButtonLink`**, never `<Link><Button>`: a
   button inside a link is two tab stops and invalid HTML.
@@ -190,26 +199,39 @@ megabytes:
   `brand-500` accent. Customer empty states use them (`EmptyState art=`); the
   admin console keeps compact icons.
 
-Every homepage section below the hero tells its point with the product, not
-with icons and paragraphs:
+Every homepage section tells its point with the product, not with icons and
+paragraphs:
 
-* **How it works** is one order watched end to end: the steps drive a phone
-  through the marketplace, the buy sheet, the waiting order and the code
-  arriving (with the app's own toast), and a card beside the phone narrates
-  what just happened. Live service and price; invented balance, number, code.
+* **Hero** - a phone receiving a code (the digits fill in one by one), with
+  the services on sale today revolving around it on two tilted rings
+  (`PhoneOrbit`: logos pass behind the phone on the far side of a ring and in
+  front of it on the near side).
+* **How it works** is a mini product demo: choose a service from a live grid,
+  get a US number, wait while the SMS lands, read the code as it fills in; a
+  card beside the phone narrates what just happened.
+* **Built for the way you verify** - a two-row marquee of live service logos
+  above the service picker.
 * **Mobile Money** is a top-up happening: Add funds filled in, the network's
   own PIN prompt (a plain system dialog - not VerifyGH's screen), then
-  "Payment received" and the balance counting up. Networks, their number
-  prefixes and the quick amounts come from `/payments/options/`.
+  "Payment received" and the balance counting up - beside a flow diagram
+  (Mobile Money -> wallet -> numbers) whose lines carry the money in step.
+  Networks, their number prefixes and the quick amounts come from
+  `/payments/options/`. No cards: top-ups are Mobile Money only.
 * **Pricing** is one live price as a receipt (price, added at checkout
   GH₵ 0.00, taken from your wallet) with the cedi sign set huge behind it and
   today's other prices around it. The provider's cost is not public, so it is
   described, never quantified.
-* **Security** is an annotated product shot: six numbered markers on an
-  account screen, each beside the protection that guards that part. Every
-  note is something the code does.
+* **Your number, protected** (navy) - your masked number, the number the app
+  sees, and a breathing shield between them ringed with the real layers.
+* **Your money and account** - an annotated wallet: six numbered markers on
+  the screen, each beside the protection that guards that part.
+* **Everything you need to verify** - the products that exist (numbers,
+  reuse, automatic refunds, favourites), each with its own picture. No voice,
+  rentals or public API: they are not offered, so they are not shown.
+* **Dashboard** - the app in a laptop from lg, on a phone below it.
 * **FAQ** puts the Help screen on a phone with the first questions people ask
   floating around it; tapping one opens its answer in the list beside it.
+  Every answer describes what the product does today.
 
 Every phone is `Device` - one titanium-framed, current "Pro"-class phone drawn
 in CSS, never a photograph and never named - showing a real VerifyGH screen

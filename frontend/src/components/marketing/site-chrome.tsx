@@ -6,12 +6,12 @@ import * as React from "react";
 import { AccountMenu } from "@/components/account-menu";
 import { useAuth } from "@/components/auth-provider";
 import { Logo } from "@/components/brand";
-import { CloseIcon, LogoutIcon, MenuIcon } from "@/components/icons";
+import { ChevronRightIcon, CloseIcon, LogoutIcon, MenuIcon } from "@/components/icons";
 import { ThemeSwitcher } from "@/components/theme";
 import { ButtonLink, cn } from "@/components/ui/primitives";
 
 const LINKS = [
-  { href: "/services", label: "Services" },
+  { href: "/#products", label: "Products" },
   { href: "/#how-it-works", label: "How it works" },
   { href: "/#pricing", label: "Pricing" },
   { href: "/#security", label: "Security" },
@@ -31,7 +31,7 @@ export function SiteHeader() {
   }, [open]);
 
   return (
-    <header className="sticky top-0 z-50 border-b border-line/80 bg-canvas/85 backdrop-blur-md">
+    <header className="sticky top-0 z-50 border-b border-line/70 bg-surface/90 shadow-[0_1px_12px_-6px_rgba(5,11,24,0.18)] backdrop-blur-md">
       <div className="container-page flex h-16 items-center justify-between gap-4">
         <Link href="/" aria-label="VerifyGH home" className="flex min-h-11 items-center rounded-lg">
           <Logo />
@@ -63,11 +63,20 @@ export function SiteHeader() {
           ) : (
             <>
               <ButtonLink href="/login" variant="ghost" size="sm">Sign in</ButtonLink>
-              <ButtonLink href="/register" size="sm">Get started</ButtonLink>
+              <ButtonLink href="/register" size="sm" variant="dawn">Get started</ButtonLink>
             </>
           )}
         </div>
 
+        <div className="flex items-center gap-1 lg:hidden">
+        {ready ? (
+          <Link
+            href={user ? "/dashboard" : "/login"}
+            className="flex min-h-11 items-center rounded-lg px-3 text-sm font-semibold text-ink transition-colors hover:bg-sunken"
+          >
+            {user ? "Dashboard" : "Sign in"}
+          </Link>
+        ) : null}
         <button
           type="button"
           onClick={() => setOpen((value) => !value)}
@@ -78,22 +87,27 @@ export function SiteHeader() {
         >
           {open ? <CloseIcon /> : <MenuIcon />}
         </button>
+        </div>
       </div>
 
       <div
         id="mobile-menu"
         hidden={!open}
-        className={cn("border-t border-line bg-surface lg:hidden", open && "animate-fade-in")}
+        className={cn(
+          "max-h-[calc(100dvh-4rem)] overflow-y-auto border-t border-line bg-surface shadow-pop lg:hidden",
+          open && "animate-fade-in",
+        )}
       >
-        <nav className="container-page flex flex-col py-2" aria-label="Mobile">
+        <nav className="container-page flex flex-col py-3" aria-label="Mobile">
           {LINKS.map((link) => (
             <Link
               key={link.href}
               href={link.href}
               onClick={() => setOpen(false)}
-              className="rounded-lg px-2 py-3 text-base font-medium text-ink-soft hover:bg-sunken"
+              className="flex items-center justify-between rounded-xl px-3 py-3.5 text-lg font-semibold tracking-tight text-ink hover:bg-sunken"
             >
               {link.label}
+              <ChevronRightIcon className="h-4 w-4 text-ink-faint" />
             </Link>
           ))}
           <div className="mt-2 flex flex-col gap-2 border-t border-line pt-3 pb-4">
@@ -124,8 +138,8 @@ export function SiteHeader() {
               </>
             ) : (
               <>
-                <ButtonLink href="/register" onClick={() => setOpen(false)} fullWidth>
-                  Create free account
+                <ButtonLink href="/register" onClick={() => setOpen(false)} fullWidth size="lg" variant="dawn">
+                  Get started free
                 </ButtonLink>
                 <ButtonLink href="/login" onClick={() => setOpen(false)} variant="secondary" fullWidth>
                   Sign in
@@ -143,10 +157,10 @@ const FOOTER_SECTIONS = [
   {
     title: "Product",
     links: [
-      { href: "/services", label: "Supported services" },
+      { href: "/services", label: "SMS verification" },
       { href: "/#how-it-works", label: "How it works" },
       { href: "/#pricing", label: "Pricing" },
-      { href: "/register", label: "Create an account" },
+      { href: "/#security", label: "Security" },
     ],
   },
   {
@@ -154,7 +168,6 @@ const FOOTER_SECTIONS = [
     links: [
       { href: "/help", label: "Help centre" },
       { href: "/#faq", label: "FAQ" },
-      { href: "/#security", label: "Security" },
       { href: "mailto:support@getverifygh.com", label: "Contact support" },
     ],
   },
@@ -168,16 +181,28 @@ const FOOTER_SECTIONS = [
   },
 ];
 
-/** `seamless`: the page above already fades into the footer's colour, so no rule. */
-export function SiteFooter({ seamless = false }: { seamless?: boolean }) {
+/**
+ * `seamless`: the page above already fades into the footer's colour, so no rule.
+ * `night`: the homepage's navy footer - the close ramps into it. The subtree
+ * takes the dark theme's tokens (`dark`), so text and the theme switcher read
+ * on navy in either theme.
+ */
+export function SiteFooter({ seamless = false, night = false }: { seamless?: boolean; night?: boolean }) {
   return (
-    <footer className={seamless ? "bg-surface" : "border-t border-line bg-surface"}>
+    <footer
+      className={cn(
+        night ? "dark bg-navy-deep text-ink" : seamless ? "bg-surface" : "border-t border-line bg-surface",
+      )}
+    >
       <div className="container-page py-12">
         <div className="grid grid-cols-1 gap-10 sm:grid-cols-2 lg:grid-cols-4">
           <div className="lg:col-span-1">
             <Logo />
-            <p className="mt-3 max-w-xs text-sm text-ink-muted">
-              Verification numbers for customers in Ghana, paid for in cedis with Mobile Money.
+            <p className="mt-3 text-base font-semibold tracking-tight text-ink">
+              Verify privately. Verify simply.
+            </p>
+            <p className="mt-1.5 max-w-xs text-sm text-ink-muted">
+              US numbers for verification codes, paid for in cedis with Mobile Money.
             </p>
           </div>
 

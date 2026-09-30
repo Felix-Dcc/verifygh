@@ -3,7 +3,7 @@
 import useSWR from "swr";
 
 import { CountryFlag } from "@/components/country-flag";
-import { ArrowRightIcon, LockIcon } from "@/components/icons";
+import { ArrowRightIcon, CheckIcon, LockIcon } from "@/components/icons";
 import { ServiceLogo } from "@/components/service-logo";
 import { ButtonLink, Skeleton, cn } from "@/components/ui/primitives";
 import { cedis } from "@/lib/format";
@@ -46,13 +46,15 @@ export function PricingSection() {
   const popular = (data?.popular ?? []).filter((row) => !row.temporarily_unavailable && row.price);
   const featured = popular.find((row) => row.slug === "tiktok") ?? popular[0];
   const others = popular.filter((row) => row.slug !== featured?.slug).slice(0, TAG_SLOTS.length);
+  const prices = popular.map((row) => Number.parseFloat(row.price ?? "")).filter((value) => value > 0);
+  const cheapest = prices.length ? Math.min(...prices) : null;
 
   return (
     <section id="pricing" className="relative scroll-mt-20 overflow-x-clip py-16 sm:py-24" aria-labelledby="pricing-heading">
       <div className="container-page">
         <Reveal className="mx-auto max-w-2xl text-center">
           <h2 id="pricing-heading" className="section-title">
-            One price per number, in cedis
+            One price per number. No surprises.
           </h2>
           <p className="section-lead">
             You see the price in Ghana cedis before you buy, and that price is exactly what leaves
@@ -114,7 +116,28 @@ export function PricingSection() {
           </div>
         </Reveal>
 
-        <Reveal className="mx-auto mt-12 max-w-3xl text-center lg:mt-4">
+        {/* The two ways a number is sold - both real, both priced in cedis. */}
+        <Reveal className="mx-auto mt-12 grid max-w-4xl grid-cols-1 gap-4 sm:grid-cols-2 lg:mt-6">
+          <Option
+            title="One number, one code"
+            price={cheapest !== null ? `From ${cedis(cheapest)}` : "Priced per service"}
+            note="Per number, for the popular services today"
+            points={["Shown in cedis before you buy", "Refunded if no code arrives", "Nothing added at checkout"]}
+            featured
+          />
+          <Option
+            title="Another code, same number"
+            price="Priced on your order"
+            note="When the service allows a number to be used again"
+            points={[
+              "Offered on the order while its window is open",
+              "A new order, with its own price in cedis",
+              "Refunded too if no code comes",
+            ]}
+          />
+        </Reveal>
+
+        <Reveal className="mx-auto mt-12 max-w-3xl text-center">
           <p className="text-balance text-2xl font-bold tracking-tight text-ink sm:text-3xl">
             No crypto. No dollars.{" "}
             <span className="text-brand-700">Nothing added at checkout.</span>
@@ -203,6 +226,57 @@ function ReceiptLine({ label, strong, children }: { label: string; strong?: bool
     <div className="flex items-center justify-between gap-3">
       <dt className={strong ? "font-semibold text-ink" : "text-ink-muted"}>{label}</dt>
       <dd className={cn("tabular", strong ? "font-semibold text-ink" : "text-ink-soft")}>{children}</dd>
+    </div>
+  );
+}
+
+/** One way to buy: what it is, what it costs, what you can count on. */
+function Option({
+  title,
+  price,
+  note,
+  points,
+  featured = false,
+}: {
+  title: string;
+  price: string;
+  note: string;
+  points: string[];
+  featured?: boolean;
+}) {
+  return (
+    <div
+      className={cn(
+        "relative overflow-hidden rounded-3xl p-6",
+        featured
+          ? "bg-navy text-white shadow-pop ring-1 ring-white/10"
+          : "border border-line bg-surface text-ink shadow-card",
+      )}
+    >
+      {featured ? (
+        <span
+          aria-hidden
+          className="pointer-events-none absolute -right-16 -top-16 h-48 w-48 rounded-full bg-[radial-gradient(closest-side,rgba(40,199,247,0.35),transparent)]"
+        />
+      ) : null}
+      <p className={cn("text-sm font-semibold", featured ? "text-aqua" : "text-brand-700")}>{title}</p>
+      <p className="tabular mt-2 text-3xl font-extrabold tracking-tight">{price}</p>
+      <p className={cn("mt-1 text-caption", featured ? "text-white/65" : "text-ink-muted")}>{note}</p>
+      <ul className="mt-5 space-y-2.5">
+        {points.map((point) => (
+          <li key={point} className={cn("flex items-start gap-2.5 text-sm", featured ? "text-white/85" : "text-ink-soft")}>
+            <span
+              className={cn(
+                "mt-0.5 flex h-4 w-4 shrink-0 items-center justify-center rounded-full",
+                featured ? "bg-leaf text-navy" : "bg-brand-50 text-brand-700",
+              )}
+            >
+              <CheckIcon className="h-2.5 w-2.5" />
+            </span>
+            {point}
+          </li>
+        ))}
+      </ul>
     </div>
   );
 }

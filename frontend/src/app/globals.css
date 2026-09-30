@@ -24,16 +24,26 @@
     --c-primary: 11 100 70;
     --c-band: 11 100 70;
     --c-band-deep: 6 53 38;
-    /* The ramp from the band into the page: five steps between --c-band and
-       --c-canvas, eased (small steps in the dark greens, larger ones as it
-       pales) so no stop reads as a line. --c-wash is the palest green, for
-       sections that need a little separation without a boundary. */
-    --c-ramp-1: 22 116 83;
-    --c-ramp-2: 49 140 103;
-    --c-ramp-3: 101 173 141;
-    --c-ramp-4: 163 207 186;
-    --c-ramp-5: 216 235 225;
+    /* The palest green, for sections that need a little separation without
+       a boundary (atmosphere-wash). */
     --c-wash: 236 244 239;
+    /* The night-to-day ramp: navy (#071426) to the page through deep blue,
+       azure, aqua and mint - one smooth curve in OKLab, eased at both ends
+       and sampled into twelve steps (see docs/DESIGN-SYSTEM.md), so no stop
+       changes the slope enough to be seen as a line and nothing turns grey
+       where blue meets green. Used only by the atmosphere-night* classes. */
+    --c-dawn-1: 7 22 41;
+    --c-dawn-2: 8 28 55;
+    --c-dawn-3: 10 41 85;
+    --c-dawn-4: 14 60 123;
+    --c-dawn-5: 22 84 160;
+    --c-dawn-6: 38 115 191;
+    --c-dawn-7: 60 149 208;
+    --c-dawn-8: 90 181 216;
+    --c-dawn-9: 134 209 212;
+    --c-dawn-10: 176 227 212;
+    --c-dawn-11: 219 240 232;
+    --c-dawn-12: 241 246 244;
     --c-primary-hover: 9 79 55;
     --c-primary-active: 7 60 42;
     --c-brand-50: 237 246 242;
@@ -89,12 +99,21 @@
     --c-primary: 24 126 88;
     --c-band: 18 64 47;
     --c-band-deep: 11 26 20;
-    --c-ramp-1: 17 57 42;
-    --c-ramp-2: 16 48 36;
-    --c-ramp-3: 14 38 29;
-    --c-ramp-4: 13 29 23;
-    --c-ramp-5: 12 21 18;
     --c-wash: 14 23 19;
+    /* In the dark theme the page is night too: the same curve stays deep -
+       navy, deep blue, deep teal, deep green - and lands on the dark canvas. */
+    --c-dawn-1: 7 21 39;
+    --c-dawn-2: 8 23 44;
+    --c-dawn-3: 8 28 55;
+    --c-dawn-4: 9 35 70;
+    --c-dawn-5: 10 43 83;
+    --c-dawn-6: 11 53 81;
+    --c-dawn-7: 11 51 61;
+    --c-dawn-8: 12 45 42;
+    --c-dawn-9: 13 36 31;
+    --c-dawn-10: 13 26 23;
+    --c-dawn-11: 12 20 17;
+    --c-dawn-12: 11 17 15;
     --c-primary-hover: 27 134 93;
     --c-primary-active: 22 111 79;
     --c-brand-50: 15 36 27;
@@ -231,51 +250,10 @@
   .section-title {
     @apply text-balance text-3xl font-bold tracking-tight text-ink sm:text-4xl;
   }
-  /* ---- Atmosphere: how green meets the page ----------------------------
-     The homepage never changes colour at a line. The band fades into the
-     page through the ramp over a long distance, and sections that need
-     separation get a wash that fades in and out. White text only ever sits
-     on the solid band, never on the ramp. */
-
-  /* The hero: deeper green behind the headline, a faint light at the top
-     right, then the ramp into the page over the last --fade of the section.
-     A radial of page colour rises around the phone (--glow-x) so the edge of
-     the green curves up around it instead of running straight across. */
-  .atmosphere-hero {
-    --fade: 34rem;
-    --glow-x: 50%;
-    background:
-      radial-gradient(ellipse 70% 55% at 22% 0%, rgb(var(--c-band-deep) / 0.45), rgb(var(--c-band-deep) / 0) 70%),
-      radial-gradient(ellipse 45% 35% at 78% 6%, rgb(255 255 255 / 0.06), rgb(255 255 255 / 0) 70%),
-      radial-gradient(
-        ellipse 60% var(--fade) at var(--glow-x) 100%,
-        rgb(var(--c-canvas)) 0%,
-        rgb(var(--c-canvas) / 0.55) 45%,
-        rgb(var(--c-canvas) / 0) 100%
-      ),
-      linear-gradient(
-        180deg,
-        rgb(var(--c-band)) 0%,
-        rgb(var(--c-band)) calc(100% - var(--fade)),
-        rgb(var(--c-ramp-1)) calc(100% - var(--fade) * 0.9),
-        rgb(var(--c-ramp-2)) calc(100% - var(--fade) * 0.76),
-        rgb(var(--c-ramp-3)) calc(100% - var(--fade) * 0.62),
-        rgb(var(--c-ramp-4)) calc(100% - var(--fade) * 0.46),
-        rgb(var(--c-ramp-5)) calc(100% - var(--fade) * 0.28),
-        rgb(var(--c-canvas)) 100%
-      );
-  }
-  @media (min-width: 1024px) {
-    .atmosphere-hero {
-      --fade: 17rem;
-      --glow-x: 72%;
-    }
-  }
-  /* The hero's dot texture belongs to the green: it thins out as the ramp begins. */
-  .atmosphere-dots {
-    -webkit-mask-image: linear-gradient(180deg, #000 0%, #000 calc(100% - var(--fade)), transparent calc(100% - var(--fade) * 0.55));
-    mask-image: linear-gradient(180deg, #000 0%, #000 calc(100% - var(--fade)), transparent calc(100% - var(--fade) * 0.55));
-  }
+  /* ---- Atmosphere: the homepage never changes colour at a line ----------
+     Navy surfaces ramp into the page through the sky ramp (below), and
+     sections that need separation get a wash that fades in and out. White
+     text only ever sits on the navy, never on a ramp. */
 
   /* A section set slightly apart: the palest green, faded in and out. */
   .atmosphere-wash {
@@ -288,51 +266,172 @@
     );
   }
 
-  /* The close: the page ramps back up into the band over --fade-in, holds it
-     behind the text (deepest at the centre), then ramps down into the footer
-     (--c-surface) over --fade-out. Pad the content by at least each fade. */
-  .atmosphere-close {
-    --fade-in: 10rem;
-    --fade-out: 9rem;
+  /* ---- Night: the homepage's navy surfaces and their ramp into the page ---
+     Navy, then the dawn ramp (--c-dawn-1..12) into the page. The ramp is the
+     only thing in the blend - no glows or mists over it - so it stays clean.
+     Light inside the navy (blue behind the phone, the shield, the close) sits
+     well clear of the ramps. White text only ever sits on the navy: pad the
+     content by at least each fade. */
+  .atmosphere-night {
+    --fade: 30rem;
     background:
-      /* Mists of page colour at the middle of each edge: the green arrives
-         at the sides first, so the edge is a shallow curve, not a rule. */
-      radial-gradient(
-        ellipse 95% var(--fade-in) at 50% 0%,
-        rgb(var(--c-canvas) / 0.85) 0%,
-        rgb(var(--c-canvas) / 0.35) 45%,
-        rgb(var(--c-canvas) / 0) 100%
-      ),
-      radial-gradient(
-        ellipse 95% var(--fade-out) at 50% 100%,
-        rgb(var(--c-surface) / 0.85) 0%,
-        rgb(var(--c-surface) / 0.35) 45%,
-        rgb(var(--c-surface) / 0) 100%
-      ),
-      radial-gradient(ellipse 60% 35% at 50% 50%, rgb(var(--c-band-deep) / 0.3), rgb(var(--c-band-deep) / 0) 75%),
+      radial-gradient(ellipse 55% 34% at var(--light-x, 50%) 36%, rgb(8 120 209 / 0.3), rgb(8 120 209 / 0) 70%),
+      radial-gradient(ellipse 40% 30% at 12% 12%, rgb(40 199 247 / 0.1), rgb(40 199 247 / 0) 70%),
+      linear-gradient(
+        180deg,
+        #050b18 0%,
+        #071426 calc(100% - var(--fade)),
+        rgb(var(--c-dawn-1)) calc(100% - var(--fade) * 0.9231),
+        rgb(var(--c-dawn-2)) calc(100% - var(--fade) * 0.8462),
+        rgb(var(--c-dawn-3)) calc(100% - var(--fade) * 0.7692),
+        rgb(var(--c-dawn-4)) calc(100% - var(--fade) * 0.6923),
+        rgb(var(--c-dawn-5)) calc(100% - var(--fade) * 0.6154),
+        rgb(var(--c-dawn-6)) calc(100% - var(--fade) * 0.5385),
+        rgb(var(--c-dawn-7)) calc(100% - var(--fade) * 0.4615),
+        rgb(var(--c-dawn-8)) calc(100% - var(--fade) * 0.3846),
+        rgb(var(--c-dawn-9)) calc(100% - var(--fade) * 0.3077),
+        rgb(var(--c-dawn-10)) calc(100% - var(--fade) * 0.2308),
+        rgb(var(--c-dawn-11)) calc(100% - var(--fade) * 0.1538),
+        rgb(var(--c-dawn-12)) calc(100% - var(--fade) * 0.0769),
+        rgb(var(--c-canvas)) 100%
+      );
+  }
+  @media (min-width: 1024px) {
+    .atmosphere-night {
+      --fade: 22rem;
+      --light-x: 72%;
+    }
+  }
+
+  /* A navy section mid-page: the page ramps up into night over --fade-in,
+     holds it (blue light at the centre, cyan and green at the sides), and
+     ramps back down into the page over --fade-out. */
+  .atmosphere-night-mid {
+    --fade-in: 20rem;
+    --fade-out: 20rem;
+    background:
+      radial-gradient(ellipse 45% 22% at 50% 50%, rgb(8 120 209 / 0.3), rgb(8 120 209 / 0) 70%),
+      radial-gradient(ellipse 30% 18% at 8% 48%, rgb(40 199 247 / 0.1), rgb(40 199 247 / 0) 70%),
+      radial-gradient(ellipse 30% 18% at 92% 52%, rgb(32 178 107 / 0.12), rgb(32 178 107 / 0) 70%),
       linear-gradient(
         180deg,
         rgb(var(--c-canvas)) 0,
-        rgb(var(--c-ramp-5)) calc(var(--fade-in) * 0.28),
-        rgb(var(--c-ramp-4)) calc(var(--fade-in) * 0.46),
-        rgb(var(--c-ramp-3)) calc(var(--fade-in) * 0.62),
-        rgb(var(--c-ramp-2)) calc(var(--fade-in) * 0.76),
-        rgb(var(--c-ramp-1)) calc(var(--fade-in) * 0.9),
-        rgb(var(--c-band)) var(--fade-in),
-        rgb(var(--c-band)) calc(100% - var(--fade-out)),
-        rgb(var(--c-ramp-1)) calc(100% - var(--fade-out) * 0.9),
-        rgb(var(--c-ramp-2)) calc(100% - var(--fade-out) * 0.76),
-        rgb(var(--c-ramp-3)) calc(100% - var(--fade-out) * 0.62),
-        rgb(var(--c-ramp-4)) calc(100% - var(--fade-out) * 0.46),
-        rgb(var(--c-ramp-5)) calc(100% - var(--fade-out) * 0.28),
-        rgb(var(--c-surface)) 100%
+        rgb(var(--c-dawn-12)) calc(var(--fade-in) * 0.0769),
+        rgb(var(--c-dawn-11)) calc(var(--fade-in) * 0.1538),
+        rgb(var(--c-dawn-10)) calc(var(--fade-in) * 0.2308),
+        rgb(var(--c-dawn-9)) calc(var(--fade-in) * 0.3077),
+        rgb(var(--c-dawn-8)) calc(var(--fade-in) * 0.3846),
+        rgb(var(--c-dawn-7)) calc(var(--fade-in) * 0.4615),
+        rgb(var(--c-dawn-6)) calc(var(--fade-in) * 0.5385),
+        rgb(var(--c-dawn-5)) calc(var(--fade-in) * 0.6154),
+        rgb(var(--c-dawn-4)) calc(var(--fade-in) * 0.6923),
+        rgb(var(--c-dawn-3)) calc(var(--fade-in) * 0.7692),
+        rgb(var(--c-dawn-2)) calc(var(--fade-in) * 0.8462),
+        rgb(var(--c-dawn-1)) calc(var(--fade-in) * 0.9231),
+        #071426 var(--fade-in),
+        #071426 calc(100% - var(--fade-out)),
+        rgb(var(--c-dawn-1)) calc(100% - var(--fade-out) * 0.9231),
+        rgb(var(--c-dawn-2)) calc(100% - var(--fade-out) * 0.8462),
+        rgb(var(--c-dawn-3)) calc(100% - var(--fade-out) * 0.7692),
+        rgb(var(--c-dawn-4)) calc(100% - var(--fade-out) * 0.6923),
+        rgb(var(--c-dawn-5)) calc(100% - var(--fade-out) * 0.6154),
+        rgb(var(--c-dawn-6)) calc(100% - var(--fade-out) * 0.5385),
+        rgb(var(--c-dawn-7)) calc(100% - var(--fade-out) * 0.4615),
+        rgb(var(--c-dawn-8)) calc(100% - var(--fade-out) * 0.3846),
+        rgb(var(--c-dawn-9)) calc(100% - var(--fade-out) * 0.3077),
+        rgb(var(--c-dawn-10)) calc(100% - var(--fade-out) * 0.2308),
+        rgb(var(--c-dawn-11)) calc(100% - var(--fade-out) * 0.1538),
+        rgb(var(--c-dawn-12)) calc(100% - var(--fade-out) * 0.0769),
+        rgb(var(--c-canvas)) 100%
       );
   }
   @media (min-width: 640px) {
-    .atmosphere-close {
-      --fade-in: 15rem;
-      --fade-out: 12rem;
+    .atmosphere-night-mid {
+      --fade-in: 26rem;
+      --fade-out: 26rem;
     }
+  }
+
+  /* The close: the page ramps up into night and stays there - the homepage
+     footer is navy too (SiteFooter night), so nothing ramps back down. */
+  .atmosphere-night-close {
+    --fade-in: 20rem;
+    background:
+      radial-gradient(ellipse 36% 22% at 22% 74%, rgb(8 120 209 / 0.32), rgb(8 120 209 / 0) 70%),
+      radial-gradient(ellipse 30% 20% at 50% 66%, rgb(40 199 247 / 0.12), rgb(40 199 247 / 0) 70%),
+      radial-gradient(ellipse 36% 22% at 80% 76%, rgb(32 178 107 / 0.26), rgb(32 178 107 / 0) 70%),
+      linear-gradient(
+        180deg,
+        rgb(var(--c-canvas)) 0,
+        rgb(var(--c-dawn-12)) calc(var(--fade-in) * 0.0769),
+        rgb(var(--c-dawn-11)) calc(var(--fade-in) * 0.1538),
+        rgb(var(--c-dawn-10)) calc(var(--fade-in) * 0.2308),
+        rgb(var(--c-dawn-9)) calc(var(--fade-in) * 0.3077),
+        rgb(var(--c-dawn-8)) calc(var(--fade-in) * 0.3846),
+        rgb(var(--c-dawn-7)) calc(var(--fade-in) * 0.4615),
+        rgb(var(--c-dawn-6)) calc(var(--fade-in) * 0.5385),
+        rgb(var(--c-dawn-5)) calc(var(--fade-in) * 0.6154),
+        rgb(var(--c-dawn-4)) calc(var(--fade-in) * 0.6923),
+        rgb(var(--c-dawn-3)) calc(var(--fade-in) * 0.7692),
+        rgb(var(--c-dawn-2)) calc(var(--fade-in) * 0.8462),
+        rgb(var(--c-dawn-1)) calc(var(--fade-in) * 0.9231),
+        #071426 var(--fade-in),
+        #050b18 100%
+      );
+  }
+  @media (min-width: 640px) {
+    .atmosphere-night-close {
+      --fade-in: 26rem;
+    }
+  }
+
+  /* "ours." - the one word the hero is about, in the dawn gradient. */
+  .text-dawn {
+    background: linear-gradient(95deg, #28c7f7 0%, #3fd0c6 48%, #65d99a 100%);
+    -webkit-background-clip: text;
+    background-clip: text;
+    color: transparent;
+  }
+
+  /* Night motion: stars, the services marquee, money moving along a line,
+     the shield breathing. All of it stops under reduced motion. */
+  .twinkle {
+    animation: twinkle 4s ease-in-out infinite;
+  }
+  .marquee {
+    animation: marquee var(--marquee-duration, 60s) linear infinite;
+  }
+  .marquee-reverse {
+    animation: marquee var(--marquee-duration, 60s) linear infinite reverse;
+  }
+  .marquee-track:hover .marquee,
+  .marquee-track:hover .marquee-reverse {
+    animation-play-state: paused;
+  }
+  .flow-dash {
+    stroke-dasharray: 4 8;
+    animation: flow-dash 1.2s linear infinite;
+  }
+  .shield-breathe {
+    animation: shield-breathe 5s ease-in-out infinite;
+  }
+  @keyframes twinkle {
+    0%, 100% { opacity: 0.15; }
+    50% { opacity: 0.8; }
+  }
+  @keyframes marquee {
+    from { transform: translateX(0); }
+    to { transform: translateX(-50%); }
+  }
+  @keyframes flow-dash {
+    to { stroke-dashoffset: -24; }
+  }
+  @keyframes shield-breathe {
+    0%, 100% { transform: scale(1); opacity: 0.55; }
+    50% { transform: scale(1.06); opacity: 0.9; }
+  }
+  @media (prefers-reduced-motion: reduce) {
+    .twinkle, .marquee, .marquee-reverse, .flow-dash, .shield-breathe { animation: none; }
   }
 
   /* A soft pale-green light behind a device (see Halo in device.tsx). */

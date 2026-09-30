@@ -3,7 +3,7 @@
 import useSWR from "swr";
 
 import { CountryFlag } from "@/components/country-flag";
-import { CheckCircleIcon, ClockIcon, CopyIcon, PhoneIcon, SearchIcon, WalletIcon } from "@/components/icons";
+import { CheckCircleIcon, ClockIcon, CopyIcon, MessageIcon, PhoneIcon, SearchIcon } from "@/components/icons";
 import { ServiceLogo } from "@/components/service-logo";
 import { Skeleton, cn } from "@/components/ui/primitives";
 import { cedis } from "@/lib/format";
@@ -12,39 +12,37 @@ import type { MarketHome, MarketRow } from "@/lib/types";
 import { BottomNav, Device, Halo, HomeIndicator, Reveal, ScreenStack, StatusBar, useInView, useStory } from "./device";
 
 /**
- * How it works, as one order watched from start to finish. The steps on the
- * left drive the phone on the right: the marketplace, the buy sheet, the order
- * with its number, then the code arriving - the real screens, with today's
- * real service and price. It plays on its own while on screen; choosing a
- * step takes over.
+ * How it works, as a mini product demo: the four steps on one side drive a
+ * phone on the other - choose a service from today's catalogue, get a US
+ * number, wait for the SMS, read the code as it fills in. It plays on its
+ * own while on screen; choosing a step takes over.
  *
- * Invented, and only these: the example wallet balance, the number (from the
- * 555 range kept for fiction), the countdown and the code.
+ * Live: the services, their logos and prices. Invented, and only these: the
+ * number (from the 555 range kept for fiction), the countdown and the code.
  */
 
-const STEP_MS = 4200;
-const EXAMPLE_BALANCE = 50;
+const STEP_MS = 4400;
 const EXAMPLE_NUMBER = "+1 (512) 555-0147";
-const EXAMPLE_CODE = "482913";
+const EXAMPLE_CODE = "482196";
 /** The story follows TikTok; its bundled tile stands in until the catalogue answers. Prices never do. */
 const SUBJECT_ICON = "/service-icons/tiktok.svg";
 
 const STEPS = [
   {
-    title: "Choose a service",
-    body: "Search for the app you are signing up to. Every service shows its price in cedis before you buy.",
+    title: "Choose your service",
+    body: "Pick the app you are signing up to from the live catalogue. Every price is in cedis, before you buy.",
   },
   {
-    title: "Pay with your wallet",
-    body: "The price comes out of your VerifyGH balance, which you top up with MoMo. Nothing is added at checkout.",
+    title: "Get your number",
+    body: "Pay from your wallet and a US number is assigned to your order. Enter it in the app and ask for the code.",
   },
   {
-    title: "Receive your number",
-    body: "A US number is assigned to your order. Enter it in the app and ask it to send the code.",
+    title: "Wait for your code",
+    body: "Keep the order open. The SMS lands on it the moment the app sends it - no refreshing, no inbox to check.",
   },
   {
-    title: "Get your SMS code",
-    body: "The code appears on your order the moment it arrives. If none arrives before the number expires, you get the full price back.",
+    title: "Verify",
+    body: "Copy the code into the app and you are in. If no code arrives before the number expires, you get the full price back.",
   },
 ];
 
@@ -60,21 +58,19 @@ export function HowItWorks() {
     // so nothing inside becomes a scroll container.
     <section ref={ref} id="how-it-works" className="scroll-mt-20 overflow-x-clip" aria-labelledby="how-heading">
       {/* Phones read heading, phone, steps. From lg the heading and steps share
-          the left column, centred as a group (the 1fr rows either side take up
-          the slack) against the phone, which spans every row on the right. */}
+          the left column, centred as a group against the phone. */}
       <div className="container-page grid grid-cols-1 gap-x-16 gap-y-8 py-16 sm:py-24 lg:grid-cols-2 lg:grid-rows-[1fr_auto_auto_1fr] lg:gap-y-6">
         <Reveal className="text-center lg:col-start-1 lg:row-start-2 lg:text-left">
           <h2 id="how-heading" className="section-title">
             How VerifyGH works
           </h2>
           <p className="section-lead mx-auto max-w-lg lg:mx-0">
-            One order, from choosing a service to reading the code - the way it looks on your
-            phone.
+            From choosing a service to reading your code, on one screen. Here it is, step by step.
           </p>
         </Reveal>
 
         <Reveal className="lg:col-start-2 lg:row-span-4 lg:row-start-1 lg:self-center">
-          <Journey step={story.index} featured={featured} rows={popular} loading={!data} />
+          <Demo step={story.index} featured={featured} rows={popular} loading={!data} />
         </Reveal>
 
         <Reveal className="mx-auto w-full max-w-xl lg:col-start-1 lg:row-start-3 lg:max-w-none">
@@ -83,6 +79,7 @@ export function HowItWorks() {
             <span aria-hidden className="absolute bottom-6 left-[1.5rem] top-6 w-px bg-line" />
             {STEPS.map((step, index) => {
               const active = index === story.index;
+              const done = index < story.index;
               return (
                 <li key={step.title} className="relative">
                   <button
@@ -96,19 +93,18 @@ export function HowItWorks() {
                   >
                     <span
                       className={cn(
-                        "tabular relative z-10 flex h-8 w-8 shrink-0 items-center justify-center rounded-full text-caption font-bold transition-colors",
-                        active ? "bg-primary text-white" : "border border-line-strong bg-canvas text-ink-muted",
+                        "tabular relative z-10 flex h-8 w-8 shrink-0 items-center justify-center rounded-full text-caption font-bold transition-colors duration-500",
+                        active
+                          ? "bg-gradient-to-br from-[#0B63B6] to-[#137A4E] text-white"
+                          : done
+                            ? "bg-brand-50 text-brand-700"
+                            : "border border-line-strong bg-canvas text-ink-muted",
                       )}
                     >
-                      {String(index + 1).padStart(2, "0")}
+                      {done ? <CheckCircleIcon className="h-4 w-4" /> : String(index + 1).padStart(2, "0")}
                     </span>
                     <span className="min-w-0 flex-1 pt-1">
-                      <span
-                        className={cn(
-                          "block text-base font-semibold transition-colors",
-                          active ? "text-ink" : "text-ink-soft",
-                        )}
-                      >
+                      <span className={cn("block text-base font-semibold transition-colors", active ? "text-ink" : "text-ink-soft")}>
                         {step.title}
                       </span>
                       {/* The body opens for the active step only - the phone shows the rest. */}
@@ -124,7 +120,7 @@ export function HowItWorks() {
                             <span aria-hidden className="mt-3 block h-0.5 overflow-hidden rounded-full bg-line">
                               <span
                                 key={story.index}
-                                className="story-progress block h-full origin-left rounded-full bg-brand-500"
+                                className="story-progress block h-full origin-left rounded-full bg-gradient-to-r from-azure to-leaf"
                                 style={{ ["--story-interval" as string]: `${STEP_MS}ms` }}
                               />
                             </span>
@@ -145,7 +141,7 @@ export function HowItWorks() {
 
 /* ------------------------------------------------------------------------ */
 
-function Journey({
+function Demo({
   step,
   featured,
   rows,
@@ -156,43 +152,16 @@ function Journey({
   rows: MarketRow[];
   loading: boolean;
 }) {
-  const price = featured?.price ? Number.parseFloat(featured.price) : null;
   const name = featured?.name ?? "TikTok";
-
-  // What just happened, narrated beside the phone.
   const events = [
     {
       icon: <ServiceLogo name={name} src={featured?.icon_url ?? SUBJECT_ICON} slug={featured?.slug ?? "tiktok"} size="xs" />,
       title: `${name} selected`,
-      note: "United States",
+      note: featured?.price ? `${cedis(featured.price)} · United States` : "United States",
     },
-    {
-      icon: (
-        <Bubble>
-          <WalletIcon className="h-3.5 w-3.5" />
-        </Bubble>
-      ),
-      title: price !== null ? `${cedis(price)} paid` : "Paid",
-      note: "From your wallet",
-    },
-    {
-      icon: (
-        <Bubble>
-          <PhoneIcon className="h-3.5 w-3.5" />
-        </Bubble>
-      ),
-      title: "Number assigned",
-      note: EXAMPLE_NUMBER,
-    },
-    {
-      icon: (
-        <Bubble tone="success">
-          <CheckCircleIcon className="h-3.5 w-3.5" />
-        </Bubble>
-      ),
-      title: "Code received",
-      note: EXAMPLE_CODE,
-    },
+    { icon: <Bubble><PhoneIcon className="h-3.5 w-3.5" /></Bubble>, title: "Number assigned", note: EXAMPLE_NUMBER },
+    { icon: <Bubble><MessageIcon className="h-3.5 w-3.5" /></Bubble>, title: "SMS received", note: `From ${name}` },
+    { icon: <Bubble tone="success"><CheckCircleIcon className="h-3.5 w-3.5" /></Bubble>, title: "Code received", note: EXAMPLE_CODE },
   ];
 
   return (
@@ -202,19 +171,16 @@ function Journey({
       <Device>
         <StatusBar />
         <ScreenStack active={step}>
-          <BrowseScreen rows={rows} featured={featured} loading={loading} />
-          <PayScreen rows={rows} featured={featured} price={price} />
-          <OrderScreen featured={featured} code={false} />
-          <OrderScreen featured={featured} code />
+          <ChooseScreen rows={rows} featured={featured} loading={loading} />
+          <NumberScreen featured={featured} />
+          <WaitScreen featured={featured} arrived={step === 2} />
+          <VerifyScreen featured={featured} run={step === 3} />
         </ScreenStack>
       </Device>
 
-      {/* The narration: slides in afresh at every step. */}
+      {/* What just happened, narrated at the phone's edge */}
       <div className="absolute bottom-0 left-0 z-20 sm:-left-2">
-        <div
-          key={step}
-          className="rise-in flex items-center gap-2.5 rounded-2xl bg-white py-2.5 pl-2.5 pr-4 text-left shadow-pop"
-        >
+        <div key={step} className="rise-in flex items-center gap-2.5 rounded-2xl bg-white py-2.5 pl-2.5 pr-4 text-left shadow-pop">
           {events[step].icon}
           <span className="min-w-0">
             <span className="tabular block text-sm font-semibold leading-tight text-black">{events[step].title}</span>
@@ -231,7 +197,7 @@ function Bubble({ children, tone = "brand" }: { children: React.ReactNode; tone?
     <span
       className={cn(
         "flex h-7 w-7 items-center justify-center rounded-full",
-        tone === "success" ? "bg-[#E6F4EC] text-[#1C7A4A]" : "bg-[#E8F3EE] text-[#0B6446]",
+        tone === "success" ? "bg-[#E6F4EC] text-[#1C7A4A]" : "bg-[#E7F1FB] text-[#0B63B6]",
       )}
     >
       {children}
@@ -239,51 +205,58 @@ function Bubble({ children, tone = "brand" }: { children: React.ReactNode; tone?
   );
 }
 
-/** The marketplace on a phone, with the featured service being tapped. */
-function BrowseScreen({ rows, featured, loading }: { rows: MarketRow[]; featured?: MarketRow; loading: boolean }) {
-  const list = featured ? [featured, ...rows.filter((row) => row.slug !== featured.slug)].slice(0, 5) : [];
+function ServiceHeader({ featured }: { featured?: MarketRow }) {
+  const name = featured?.name ?? "TikTok";
+  return (
+    <div className="flex items-center gap-2.5 px-0.5">
+      <ServiceLogo name={name} src={featured?.icon_url ?? SUBJECT_ICON} slug={featured?.slug ?? "tiktok"} size="xs" />
+      <div className="min-w-0 flex-1">
+        <p className="text-sm font-semibold leading-tight text-ink">{name}</p>
+        <p className="flex items-center gap-1 text-2xs text-ink-muted">
+          <CountryFlag code="US" size="sm" /> United States
+        </p>
+      </div>
+    </div>
+  );
+}
+
+/** 01 - the catalogue as a grid of tiles, the chosen one being tapped. */
+function ChooseScreen({ rows, featured, loading }: { rows: MarketRow[]; featured?: MarketRow; loading: boolean }) {
+  const tiles = featured ? [featured, ...rows.filter((row) => row.slug !== featured.slug)].slice(0, 6) : [];
   return (
     <>
       <div className="flex min-h-0 flex-1 flex-col px-3.5 pt-2">
         <p className="px-0.5 text-base font-semibold text-ink">Buy a number</p>
         <div className="mt-2 flex h-8 items-center gap-2 rounded-full border border-line-strong bg-surface px-3 text-2xs text-ink-faint">
           <SearchIcon className="h-3 w-3" />
-          Search - WhatsApp, TikTok…
+          Search services
         </div>
         <p className="mt-3 px-0.5 text-2xs font-medium uppercase tracking-wide text-ink-muted">Popular</p>
-        <ul className="mt-1.5 space-y-1.5">
-          {loading || list.length === 0
-            ? [0, 1, 2, 3].map((key) => (
-                <li key={key} className="flex h-11 items-center gap-2 rounded-xl bg-surface px-2">
-                  <Skeleton className="h-7 w-7 rounded-lg" />
-                  <Skeleton className="h-2.5 flex-1" />
-                </li>
-              ))
-            : list.map((row, index) => (
-                <li
+        <div className="mt-1.5 grid grid-cols-2 gap-1.5">
+          {loading || tiles.length === 0
+            ? [0, 1, 2, 3, 4, 5].map((key) => <Skeleton key={key} className="h-[4.25rem] rounded-xl" />)
+            : tiles.map((row, index) => (
+                <div
                   key={row.slug}
                   className={cn(
-                    "relative flex h-11 items-center gap-2 rounded-xl border px-2",
-                    index === 0 ? "border-brand-500 bg-brand-50" : "border-line bg-surface",
+                    "relative flex flex-col gap-1.5 rounded-xl border p-2",
+                    index === 0 ? "border-brand-500 bg-brand-50 ring-1 ring-brand-500" : "border-line bg-surface",
                   )}
                 >
-                  <ServiceLogo name={row.name} src={row.icon_url} slug={row.slug} size="xs" />
-                  <span className="min-w-0 flex-1">
-                    <span className="block truncate text-caption font-semibold text-ink">{row.name}</span>
-                    <span className="block text-[0.625rem] text-ink-muted">
-                      {row.available_count ? `${row.available_count} available` : "Available"}
-                    </span>
-                  </span>
-                  <span className="tabular text-caption font-semibold text-ink">{cedis(row.price)}</span>
+                  <div className="flex items-center gap-1.5">
+                    <ServiceLogo name={row.name} src={row.icon_url} slug={row.slug} size="xs" className="!h-6 !w-6" />
+                    <span className="min-w-0 truncate text-[0.6875rem] font-semibold text-ink">{row.name}</span>
+                  </div>
+                  <span className="tabular text-caption font-bold text-ink">{cedis(row.price)}</span>
                   {index === 0 ? (
-                    <span className="absolute left-[55%] top-1/2 h-8 w-8 -translate-y-1/2">
+                    <span className="absolute right-2 top-2 h-7 w-7">
                       <span className="tap-ring absolute inset-0 rounded-full bg-brand-500/40" />
-                      <span className="absolute inset-2.5 rounded-full bg-brand-500/50" />
+                      <span className="absolute inset-2 rounded-full bg-brand-500/50" />
                     </span>
                   ) : null}
-                </li>
+                </div>
               ))}
-        </ul>
+        </div>
       </div>
       <BottomNav active="buy" />
       <HomeIndicator />
@@ -291,148 +264,111 @@ function BrowseScreen({ rows, featured, loading }: { rows: MarketRow[]; featured
   );
 }
 
-/** The buy sheet over the marketplace, as the real one lays it out. */
-function PayScreen({ rows, featured, price }: { rows: MarketRow[]; featured?: MarketRow; price: number | null }) {
-  const balance = price !== null && price > EXAMPLE_BALANCE ? Math.ceil(price / 50) * 50 + 50 : EXAMPLE_BALANCE;
+/** 02 - the number, large, ready to enter in the app. */
+function NumberScreen({ featured }: { featured?: MarketRow }) {
+  const name = featured?.name ?? "TikTok";
   return (
-    <div className="relative flex min-h-0 flex-1 flex-col">
-      {/* The marketplace, dimmed behind the sheet */}
-      <div className="flex-1 space-y-1.5 px-3.5 pt-2 opacity-40">
-        <p className="px-0.5 text-base font-semibold text-ink">Buy a number</p>
-        {rows.slice(0, 3).map((row) => (
-          <div key={row.slug} className="flex h-11 items-center gap-2 rounded-xl border border-line bg-surface px-2">
-            <ServiceLogo name={row.name} src={row.icon_url} slug={row.slug} size="xs" />
-            <span className="text-caption font-semibold text-ink">{row.name}</span>
-          </div>
-        ))}
-      </div>
-      <div className="absolute inset-0 bg-scrim/40" />
-
-      <div className="absolute inset-x-0 bottom-0 rounded-t-3xl bg-raised px-3.5 pt-2.5 shadow-pop">
-        <span className="mx-auto block h-1 w-8 rounded-full bg-line-strong" />
-        <p className="mt-2.5 text-sm font-semibold text-ink">Buy a number</p>
-        <div className="mt-2 flex items-center gap-2">
-          <ServiceLogo name={featured?.name ?? "TikTok"} src={featured?.icon_url ?? SUBJECT_ICON} slug={featured?.slug ?? "tiktok"} size="xs" />
-          <span className="min-w-0">
-            <span className="block text-caption font-semibold text-ink">{featured?.name ?? "TikTok"}</span>
-            <span className="block text-[0.625rem] text-ink-muted">One-time number for an SMS code</span>
-          </span>
-        </div>
-        <dl className="mt-2.5 divide-y divide-line rounded-xl border border-line text-2xs">
-          <Line label="Country">
-            <span className="flex items-center gap-1">
-              <CountryFlag code="US" size="sm" /> United States
+    <div className="flex min-h-0 flex-1 flex-col">
+      <div className="flex min-h-0 flex-1 flex-col gap-3 px-3.5 pt-2">
+        <ServiceHeader featured={featured} />
+        <div className="rounded-2xl border border-line bg-surface p-3.5">
+          <div className="flex items-center justify-between">
+            <p className="text-2xs text-ink-muted">Your number</p>
+            <span className="rounded-full bg-success-50 px-2 py-0.5 text-[0.5625rem] font-bold uppercase tracking-wider text-success-700">
+              Ready
             </span>
-          </Line>
-          <Line label="Number price" strong>
-            {cedis(price)}
-          </Line>
-          <Line label="Current balance">{cedis(balance)}</Line>
-          <Line label="After purchase" strong>
-            {price !== null ? cedis(balance - price) : "—"}
-          </Line>
-        </dl>
-        <div className="mt-2.5 grid grid-cols-[auto_1fr] gap-2">
-          <span className="flex h-9 items-center rounded-full border border-line-strong px-3.5 text-2xs font-medium text-ink-soft">
-            Cancel
-          </span>
-          <span className="tabular flex h-9 items-center justify-center rounded-full bg-primary text-2xs font-semibold text-white">
-            Buy for {cedis(price)}
-          </span>
+          </div>
+          <p className="code mt-1.5 text-[1.2rem] font-semibold leading-tight text-ink">{EXAMPLE_NUMBER}</p>
+          <div className="mt-3 flex items-center justify-between">
+            <span className="flex items-center gap-1 text-2xs text-ink-soft">
+              <ClockIcon className="h-3 w-3" />
+              <span className="tabular font-semibold">19:58</span> left
+            </span>
+            <span className="flex items-center gap-1 rounded-full border border-line-strong px-2.5 py-1 text-[0.625rem] font-medium text-ink-soft">
+              <CopyIcon className="h-3 w-3" /> Copy
+            </span>
+          </div>
         </div>
-        <HomeIndicator />
+        <p className="px-1 text-2xs leading-relaxed text-ink-muted">
+          Enter this number in {name} and ask it to send the code.
+        </p>
       </div>
+      <HomeIndicator />
     </div>
   );
 }
 
-function Line({ label, strong, children }: { label: string; strong?: boolean; children: React.ReactNode }) {
-  return (
-    <div className="flex items-center justify-between px-2.5 py-1.5">
-      <dt className="text-ink-muted">{label}</dt>
-      <dd className={cn("tabular", strong ? "font-semibold text-ink" : "text-ink-soft")}>{children}</dd>
-    </div>
-  );
-}
-
-/** The order: waiting for the SMS, then the code - with the app's own toast when it lands. */
-function OrderScreen({ featured, code }: { featured?: MarketRow; code: boolean }) {
+/** 03 - waiting, then the SMS landing on the order. */
+function WaitScreen({ featured, arrived }: { featured?: MarketRow; arrived: boolean }) {
   const name = featured?.name ?? "TikTok";
   return (
     <div className="relative flex min-h-0 flex-1 flex-col">
-      {code ? (
-        <div className="drop-in absolute inset-x-2.5 top-1 z-20 flex items-start gap-2 rounded-2xl bg-raised p-2.5 shadow-pop ring-1 ring-line">
-          <CheckCircleIcon className="mt-px h-4 w-4 shrink-0 text-success-700" />
-          <span className="min-w-0">
-            <span className="block text-caption font-semibold text-ink">Verification code received</span>
-            <span className="block text-2xs text-ink-muted">It is on your order screen now.</span>
-          </span>
-        </div>
-      ) : null}
-
-      <div className="flex min-h-0 flex-1 flex-col gap-2.5 px-3.5 pt-2">
-        <div className="flex items-center gap-2.5 px-0.5">
-          <ServiceLogo name={name} src={featured?.icon_url ?? SUBJECT_ICON} slug={featured?.slug ?? "tiktok"} size="xs" />
-          <div className="min-w-0 flex-1">
-            <p className="text-sm font-semibold leading-tight text-ink">{name}</p>
-            <p className="flex items-center gap-1 text-2xs text-ink-muted">
-              <CountryFlag code="US" size="sm" /> United States
-            </p>
-          </div>
-        </div>
-
-        <div className="rounded-xl border border-line bg-surface p-3">
-          <div className="flex items-center justify-between gap-2">
-            <p className="truncate text-2xs text-ink-muted">Your number</p>
-            <span className="flex items-center gap-1 rounded-md bg-sunken px-1.5 py-0.5 text-2xs text-ink-soft">
-              <ClockIcon className="h-3 w-3" />
-              <span className="tabular font-semibold">{code ? "18:41" : "19:58"}</span>
-            </span>
-          </div>
+      <div className="flex min-h-0 flex-1 flex-col gap-3 px-3.5 pt-2">
+        <ServiceHeader featured={featured} />
+        <div className="rounded-2xl border border-line bg-surface p-3.5">
+          <p className="text-2xs text-ink-muted">Your number</p>
           <p className="code mt-1 text-[0.95rem] font-semibold text-ink">{EXAMPLE_NUMBER}</p>
         </div>
+        <div className="flex flex-col items-center rounded-2xl border border-dashed border-line-strong px-3 py-6 text-center">
+          <span className="relative flex h-10 w-10 items-center justify-center">
+            <span className="absolute inset-0 animate-pulse-ring rounded-full bg-azure/30" />
+            <span className="relative h-2.5 w-2.5 rounded-full bg-azure" />
+          </span>
+          <p className="mt-3 text-caption font-semibold text-ink">Waiting for the SMS</p>
+          <p className="mt-0.5 text-[0.625rem] text-ink-muted">The code appears here the moment it arrives.</p>
+        </div>
+      </div>
+      {arrived ? (
+        <div
+          className="drop-in absolute inset-x-2.5 top-1 z-20 rounded-2xl bg-raised p-3 shadow-pop ring-1 ring-line"
+          style={{ animationDelay: "1400ms" }}
+        >
+          <p className="flex items-center gap-1.5 text-[0.5625rem] font-bold uppercase tracking-[0.12em] text-azure">
+            <MessageIcon className="h-3 w-3" /> SMS received · {name}
+          </p>
+          <p className="mt-1 text-[0.6875rem] leading-snug text-ink-soft">
+            Your {name} code is {EXAMPLE_CODE}. Don&apos;t share it with anyone.
+          </p>
+        </div>
+      ) : null}
+      <HomeIndicator />
+    </div>
+  );
+}
 
-        {code ? (
-          <div className="rounded-xl border border-success-200 bg-success-50 p-3">
-            <div className="flex items-center justify-between gap-2">
-              <p className="text-2xs font-medium text-success-700">Verification code</p>
-              <span className="rounded-full bg-surface px-2 py-0.5 text-[0.625rem] font-medium text-success-700">
-                Code received
+/** 04 - the code filling in digit by digit, then received. */
+function VerifyScreen({ featured, run }: { featured?: MarketRow; run: boolean }) {
+  const name = featured?.name ?? "TikTok";
+  return (
+    <div className="flex min-h-0 flex-1 flex-col">
+      <div className="flex min-h-0 flex-1 flex-col gap-3 px-3.5 pt-2">
+        <ServiceHeader featured={featured} />
+        <div className="rounded-2xl border border-success-200 bg-success-50 p-3.5">
+          <p className="text-2xs font-medium text-success-700">Verification code</p>
+          <div key={run ? "run" : "rest"} className="mt-2 grid grid-cols-6 gap-1">
+            {EXAMPLE_CODE.split("").map((digit, index) => (
+              <span
+                key={index}
+                className="rise-in code flex h-9 items-center justify-center rounded-lg border border-success-200 bg-surface text-base font-semibold text-success-700"
+                style={{ animationDelay: `${200 + index * 180}ms` }}
+              >
+                {digit}
               </span>
-            </div>
-            <p className="code mt-0.5 text-[1.7rem] font-semibold leading-tight tracking-[0.18em] text-success-700">
-              {EXAMPLE_CODE}
-            </p>
+            ))}
           </div>
-        ) : (
-          <div className="rounded-xl border border-line bg-surface p-3">
-            <div className="flex items-center justify-between gap-2">
-              <p className="text-2xs text-ink-muted">Verification code</p>
-              <span className="rounded-full bg-info-50 px-2 py-0.5 text-[0.625rem] font-medium text-info-700">
-                Waiting for SMS
-              </span>
-            </div>
-            <div className="mt-2 flex items-start gap-2">
-              <span className="relative mt-1 flex h-2 w-2 shrink-0">
-                <span className="absolute inline-flex h-full w-full animate-pulse-ring rounded-full bg-brand-400" />
-                <span className="relative inline-flex h-2 w-2 rounded-full bg-brand-500" />
-              </span>
-              <p className="text-2xs leading-snug text-ink-soft">
-                Waiting for the SMS. The code appears here the moment it arrives.
-              </p>
-            </div>
-          </div>
-        )}
-
-        <div className="mt-auto pb-2">
-          <div
-            className={cn(
-              "flex h-9 items-center justify-center gap-1.5 rounded-full text-caption font-medium",
-              code ? "bg-primary text-white" : "border border-line-strong text-ink-soft",
-            )}
+          <p
+            key={run ? "ok" : "rest-ok"}
+            className="rise-in mt-3 flex items-center gap-1.5 text-caption font-semibold text-success-700"
+            style={{ animationDelay: "1400ms" }}
           >
+            <CheckCircleIcon className="h-4 w-4" /> Code received
+          </p>
+        </div>
+        <p className="px-1 text-2xs leading-relaxed text-ink-muted">Copy it into {name} to finish signing up.</p>
+        <div className="mt-auto pb-2">
+          <div className="flex h-10 items-center justify-center gap-1.5 rounded-full bg-primary text-caption font-semibold text-white">
             <CopyIcon className="h-3.5 w-3.5" />
-            {code ? "Copy code" : "Copy number"}
+            Copy code
           </div>
         </div>
       </div>

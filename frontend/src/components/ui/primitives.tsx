@@ -19,7 +19,10 @@ type ButtonVariant =
   | "subtle"
   // On the green band (homepage hero, closing call to action) only.
   | "onBand"
-  | "onBandOutline";
+  | "onBandOutline"
+  // The homepage's main action: blue into green, white text (5:1 or better
+  // at both ends), a soft blue glow beneath.
+  | "dawn";
 type ButtonSize = "sm" | "md" | "lg";
 
 const VARIANTS: Record<ButtonVariant, string> = {
@@ -35,6 +38,8 @@ const VARIANTS: Record<ButtonVariant, string> = {
   onBand: "bg-white text-band-deep hover:bg-white/90 active:bg-white/80 disabled:opacity-60",
   onBandOutline:
     "border border-white/35 bg-transparent text-white hover:bg-white/10 active:bg-white/15 disabled:opacity-50",
+  dawn:
+    "bg-gradient-to-r from-[#0B63B6] to-[#137A4E] text-white shadow-[0_10px_30px_-10px_rgba(8,120,209,0.7)] hover:brightness-110 active:brightness-95 disabled:opacity-60",
 };
 
 const SIZES: Record<ButtonSize, string> = {

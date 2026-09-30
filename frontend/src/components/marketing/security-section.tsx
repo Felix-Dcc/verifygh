@@ -45,9 +45,9 @@ const CONTROLS = [
   },
 ];
 
-const EXAMPLE_BALANCE = 45;
-const EXAMPLE_TOPUP = 20;
-const EXAMPLE_PURCHASE = 19.5;
+const EXAMPLE_BALANCE = 127.5;
+const EXAMPLE_TOPUP = 50;
+const EXAMPLE_PURCHASE = 11.5;
 
 export function SecuritySection() {
   const [ref, inView] = useInView<HTMLElement>();
@@ -67,15 +67,15 @@ export function SecuritySection() {
   );
 
   return (
-    <section ref={ref} id="security" className="atmosphere-wash scroll-mt-20 overflow-x-clip" aria-labelledby="security-heading">
+    <section ref={ref} id="protection" className="atmosphere-wash scroll-mt-20 overflow-x-clip" aria-labelledby="security-heading">
       <div className="container-page py-16 sm:py-24">
         <Reveal className="mx-auto max-w-2xl text-center">
           <h2 id="security-heading" className="section-title">
-            How your money and account are protected
+            Your money and account are protected.
           </h2>
           <p className="section-lead">
-            What the product actually does, shown where it happens. No badges, no borrowed
-            certifications.
+            Your wallet, the way you see it - and the six things guarding it, shown where they
+            work. No badges, no borrowed certifications.
           </p>
         </Reveal>
 
@@ -89,7 +89,7 @@ export function SecuritySection() {
               <Rings />
               <Halo className="left-1/2 top-1/2 h-[110%] w-[150%] -translate-x-1/2 -translate-y-1/2" />
               <Device>
-                <AccountScreen active={active} />
+                <WalletScreen active={active} />
               </Device>
             </div>
           </Reveal>
@@ -180,8 +180,8 @@ function Marker({ n, active }: { n: number; active: number }) {
   );
 }
 
-/** Settings and wallet on one screen: the parts of an account the protections guard. */
-function AccountScreen({ active }: { active: number }) {
+/** The wallet as the app shows it: balance, activity - and the account it belongs to. */
+function WalletScreen({ active }: { active: number }) {
   return (
     <>
       <StatusBar />
@@ -191,71 +191,95 @@ function AccountScreen({ active }: { active: number }) {
           <Marker n={1} active={active} />
         </span>
       </div>
-      <div className="flex min-h-0 flex-1 flex-col gap-1.5 px-3.5 pt-1.5">
-        <p className="px-0.5 text-base font-semibold text-ink">Settings</p>
-
-        <div className="relative rounded-xl border border-line bg-surface px-2.5 py-2 pr-5">
-          <div className="flex items-center justify-between gap-2">
-            <span className="text-[0.625rem] text-ink-muted">Email address</span>
-            <span className="flex items-center gap-0.5 rounded-full bg-success-50 px-1.5 py-px text-[0.5625rem] font-semibold text-success-700">
-              <CheckCircleIcon className="h-2.5 w-2.5" /> Confirmed
+      <div className="flex min-h-0 flex-1 flex-col gap-1 px-3.5 pt-1 sm:gap-1.5">
+        <div className="relative flex items-center gap-2 px-0.5 pr-5">
+          <span className="flex h-7 w-7 items-center justify-center rounded-full bg-brand-50 text-[0.625rem] font-bold text-brand-700">
+            KA
+          </span>
+          <span className="min-w-0 flex-1">
+            <span className="block text-caption font-semibold leading-tight text-ink">Wallet</span>
+            <span className="flex items-center gap-1 truncate text-[0.5625rem] text-ink-muted">
+              you@example.com
+              <CheckCircleIcon className="h-2.5 w-2.5 shrink-0 text-success-700" />
             </span>
-          </div>
-          <p className="mt-0.5 truncate text-caption font-medium text-ink">you@example.com</p>
+          </span>
           <Marker n={2} active={active} />
         </div>
 
-        <div className="relative rounded-xl border border-line bg-surface px-2.5 py-2 pr-5">
-          <div className="flex items-center justify-between">
-            <span>
-              <span className="block text-[0.625rem] text-ink-muted">Password</span>
-              <span className="block text-caption leading-tight tracking-[0.2em] text-ink">••••••••••</span>
-            </span>
-            <span className="rounded-full border border-line-strong px-2 py-0.5 text-[0.5625rem] font-medium text-ink-soft">
-              Change
-            </span>
-          </div>
-          <p className="mt-0.5 text-[0.5625rem] leading-snug text-ink-muted">Changing it signs out other sessions.</p>
-          <Marker n={3} active={active} />
-        </div>
-
-        <div className="relative flex items-center justify-between rounded-xl border border-line bg-surface px-2.5 py-2 pr-5">
-          <span className="text-[0.625rem] text-ink-muted">Available balance</span>
-          <span className="tabular text-sm font-bold text-ink">{cedis(EXAMPLE_BALANCE)}</span>
+        <div className="relative rounded-2xl bg-gradient-to-br from-[#0B63B6] to-[#137A4E] p-2.5 pr-6 text-white sm:p-3 shadow-[0_12px_24px_-12px_rgba(8,120,209,0.8)]">
+          <p className="text-[0.625rem] text-white/75">Available balance</p>
+          <p className="tabular text-2xl font-extrabold leading-tight tracking-tight">{cedis(EXAMPLE_BALANCE)}</p>
+          <p className="mt-0.5 text-[0.5625rem] text-white/70">Spending limits apply</p>
           <Marker n={4} active={active} />
         </div>
 
-        <p className="mt-0.5 px-0.5 text-[0.625rem] font-medium text-ink-soft">Recent transactions</p>
+        <div className="relative flex items-center justify-between rounded-xl border border-line bg-surface px-2.5 py-1.5 pr-5">
+          <span className="text-[0.625rem] text-ink-muted">Password</span>
+          <span className="text-caption tracking-[0.2em] text-ink">••••••••</span>
+          <Marker n={3} active={active} />
+        </div>
+
+        <p className="mt-0.5 px-0.5 text-[0.625rem] font-medium text-ink-soft">Recent activity</p>
         <div className="divide-y divide-line rounded-xl border border-line bg-surface">
-          <div className="relative flex items-center gap-2 px-2.5 py-1.5 pr-5">
-            <span className="flex h-5 w-5 shrink-0 items-center justify-center rounded-full bg-success-50 text-success-700">
-              <PlusIcon className="h-2.5 w-2.5" />
-            </span>
-            <span className="min-w-0 flex-1">
-              <span className="block text-[0.6875rem] font-medium leading-tight text-ink">Deposit</span>
-              <span className="block truncate text-[0.5625rem] text-ink-muted">Mobile Money</span>
-            </span>
-            <span className="tabular text-[0.6875rem] font-semibold text-success-700">
-              {signedCedis(EXAMPLE_TOPUP, "CREDIT")}
-            </span>
-            <Marker n={5} active={active} />
-          </div>
-          <div className="relative flex items-center gap-2 px-2.5 py-1.5 pr-5">
-            <ServiceLogo name="TikTok" src="/service-icons/tiktok.svg" slug="tiktok" size="xs" className="!h-5 !w-5" />
-            <span className="min-w-0 flex-1">
-              <span className="block text-[0.6875rem] font-medium leading-tight text-ink">Purchase</span>
-              <span className="block truncate text-[0.5625rem] text-ink-muted">TikTok · US</span>
-            </span>
-            <span className="tabular text-[0.6875rem] font-semibold text-ink">
-              {signedCedis(EXAMPLE_PURCHASE, "DEBIT")}
-            </span>
-            <Marker n={6} active={active} />
-          </div>
+          <Activity
+            icon={<PlusIcon className="h-2.5 w-2.5" />}
+            title="Deposit"
+            note="MoMo · confirmed"
+            amount={signedCedis(EXAMPLE_TOPUP, "CREDIT")}
+            credit
+            marker={<Marker n={5} active={active} />}
+          />
+          <Activity
+            icon={<ServiceLogo name="TikTok" src="/service-icons/tiktok.svg" slug="tiktok" size="xs" className="!h-5 !w-5" />}
+            title="Purchase"
+            note="TikTok · US number"
+            amount={signedCedis(EXAMPLE_PURCHASE, "DEBIT")}
+            marker={<Marker n={6} active={active} />}
+          />
+          <Activity
+            icon={<PlusIcon className="h-2.5 w-2.5" />}
+            title="Refund"
+            note="No code arrived"
+            amount={signedCedis(EXAMPLE_PURCHASE, "CREDIT")}
+            credit
+          />
         </div>
       </div>
-      <BottomNav active="account" />
+      <BottomNav active="wallet" />
       <HomeIndicator />
     </>
+  );
+}
+
+function Activity({
+  icon,
+  title,
+  note,
+  amount,
+  credit,
+  marker,
+}: {
+  icon: React.ReactNode;
+  title: string;
+  note: string;
+  amount: string;
+  credit?: boolean;
+  marker?: React.ReactNode;
+}) {
+  return (
+    <div className="relative flex items-center gap-2 px-2.5 py-1 pr-5 sm:py-1.5">
+      <span className="flex h-5 w-5 shrink-0 items-center justify-center overflow-hidden rounded-full bg-success-50 text-success-700">
+        {icon}
+      </span>
+      <span className="min-w-0 flex-1">
+        <span className="block text-[0.6875rem] font-medium leading-tight text-ink">{title}</span>
+        <span className="block truncate text-[0.5625rem] text-ink-muted">{note}</span>
+      </span>
+      <span className={cn("tabular text-[0.6875rem] font-semibold", credit ? "text-success-700" : "text-ink")}>
+        {amount}
+      </span>
+      {marker}
+    </div>
   );
 }
 

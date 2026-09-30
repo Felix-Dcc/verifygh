@@ -60,6 +60,13 @@ const config: Config = {
         // The green band behind the homepage hero and closing call to action:
         // white text sits on it in both themes.
         band: { DEFAULT: tone("band"), deep: tone("band-deep") },
+        // The homepage's night-to-day palette (hero, the privacy section, the
+        // close). Fixed in both themes: these surfaces are always dark, and
+        // the blends into the page use the --c-sky-* ramp in globals.css.
+        navy: { DEFAULT: "#071426", deep: "#050B18" },
+        azure: "#0878D1",
+        aqua: "#28C7F7",
+        leaf: { DEFAULT: "#20B26B", light: "#65D99A" },
         brand: scale("brand", [50, 100, 200, 300, 400, 500, 600, 700, 800, 900]),
         gold: scale("gold", [100, 300, 500, 700]),
         danger: { ...scale("danger", [50, 200, 500, 700]), solid: tone("danger-solid") },

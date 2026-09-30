@@ -13,45 +13,58 @@ const FAQ_ITEMS: { question: string; answer: React.ReactNode }[] = [
     question: "What is VerifyGH?",
     answer: (
       <>
-        VerifyGH is a Ghanaian payment and access layer for supported phone verification services.
-        You top up a wallet with Mobile Money in cedis, and we handle the purchase with our
-        authorised upstream provider on your behalf - so you never need a foreign card or crypto.
+        VerifyGH gives you a US phone number to receive a verification code, paid for in cedis. You
+        top up a wallet with Mobile Money, and we buy the number from our authorised upstream
+        provider on your behalf - so you never need a foreign card or crypto.
       </>
     ),
   },
   {
-    question: "How do I pay?",
+    question: "How does SMS verification work?",
     answer: (
       <>
-        With Mobile Money. Enter your number and an amount, approve the prompt on your phone, and
-        your VerifyGH wallet is credited. You then spend that balance on verification numbers.
+        Choose the service you are signing up to and pay its price from your wallet. A US number
+        is assigned to your order: enter it in the app and ask for a code. The SMS lands on your
+        order the moment it arrives, ready to copy.
       </>
     ),
   },
   {
-    question: "Can I use MTN MoMo?",
-    answer: <>Yes. MTN Mobile Money is supported.</>,
-  },
-  {
-    question: "Can I use Telecel Cash or AT Money?",
+    question: "How quickly will I receive my code?",
     answer: (
       <>
-        Yes. Telecel Cash and AT Money are supported alongside MTN. We fill in your network from
-        your number, and you can change it if you have moved networks. The live list of supported
-        networks is always shown on the Add funds screen.
+        As soon as the app sends it - the code appears on your order the moment it reaches the
+        number, without refreshing. How quickly an app sends depends on the app. If nothing
+        arrives before the number expires, the full price goes back to your wallet.
       </>
     ),
   },
   {
-    question: "Do I need a Visa or Mastercard?",
-    answer: <>No. Mobile Money is all you need. We do not ask for card details at all.</>,
-  },
-  {
-    question: "Do I need cryptocurrency?",
+    question: "How do I fund my wallet?",
     answer: (
       <>
-        No. You never touch crypto, USD or an exchange. You pay in cedis and you see prices in
-        cedis. The currency conversion happens on our side.
+        With Mobile Money. Enter an amount and your number, approve the prompt on your phone, and
+        your wallet is credited once the network confirms the payment. You then spend that balance
+        on numbers.
+      </>
+    ),
+  },
+  {
+    question: "Can I pay with Mobile Money?",
+    answer: (
+      <>
+        Yes - MTN Mobile Money, Telecel Cash and AT Money. We fill in your network from your
+        number, and you can change it if you have moved networks. The live list is always on the
+        Add funds screen.
+      </>
+    ),
+  },
+  {
+    question: "Do you support Visa and Mastercard?",
+    answer: (
+      <>
+        Not at the moment. Top-ups are by Mobile Money only, so we never ask for card details. You
+        do not need crypto or dollars either - every price is in cedis.
       </>
     ),
   },
@@ -59,18 +72,38 @@ const FAQ_ITEMS: { question: string; answer: React.ReactNode }[] = [
     question: "How long does a verification number last?",
     answer: (
       <>
-        It depends on the service, and the exact window is shown on your order screen with a live
+        It depends on the service, and the exact window is shown on your order with a live
         countdown - typically around 20 minutes. Use the number promptly once it is assigned.
       </>
     ),
   },
   {
-    question: "What happens if I do not receive a code?",
+    question: "Can I rent a number?",
     answer: (
       <>
-        If the number expires without a verification code arriving, the order is closed
-        automatically and the full amount is returned to your VerifyGH wallet. You do not need to
-        contact anyone for this - it happens on its own.
+        Not for the long term: each number is bought for a verification. When a service allows the
+        same number to receive another code, your order offers it again - as a new order with its
+        own price - for as long as that window is open.
+      </>
+    ),
+  },
+  {
+    question: "Is my personal phone number protected?",
+    answer: (
+      <>
+        Yes. You give the app our US number, not yours. Your own number is only used for your
+        Mobile Money top-ups, where it goes to the payment provider so it can send you the prompt.
+        We never see or store your MoMo PIN.
+      </>
+    ),
+  },
+  {
+    question: "What happens if I don't receive an SMS?",
+    answer: (
+      <>
+        If the number expires without a code arriving, the order is closed automatically and the
+        full amount is returned to your VerifyGH wallet. You do not need to contact anyone - it
+        happens on its own.
       </>
     ),
   },
@@ -86,28 +119,17 @@ const FAQ_ITEMS: { question: string; answer: React.ReactNode }[] = [
     ),
   },
   {
-    question: "Which services are supported?",
+    question: "Can I use VerifyGH outside Ghana?",
     answer: (
       <>
-        Only the services our upstream provider actually offers, and only while they are in stock.
-        The{" "}
-        <Link href="/services" className="font-medium text-brand-700 underline">
-          services page
-        </Link>{" "}
-        shows the live list with real prices. We do not promise a service we cannot supply.
+        The website works wherever you are, but wallets are topped up with Ghanaian Mobile Money
+        (MTN, Telecel Cash or AT Money) and every price is in cedis.
       </>
     ),
   },
   {
-    question: "Is my payment secure?",
-    answer: (
-      <>
-        Payments are collected by a licensed Ghanaian payment provider - we never see or store your
-        MoMo PIN. A payment is only credited after we verify a signed confirmation from that
-        provider directly. Every movement of money is recorded in an immutable ledger tied to your
-        account.
-      </>
-    ),
+    question: "Do you provide an API?",
+    answer: <>Not yet. VerifyGH is used through this website, on your phone or your computer.</>,
   },
   {
     question: "What can I not use VerifyGH for?",
@@ -127,9 +149,9 @@ const FAQ_ITEMS: { question: string; answer: React.ReactNode }[] = [
 
 /** The questions people bring up first, as they would put it - each opens its answer below. */
 const ASKED = [
-  { question: "How do I pay?", label: "Can I pay with MoMo?" },
-  { question: "What happens if I do not receive a code?", label: "What if no code arrives?" },
-  { question: "Do I need a Visa or Mastercard?", label: "Do I need a card?" },
+  { question: "Can I pay with Mobile Money?", label: "Can I pay with MoMo?" },
+  { question: "What happens if I don't receive an SMS?", label: "What if no code arrives?" },
+  { question: "Is my personal phone number protected?", label: "Is my number private?" },
   { question: "How long does a verification number last?", label: "How long does a number last?" },
 ];
 
@@ -169,12 +191,11 @@ export function Faq({ embedded = false }: { embedded?: boolean }) {
       <div className="container-page grid grid-cols-1 gap-10 py-16 sm:py-24 lg:grid-cols-12 lg:gap-14">
         <Reveal className="lg:col-span-5">
           <h2 id="faq-heading" className="section-title">
-            Questions?
-            <br />
-            We&apos;ve got answers.
+            Questions people ask
           </h2>
           <p className="section-lead">
-            Straight answers about paying, numbers and refunds. Tap a question to jump to it.
+            Everything you need to know before your first verification. Tap a question to jump to
+            its answer.
           </p>
 
           {/* Phones: the questions as a row of bubbles */}
