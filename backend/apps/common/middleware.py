@@ -1,10 +1,16 @@
-"""Per-request context: a request id that threads through every log line."""
+"""Per-request context, client IP resolution and the Cloudflare origin lock."""
 
 from __future__ import annotations
 
 import contextvars
+import hmac
+import ipaddress
+import json
+import logging
 import time
 import uuid
+
+logger = logging.getLogger("verifygh.edge")
 
 _context: contextvars.ContextVar[dict] = contextvars.ContextVar("request_context", default={})
 
@@ -13,8 +19,50 @@ def get_request_context() -> dict:
     return _context.get()
 
 
+#: Set by a Cloudflare Request Header Transform Rule to CLOUDFLARE_ORIGIN_SECRET
+#: on every request it forwards (docs/CLOUDFLARE.md). Cloudflare overwrites any
+#: value a visitor sends, so only traffic that passed through it can carry the
+#: right one. Names starting cf- are reserved by Cloudflare, hence this name.
+CLOUDFLARE_ORIGIN_META = "HTTP_X_VERIFYGH_ORIGIN"
+
+#: Railway's own health checks reach the container directly, never through
+#: Cloudflare, and must never be refused.
+RAILWAY_HEALTHCHECK_HOST = "healthcheck.railway.app"
+
+
+def came_through_cloudflare(request) -> bool:
+    """Whether this request provably passed through our Cloudflare zone."""
+    from django.conf import settings
+
+    if getattr(settings, "CLOUDFLARE_MODE", "off") == "off":
+        return False
+    secret = getattr(settings, "CLOUDFLARE_ORIGIN_SECRET", "") or ""
+    given = request.META.get(CLOUDFLARE_ORIGIN_META, "") or ""
+    return bool(secret and given) and hmac.compare_digest(given.encode(), secret.encode())
+
+
+def _cloudflare_client_ip(request) -> str:
+    """CF-Connecting-IP, but only on a request proven to come from Cloudflare.
+
+    Cloudflare sends it "only on the traffic from Cloudflare's edge to your
+    origin". Anyone reaching the origin directly could write it themselves, so
+    it is believed only alongside the origin secret.
+    """
+    if not came_through_cloudflare(request):
+        return ""
+    value = (request.META.get("HTTP_CF_CONNECTING_IP", "") or "").strip()
+    try:
+        return str(ipaddress.ip_address(value))
+    except ValueError:
+        return ""
+
+
 def get_client_ip(request) -> str:
     """The client's address, as far as it can be trusted.
+
+    Behind Cloudflare (CLOUDFLARE_MODE report/enforce, request carrying the
+    origin secret) that is CF-Connecting-IP. Otherwise it is read from
+    X-Forwarded-For as below.
 
     X-Forwarded-For is written left to right: the client first, then each
     proxy appends the address it received from. Everything left of our own
@@ -26,6 +74,10 @@ def get_client_ip(request) -> str:
     limits - a forgeable IP would poison all four.
     """
     from django.conf import settings
+
+    via_cloudflare = _cloudflare_client_ip(request)
+    if via_cloudflare:
+        return via_cloudflare
 
     remote_addr = request.META.get("REMOTE_ADDR", "") or ""
     proxies = int(getattr(settings, "TRUSTED_PROXY_COUNT", 0) or 0)
@@ -57,6 +109,49 @@ class RequestContextMiddleware:
         response["X-Request-ID"] = request_id
         response["X-Response-Time-ms"] = f"{(time.monotonic() - started) * 1000:.0f}"
         return response
+
+
+class CloudflareOriginMiddleware:
+    """Only traffic that came through Cloudflare reaches the application.
+
+    CLOUDFLARE_MODE:
+      off     - nothing checked (the default, and the state before DNS moves).
+      report  - requests without the origin secret are logged, not refused.
+                Use it right after the DNS move to confirm every route carries
+                the header before switching to enforce.
+      enforce - requests without it get 403: the Railway addresses
+                (*.up.railway.app) no longer bypass Cloudflare's WAF and bot
+                protection, and CF-Connecting-IP cannot be forged.
+
+    Railway's health checks are always let through.
+    """
+
+    def __init__(self, get_response):
+        self.get_response = get_response
+
+    def __call__(self, request):
+        from django.conf import settings
+        from django.http import HttpResponse
+
+        mode = getattr(settings, "CLOUDFLARE_MODE", "off")
+        if mode == "off" or came_through_cloudflare(request) or _is_railway_healthcheck(request):
+            return self.get_response(request)
+
+        logger.warning("request_not_via_cloudflare", extra={
+            "mode": mode, "path": request.path[:120],
+            "host": (request.META.get("HTTP_HOST", "") or "")[:80],
+        })
+        if mode != "enforce":
+            return self.get_response(request)
+        return HttpResponse(
+            json.dumps({"error": {"code": "FORBIDDEN", "message": "Forbidden."}}),
+            status=403, content_type="application/json",
+        )
+
+
+def _is_railway_healthcheck(request) -> bool:
+    host = (request.META.get("HTTP_HOST", "") or "").split(":")[0].lower()
+    return host == RAILWAY_HEALTHCHECK_HOST
 
 
 def bind_user(user) -> None:

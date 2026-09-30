@@ -202,6 +202,17 @@ if VERIFYGH["VERIFICATION_PROVIDER"] == "mock" and not env_bool(
         "ALLOW_MOCK_VERIFICATION_IN_PRODUCTION=true for a non-public staging stack."
     )
 
+# The Cloudflare origin lock: a mode we do not know, or a lock without a
+# strong secret, would look protected while protecting nothing.
+if CLOUDFLARE_MODE not in {"off", "report", "enforce"}:  # noqa: F405
+    _problems.append(f"CLOUDFLARE_MODE={CLOUDFLARE_MODE} must be off, report or enforce.")  # noqa: F405
+elif CLOUDFLARE_MODE != "off" and len(CLOUDFLARE_ORIGIN_SECRET) < 32:  # noqa: F405
+    _problems.append(
+        "CLOUDFLARE_MODE is on but CLOUDFLARE_ORIGIN_SECRET is missing or shorter than 32 "
+        "characters. Generate a long random value and set it in both Railway and the "
+        "Cloudflare Transform Rule."
+    )
+
 # A real provider without its credentials fails here, at boot, rather than at
 # the first customer's purchase - and never falls back to anything else.
 _VERIFICATION_CREDENTIALS = {

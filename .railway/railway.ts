@@ -182,6 +182,11 @@ function backendEnv(databaseUrl: VariableValue, redisUrl: VariableValue) {
     TEXTVERIFIED_BASE_URL: preserve(),
     // Optional: the whsec_ secret from TextVerified's webhook settings.
     TEXTVERIFIED_WEBHOOK_SECRET: preserve(),
+    // Cloudflare origin lock (docs/CLOUDFLARE.md): off until the DNS is on
+    // Cloudflare, then report, then enforce. The secret is the value
+    // Cloudflare's Transform Rule sets on X-VerifyGH-Origin.
+    CLOUDFLARE_MODE: preserve(),
+    CLOUDFLARE_ORIGIN_SECRET: preserve(),
     EXCHANGE_RATE_API_KEY: preserve(),
     // Set this and verification emails start arriving. Without it the API
     // refuses to boot, rather than writing them to the container log where
@@ -287,6 +292,13 @@ export default defineRailway(() => {
       // Where the Railway-generated hostname redirects to; signing in cannot
       // work on that hostname (see frontend/src/middleware.ts).
       NEXT_PUBLIC_SITE_ORIGIN: `https://${WEB_DOMAIN}`,
+      // Server-side only (read by middleware, never bundled for the browser):
+      // the same origin lock as the API. See docs/CLOUDFLARE.md.
+      CLOUDFLARE_MODE: preserve(),
+      CLOUDFLARE_ORIGIN_SECRET: preserve(),
+      // Public by design: the Turnstile site key. Setting it also allows
+      // https://challenges.cloudflare.com in the Content-Security-Policy.
+      NEXT_PUBLIC_TURNSTILE_SITE_KEY: preserve(),
     },
   });
 

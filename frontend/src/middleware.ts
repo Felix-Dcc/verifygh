@@ -18,9 +18,19 @@ import { NextResponse, type NextRequest } from "next/server";
  *   style is a far smaller risk than inline script: it cannot execute.
  * - In development only, `'unsafe-eval'` and `ws:` are allowed, because
  *   hot-module replacement needs both. Neither is present in production.
+ *
+ * Cloudflare Turnstile, once a site key is configured: its `api.js` loads with
+ * our nonce (which `'strict-dynamic'` honours), and its challenge runs in an
+ * iframe from https://challenges.cloudflare.com - the one origin allowed in
+ * `frame-src`, as Cloudflare's CSP guidance specifies. Without a site key
+ * nothing is relaxed.
  */
 
 const isDev = process.env.NODE_ENV === "development";
+
+const TURNSTILE_ORIGIN = process.env.NEXT_PUBLIC_TURNSTILE_SITE_KEY
+  ? "https://challenges.cloudflare.com"
+  : "";
 
 /** The API origin, so `connect-src` does not have to be a wildcard. */
 function apiOrigin(): string {
@@ -41,6 +51,8 @@ function buildCsp(nonce: string): string {
       "'self'",
       `'nonce-${nonce}'`,
       "'strict-dynamic'",
+      // Ignored by CSP3 browsers under 'strict-dynamic'; lets older ones load it.
+      ...(TURNSTILE_ORIGIN ? [TURNSTILE_ORIGIN] : []),
       ...(isDev ? ["'unsafe-eval'"] : []),
     ],
     "style-src": ["'self'", "'unsafe-inline'"],
@@ -51,7 +63,7 @@ function buildCsp(nonce: string): string {
     "form-action": ["'self'"],
     // Clickjacking: this app moves money, so it is never framed.
     "frame-ancestors": ["'none'"],
-    "frame-src": ["'none'"],
+    "frame-src": TURNSTILE_ORIGIN ? [TURNSTILE_ORIGIN] : ["'none'"],
     "object-src": ["'none'"],
     "base-uri": ["'self'"],
     "manifest-src": ["'self'"],
@@ -95,15 +107,63 @@ function legacyHostRedirect(request: NextRequest): NextResponse | null {
   return NextResponse.redirect(target, 308);
 }
 
+/**
+ * Only traffic that came through Cloudflare reaches the site (docs/CLOUDFLARE.md).
+ *
+ * A Cloudflare Transform Rule sets `X-VerifyGH-Origin` to a secret on every
+ * request it forwards, overwriting anything a visitor sent. Without it, a
+ * request reached Railway directly - around Cloudflare's WAF and bot checks.
+ *
+ * CLOUDFLARE_MODE: off (nothing checked), report (logged, not refused) or
+ * enforce (403). Server-side variables only: the secret never reaches a
+ * browser bundle. Railway's health check is always let through.
+ */
+const CLOUDFLARE_MODE = (process.env.CLOUDFLARE_MODE ?? "off").trim().toLowerCase();
+const CLOUDFLARE_ORIGIN_SECRET = process.env.CLOUDFLARE_ORIGIN_SECRET ?? "";
+const ORIGIN_HEADER = "x-verifygh-origin";
+
+function sameSecret(given: string, secret: string): boolean {
+  // Constant time in the length of the secret.
+  let diff = given.length ^ secret.length;
+  for (let i = 0; i < secret.length; i++) {
+    diff |= (given.charCodeAt(i) || 0) ^ secret.charCodeAt(i);
+  }
+  return diff === 0;
+}
+
+function originCheck(request: NextRequest): NextResponse | null {
+  if (CLOUDFLARE_MODE === "off") return null;
+  const host = (request.headers.get("host") ?? "").split(":")[0].toLowerCase();
+  if (host === "healthcheck.railway.app") return null;
+  const given = request.headers.get(ORIGIN_HEADER) ?? "";
+  if (CLOUDFLARE_ORIGIN_SECRET && sameSecret(given, CLOUDFLARE_ORIGIN_SECRET)) return null;
+
+  console.warn(
+    JSON.stringify({
+      event: "request_not_via_cloudflare",
+      mode: CLOUDFLARE_MODE,
+      host: host.slice(0, 80),
+      path: request.nextUrl.pathname.slice(0, 120),
+    }),
+  );
+  if (CLOUDFLARE_MODE !== "enforce") return null;
+  return new NextResponse("Forbidden", { status: 403 });
+}
+
 export function middleware(request: NextRequest) {
   const redirect = legacyHostRedirect(request);
   if (redirect) return redirect;
+
+  const refused = originCheck(request);
+  if (refused) return refused;
 
   const nonce = Buffer.from(crypto.randomUUID()).toString("base64");
   const csp = buildCsp(nonce);
 
   // Next reads the nonce from the request-side header to stamp its scripts.
   const requestHeaders = new Headers(request.headers);
+  // The origin secret has done its job; the app never needs to see it.
+  requestHeaders.delete(ORIGIN_HEADER);
   requestHeaders.set("x-nonce", nonce);
   requestHeaders.set("Content-Security-Policy", csp);
 

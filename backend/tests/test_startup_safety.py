@@ -52,6 +52,7 @@ SAFE = {
 #: Variables that must not leak in from the developer's shell.
 SCRUB = set(SAFE) | {"DEBUG", "MOCK_PAYMENT_SECRET", "REQUIRE_POSTGRES", "DB_POOL_MODE",
                     "TEXTVERIFIED_BASE_URL", "TEXTVERIFIED_WEBHOOK_SECRET", "ONLINESIM_BASE_URL",
+                    "CLOUDFLARE_MODE", "CLOUDFLARE_ORIGIN_SECRET",
                     "EMAIL_HOST", "EMAIL_HOST_USER", "EMAIL_HOST_PASSWORD",
                     "REQUIRE_EMAIL_VERIFICATION_FOR_PURCHASE",
                     "DB_CONN_MAX_AGE", "DB_SSLROOTCERT", "HUBTEL_CLIENT_ID",
@@ -107,6 +108,13 @@ UNSAFE = [
     ("onlinesim without api key", {"VERIFICATION_PROVIDER": "onlinesim"}, "ONLINESIM_API_KEY"),
     ("unknown verification provider", {"VERIFICATION_PROVIDER": "numbersrus"},
      "not a provider this codebase has an adapter for"),
+    # An origin lock that cannot actually lock: looks protected, protects nothing.
+    ("unknown cloudflare mode", {"CLOUDFLARE_MODE": "maybe"}, "must be off, report or enforce"),
+    ("cloudflare lock without a secret", {"CLOUDFLARE_MODE": "enforce"},
+     "CLOUDFLARE_ORIGIN_SECRET"),
+    ("cloudflare lock with a short secret",
+     {"CLOUDFLARE_MODE": "report", "CLOUDFLARE_ORIGIN_SECRET": "short"},
+     "CLOUDFLARE_ORIGIN_SECRET"),
     ("proxy count unset", {"TRUSTED_PROXY_COUNT": None}, "TRUSTED_PROXY_COUNT"),
     # Email verification gates every purchase. A backend that delivers nothing
     # does not switch that gate off, it makes it impossible to pass - while
@@ -148,6 +156,11 @@ def test_production_refuses_to_boot(label, changes, message):
     assert result.returncode != 0, f"{label}: booted anyway"
     assert "ImproperlyConfigured" in result.stderr
     assert message in result.stderr, result.stderr[-1500:]
+
+
+def test_the_cloudflare_origin_lock_boots_with_a_strong_secret():
+    result = boot(CLOUDFLARE_MODE="enforce", CLOUDFLARE_ORIGIN_SECRET="c" * 48)
+    assert result.returncode == 0, result.stderr[-2000:]
 
 
 def test_debug_cannot_be_switched_on_by_the_environment():

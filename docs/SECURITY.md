@@ -234,6 +234,15 @@ Production (`config/settings/prod.py`) enforces HTTPS redirect, HSTS with preloa
 
 CORS is an explicit allowlist with credentials enabled. `*` is never valid here.
 
+### Behind Cloudflare
+
+See [CLOUDFLARE.md](CLOUDFLARE.md). The client IP comes from `CF-Connecting-IP`
+only on requests carrying the origin secret that Cloudflare's Transform Rule sets
+(`X-VerifyGH-Origin`); everything else falls back to `X-Forwarded-For` with
+`TRUSTED_PROXY_COUNT`. With `CLOUDFLARE_MODE=enforce`, both the API and the
+website refuse requests without that secret, so the Railway addresses cannot be
+used to go around Cloudflare. Rate limits key on the same resolved IP.
+
 ### Content-Security-Policy
 
 **Frontend** (`frontend/src/middleware.ts`) — a fresh nonce per request:

@@ -24,6 +24,17 @@ class ResilientThrottleMixin:
     protected by database constraints, not by throttles.
     """
 
+    def get_ident(self, request):
+        """Key rate limits on the same client IP as everything else.
+
+        DRF's own get_ident reads X-Forwarded-For by NUM_PROXIES alone. Behind
+        Cloudflare that is Cloudflare's address, and every customer on the same
+        edge would share one bucket - real people locked out, bots unaffected.
+        """
+        from apps.common.middleware import get_client_ip
+
+        return get_client_ip(request) or super().get_ident(request)
+
     def allow_request(self, request, view):
         try:
             return super().allow_request(request, view)

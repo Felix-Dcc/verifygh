@@ -88,6 +88,9 @@ INSTALLED_APPS = [
 
 MIDDLEWARE = [
     "apps.common.middleware.RequestContextMiddleware",
+    # Before anything that does work: an unverified request in enforce mode
+    # stops here.
+    "apps.common.middleware.CloudflareOriginMiddleware",
     "apps.common.security.SecurityHeadersMiddleware",
     "corsheaders.middleware.CorsMiddleware",
     "django.middleware.security.SecurityMiddleware",
@@ -226,6 +229,16 @@ STORAGES = {
 #: of the header - the only part a client cannot forge. 0 means "trust no
 #: header, use the socket address". Render and most PaaS load balancers: 1.
 TRUSTED_PROXY_COUNT = env_int("TRUSTED_PROXY_COUNT", 0)
+
+# -- Cloudflare edge (docs/CLOUDFLARE.md) -------------------------------------
+# off: no Cloudflare assumptions. report: requests carrying the origin secret
+# are trusted as Cloudflare's (client IP from CF-Connecting-IP); others are
+# logged. enforce: others are refused. Move off -> report -> enforce only after
+# the DNS points at Cloudflare and the Transform Rule adds the header.
+CLOUDFLARE_MODE = (env("CLOUDFLARE_MODE", "off") or "off").strip().lower()
+# The value Cloudflare's Transform Rule sets on X-VerifyGH-Origin. A secret:
+# Railway and Cloudflare only, never committed, never sent to the browser.
+CLOUDFLARE_ORIGIN_SECRET = env("CLOUDFLARE_ORIGIN_SECRET", "") or ""
 
 REST_FRAMEWORK = {
     # DRF's default (None) uses the *entire* client-supplied X-Forwarded-For as
