@@ -29,7 +29,7 @@ from apps.common.errors import (
 )
 from apps.common.ids import payment_reference
 from apps.common.logging import mask_phone, redact_mapping
-from apps.common.money import quantize
+from apps.common.money import format_ghs, quantize
 from apps.payments.base import ChargeStatus
 from apps.payments.models import (
     AWAITING_PAYMENT_STATUSES,
@@ -123,12 +123,12 @@ def initiate_deposit(*, user, amount, phone: str, network: str, request=None,
     balance_cap = quantize(settings.VERIFYGH["MAX_WALLET_BALANCE"])
 
     if amount < minimum:
-        raise ValidationFailed(f"The minimum deposit is GHS {minimum}.")
+        raise ValidationFailed(f"The minimum deposit is {format_ghs(minimum)}.")
     if amount > maximum:
-        raise ValidationFailed(f"The maximum single deposit is GHS {maximum}.")
+        raise ValidationFailed(f"The maximum single deposit is {format_ghs(maximum)}.")
     if wallet.balance + amount > balance_cap:
         raise LimitExceeded(
-            f"That would take your balance above the GHS {balance_cap} limit.",
+            f"That would take your balance above the {format_ghs(balance_cap)} limit.",
             code="WALLET_CAP_EXCEEDED",
         )
 
@@ -729,7 +729,7 @@ def _credit_payment(payment: Payment, event) -> Payment:
             payment.user,
             event="PAYMENT_SUCCESSFUL",
             title="Payment received",
-            body=f"Your wallet has been credited with GHS {credited_amount}.",
+            body=f"Your wallet has been credited with {format_ghs(credited_amount)}.",
             channels=("EMAIL", "IN_APP"),
             context={"amount": str(credited_amount), "reference": payment.reference},
             metadata={"payment_reference": payment.reference},

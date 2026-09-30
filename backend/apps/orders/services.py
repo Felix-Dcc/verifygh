@@ -38,7 +38,7 @@ from apps.common.errors import (
     TermsNotAccepted,
 )
 from apps.common.ids import order_reference, refund_reference
-from apps.common.money import TWO_PLACES, ZERO, quantize, round_to
+from apps.common.money import TWO_PLACES, ZERO, format_ghs, quantize, round_to
 from apps.orders.models import (
     ACTIVE_ORDER_STATUSES,
     ALLOWED_TRANSITIONS,
@@ -197,7 +197,7 @@ def check_purchase_eligibility(user) -> None:
     ).aggregate(total=Sum("amount"))["total"] or quantize("0")
     if spent_today >= spend_cap:
         raise LimitExceeded(
-            f"You have reached the daily spending limit of GHS {spend_cap}.",
+            f"You have reached the daily spending limit of {format_ghs(spend_cap)}.",
             code="DAILY_SPEND_LIMIT",
         )
 
@@ -478,10 +478,10 @@ def _place_order(*, user, offering, priced, idempotency_key: str, request=None,
                 status=OrderStatus.PROCESSING,
                 label=STATUS_LABELS[OrderStatus.PROCESSING],
                 detail=(
-                    f"GHS {charge.cash} debited from your wallet and "
-                    f"GHS {charge.promo} from your promotional credit."
+                    f"{format_ghs(charge.cash)} debited from your wallet and "
+                    f"{format_ghs(charge.promo)} from your promotional credit."
                     if charge.promo > 0
-                    else f"GHS {price} debited from your wallet."
+                    else f"{format_ghs(price)} debited from your wallet."
                 ),
             )
     except IntegrityError:
@@ -1038,7 +1038,7 @@ def issue_refund(order: Order, *, reason: str, amount=None, actor=None, note: st
                 order=order,
                 status=OrderStatus.REFUNDED,
                 label="Refunded",
-                detail=f"GHS {refund_amount} returned to your wallet.",
+                detail=f"{format_ghs(refund_amount)} returned to your wallet.",
                 is_system=actor is None,
                 actor=actor,
                 metadata={"reason": reason},
@@ -1060,7 +1060,7 @@ def issue_refund(order: Order, *, reason: str, amount=None, actor=None, note: st
         order.user,
         event="REFUND_ISSUED",
         title="Refund issued",
-        body=f"GHS {refund_amount} has been returned to your VerifyGH wallet.",
+        body=f"{format_ghs(refund_amount)} has been returned to your VerifyGH wallet.",
         channels=("EMAIL", "IN_APP"),
         context={"amount": str(refund_amount), "reference": order.reference},
         metadata={"order_reference": order.reference},

@@ -7,6 +7,7 @@ from rest_framework import serializers
 
 from apps.accounts.constants import MomoNetwork
 from apps.accounts.phone import InvalidPhoneNumber, detect_network, format_local, normalise_gh
+from apps.common.money import format_ghs
 from apps.payments.models import Payment
 
 
@@ -61,11 +62,11 @@ class DepositSerializer(serializers.Serializer):
         maximum = Decimal(str(settings.VERIFYGH["MAX_DEPOSIT"]))
         if attrs["amount"] < minimum:
             raise serializers.ValidationError(
-                {"amount": f"The minimum deposit is GHS {minimum}."}
+                {"amount": f"The minimum deposit is {format_ghs(minimum)}."}
             )
         if attrs["amount"] > maximum:
             raise serializers.ValidationError(
-                {"amount": f"The maximum single deposit is GHS {maximum}."}
+                {"amount": f"The maximum single deposit is {format_ghs(maximum)}."}
             )
         return attrs
 

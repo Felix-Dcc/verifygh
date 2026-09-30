@@ -29,6 +29,7 @@ from apps.audit.services import flag, record_admin_action, record_audit
 from apps.common.errors import Conflict, ServiceUnavailable, ValidationFailed
 from apps.common.ids import issue_reference, order_reference
 from apps.common.middleware import get_client_ip
+from apps.common.money import format_ghs
 from apps.numbers.models import (
     EXCLUDED_QUALITIES,
     OPEN_ISSUE_STATUSES,
@@ -521,7 +522,7 @@ def approve_refund(issue, *, admin, reason: str, request=None) -> VerificationIs
                     allowed_from=allowed_from, provider_report=provider_report)
     _notify(issue, "Refund approved",
             f"We reviewed your report on {issue.order.reference} and returned "
-            f"GHS {order.price} to your wallet.")
+            f"{format_ghs(order.price)} to your wallet.")
     return issue
 
 

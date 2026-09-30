@@ -42,5 +42,10 @@ def round_to(value, step: Decimal, ceiling: bool = False) -> Decimal:
 
 
 def format_ghs(value) -> str:
-    """Display helper used in emails and notifications."""
-    return f"₵{quantize(value):,.2f}"
+    """Money in customer-facing text - notifications, emails, error messages.
+
+    "GH₵ 1,250.00", exactly as the web app writes it (frontend lib/format.ts):
+    GH₵ rather than GHS or a bare ₵, a no-break space so the symbol never
+    wraps away from the figure, always two decimals.
+    """
+    return f"GH₵\u00a0{quantize(value):,.2f}"
