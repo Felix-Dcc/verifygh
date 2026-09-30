@@ -5,6 +5,7 @@ import * as React from "react";
 import useSWR, { mutate as globalMutate } from "swr";
 
 import { PageHeader } from "@/components/app-shell";
+import { BellArt } from "@/components/illustrations";
 import {
   AlertIcon,
   BellIcon,
@@ -149,7 +150,7 @@ export default function NotificationsPage() {
       ) : notifications.length === 0 ? (
         <Card>
           <EmptyState
-            icon={<BellIcon />}
+            art={<BellArt />}
             title="Nothing here yet"
             description="We will let you know when a payment lands, a number is assigned, or a code arrives."
           />

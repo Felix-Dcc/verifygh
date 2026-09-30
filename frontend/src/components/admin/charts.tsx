@@ -71,8 +71,8 @@ export function AreaChart({
       >
         <defs>
           <linearGradient id="area-fill" x1="0" y1="0" x2="0" y2="1">
-            <stop offset="0%" stopColor="#0F7A55" stopOpacity="0.20" />
-            <stop offset="100%" stopColor="#0F7A55" stopOpacity="0.02" />
+            <stop offset="0%" style={{ stopColor: "rgb(var(--c-brand-500))" }} stopOpacity="0.22" />
+            <stop offset="100%" style={{ stopColor: "rgb(var(--c-brand-500))" }} stopOpacity="0.02" />
           </linearGradient>
         </defs>
 
@@ -83,7 +83,7 @@ export function AreaChart({
             x2={width - padding.right}
             y1={padding.top + innerHeight * fraction}
             y2={padding.top + innerHeight * fraction}
-            stroke="#E3E8E5"
+            className="stroke-line"
             strokeWidth="1"
             vectorEffect="non-scaling-stroke"
           />
@@ -93,7 +93,7 @@ export function AreaChart({
         <path
           d={line}
           fill="none"
-          stroke="#0B6446"
+          className="stroke-brand-600"
           strokeWidth="2"
           strokeLinejoin="round"
           strokeLinecap="round"
@@ -119,19 +119,19 @@ export function AreaChart({
               x2={active.x}
               y1={padding.top}
               y2={padding.top + innerHeight}
-              stroke="#0B6446"
+              className="stroke-brand-600"
               strokeWidth="1"
               strokeDasharray="3 3"
               vectorEffect="non-scaling-stroke"
             />
-            <circle cx={active.x} cy={active.y} r="4" fill="#0B6446" stroke="white" strokeWidth="2" />
+            <circle cx={active.x} cy={active.y} r="4" className="fill-brand-600 stroke-surface" strokeWidth="2" />
           </>
         ) : null}
       </svg>
 
       {active ? (
         <div
-          className="pointer-events-none absolute -top-1 z-10 -translate-x-1/2 rounded-lg bg-ink px-2.5 py-1.5 text-xs text-white shadow-pop"
+          className="pointer-events-none absolute -top-1 z-10 -translate-x-1/2 rounded-lg bg-ink px-2.5 py-1.5 text-caption text-canvas shadow-pop"
           style={{ left: `${(active.x / width) * 100}%` }}
         >
           <p className="font-semibold">{formatValue(active.value)}</p>
@@ -166,9 +166,12 @@ export function BarChart({
 
   return (
     <figure>
-      <div className="flex items-end gap-1" style={{ height }} role="img" aria-label={label}>
+      {/* Columns stretch to the chart height so each bar's percentage height
+          has something to be a percentage of - with items-end they were
+          content-sized and every bar drew at 0px. */}
+      <div className="flex gap-1" style={{ height }} role="img" aria-label={label}>
         {series.map((point) => (
-          <div key={point.date} className="group flex flex-1 flex-col items-center justify-end">
+          <div key={point.date} className="group flex h-full flex-1 flex-col items-center justify-end">
             <span className="mb-1 text-2xs font-medium text-ink opacity-0 transition-opacity group-hover:opacity-100">
               {formatValue(point.value)}
             </span>

@@ -44,7 +44,7 @@ export function signedCedis(amount: string | number, direction?: "CREDIT" | "DEB
  * only - the stored text is left as it is.
  */
 export function moneyText(text: string): string {
-  return text.replace(/GHS\s?(?=\d)/g, "GH₵ ");
+  return text.replace(/\bGHS\s?(?=\d)/g, "GH₵ ");
 }
 
 const USD = new Intl.NumberFormat("en-US", {

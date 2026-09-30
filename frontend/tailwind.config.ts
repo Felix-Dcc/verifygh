@@ -10,71 +10,59 @@ import type { Config } from "tailwindcss";
  * danger, information). Neutral text colours are chosen for WCAG AA contrast
  * on both white and the page background - see docs/UI-AUDIT.md section 5.
  */
+
+/** A theme colour: the variable holds "R G B" so opacity modifiers still work. */
+function tone(name: string): string {
+  return `rgb(var(--c-${name}) / <alpha-value>)`;
+}
+
+function scale(name: string, steps: number[]): Record<number, string> {
+  return Object.fromEntries(steps.map((step) => [step, tone(`${name}-${step}`)]));
+}
+
 const config: Config = {
   content: ["./src/**/*.{ts,tsx}"],
+  // The theme is a class on <html>, set before first paint by the script in
+  // src/app/layout.tsx. Components rarely need `dark:` - the tokens switch.
+  darkMode: "class",
   theme: {
     extend: {
+      // Every colour is a CSS variable (src/app/globals.css) holding an "R G B"
+      // triplet, set once for light and once for dark. Components never name
+      // a theme: `bg-surface` is white in light mode and deep green-grey in dark.
       colors: {
-        // Page background, and the slightly deeper tone used for table heads,
-        // inset panels and hover rows.
-        canvas: "#F6F8F7",
-        sunken: "#F0F3F1",
-        surface: "#FFFFFF",
+        // Page background; the slightly different tone for table heads, inset
+        // panels and hover rows; cards; and floating things (menus, dialogs).
+        canvas: tone("canvas"),
+        sunken: tone("sunken"),
+        surface: tone("surface"),
+        raised: tone("raised"),
+        // Behind a dialog. Always used with an opacity (bg-scrim/50).
+        scrim: tone("scrim"),
         ink: {
-          DEFAULT: "#0F1B17",
-          // Secondary text: 10.4:1 on white.
-          soft: "#34433C",
-          // Supporting text, labels, metadata: 6.2:1 on white, 5.8:1 on canvas.
-          muted: "#56645D",
-          // Least important text - timestamps, placeholders: 4.8:1 on white.
-          faint: "#68766F",
+          DEFAULT: tone("ink"),
+          soft: tone("ink-soft"),
+          muted: tone("ink-muted"),
+          faint: tone("ink-faint"),
         },
         line: {
-          DEFAULT: "#E3E8E5",
-          strong: "#C9D2CD",
+          DEFAULT: tone("line"),
+          strong: tone("line-strong"),
         },
-        brand: {
-          50: "#EDF6F2",
-          100: "#D3E9DF",
-          200: "#A6D3BF",
-          300: "#6FB79A",
-          400: "#3D9A76",
-          500: "#0F7A55",
-          600: "#0B6446",
-          700: "#094F37",
-          800: "#073C2A",
-          900: "#052A1E",
+        // Filled primary actions. Separate from brand-600/700 because in dark
+        // mode a button fill must stay deep (white text on it) while brand
+        // text must turn light.
+        primary: {
+          DEFAULT: tone("primary"),
+          hover: tone("primary-hover"),
+          active: tone("primary-active"),
         },
-        gold: {
-          100: "#FBF2DC",
-          300: "#E9CE87",
-          500: "#C79A2E",
-          700: "#8F6D1B",
-        },
-        danger: {
-          50: "#FEF3F2",
-          200: "#FECDCA",
-          500: "#D92D20",
-          700: "#B42318",
-        },
-        success: {
-          50: "#ECFDF3",
-          200: "#ABEFC6",
-          500: "#17B26A",
-          700: "#067647",
-        },
-        warn: {
-          50: "#FFFAEB",
-          200: "#FEDF89",
-          500: "#F79009",
-          700: "#B54708",
-        },
-        info: {
-          50: "#EFF8FF",
-          200: "#B2DDFF",
-          500: "#2E90FA",
-          700: "#175CD3",
-        },
+        brand: scale("brand", [50, 100, 200, 300, 400, 500, 600, 700, 800, 900]),
+        gold: scale("gold", [100, 300, 500, 700]),
+        danger: { ...scale("danger", [50, 200, 500, 700]), solid: tone("danger-solid") },
+        success: scale("success", [50, 200, 500, 700]),
+        warn: scale("warn", [50, 200, 500, 700]),
+        info: scale("info", [50, 200, 500, 700]),
       },
       fontFamily: {
         // IBM Plex, self-hosted by next/font (src/app/layout.tsx). The system
@@ -122,13 +110,16 @@ const config: Config = {
         xl: "0.625rem",
         "2xl": "0.75rem",
         "3xl": "0.75rem",
+        // Phone mockups on the marketing pages only - never on product UI.
+        device: "2rem",
       },
       // Surfaces are separated by borders; shadow means "floating above the page".
+      // Defined per theme in globals.css - dark shadows are deeper and softer.
       boxShadow: {
-        card: "0 1px 0 rgba(15, 27, 23, 0.03)",
-        raised: "0 4px 12px rgba(15, 27, 23, 0.07), 0 1px 3px rgba(15, 27, 23, 0.05)",
-        pop: "0 16px 40px rgba(15, 27, 23, 0.14), 0 2px 8px rgba(15, 27, 23, 0.06)",
-        focus: "0 0 0 3px rgba(15, 122, 85, 0.2)",
+        card: "var(--shadow-card)",
+        raised: "var(--shadow-raised)",
+        pop: "var(--shadow-pop)",
+        focus: "0 0 0 3px rgb(var(--c-brand-500) / 0.25)",
       },
       transitionTimingFunction: {
         out: "cubic-bezier(0.16, 1, 0.3, 1)",

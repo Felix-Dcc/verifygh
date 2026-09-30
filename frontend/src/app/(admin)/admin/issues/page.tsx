@@ -253,7 +253,7 @@ function Metrics({ metrics }: { metrics: NumberIssueMetrics }) {
         <Breakdown title="By service" rows={metrics.by_service} />
         <Breakdown title="By provider" rows={metrics.by_provider} />
       </div>
-      <p className="text-xs text-ink-muted">{metrics.note}</p>
+      <p className="text-caption text-ink-muted">{metrics.note}</p>
     </div>
   );
 }
@@ -267,7 +267,7 @@ function Breakdown({ title, rows }: { title: string; rows: NumberIssueBreakdown[
       ) : (
         <table className="w-full text-sm">
           <thead>
-            <tr className="text-xs text-ink-muted">
+            <tr className="text-caption text-ink-muted">
               <th scope="col" className="py-1 text-left font-medium">Name</th>
               <th scope="col" className="py-1 text-right font-medium">Delivered</th>
               <th scope="col" className="py-1 text-right font-medium">Reuse reports</th>
@@ -507,7 +507,7 @@ function IssueDialog({
               {issue.history ? (
                 <div>
                   <p className="mb-2 text-sm font-semibold text-ink">This number&apos;s history with us</p>
-                  <p className="mb-2 text-xs text-ink-muted">
+                  <p className="mb-2 text-caption text-ink-muted">
                     Issued {issue.history.times_issued} time(s), {issue.history.reports} report(s),{" "}
                     {issue.history.other_reports_by_other_customers} from other customers. The
                     provider does not publish a number&apos;s history, so this only covers what
@@ -526,7 +526,7 @@ function IssueDialog({
                 </div>
               ) : null}
 
-              <p className="text-xs text-ink-muted">
+              <p className="text-caption text-ink-muted">
                 Customer: {issue.customer.orders} orders, {issue.customer.orders_with_code} with a
                 code, {issue.customer.reports} report(s), {issue.customer.remedies} refunded or
                 replaced. Joined {formatDateTime(issue.customer.joined)}.

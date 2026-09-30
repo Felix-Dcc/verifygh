@@ -40,7 +40,7 @@ export function Logo({
 }) {
   return (
     <span className={cn("inline-flex items-center gap-2.5", className)}>
-      <Logomark className={cn("h-8 w-8", tone === "light" ? "text-white" : "text-brand-600")} />
+      <Logomark className={cn("h-8 w-8", tone === "light" ? "text-white" : "text-primary")} />
       {showWordmark ? (
         <span
           className={cn(

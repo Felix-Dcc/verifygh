@@ -7,7 +7,8 @@ import useSWR from "swr";
 
 import { PageHeader } from "@/components/app-shell";
 import { CountryFlag } from "@/components/country-flag";
-import { ChevronRightIcon, ReceiptIcon, SearchIcon } from "@/components/icons";
+import { ChevronRightIcon, SearchIcon } from "@/components/icons";
+import { PhoneMessageArt, SearchArt } from "@/components/illustrations";
 import { OrderStatusRow } from "@/components/orders/order-row";
 import { ServiceLogo } from "@/components/service-logo";
 import {
@@ -113,7 +114,7 @@ function Orders() {
           <LoadError what="your orders" onRetry={() => mutate()} />
         ) : orders.length === 0 ? (
           <EmptyState
-            icon={<ReceiptIcon />}
+            art={debouncedSearch ? <SearchArt /> : <PhoneMessageArt />}
             title={
               debouncedSearch
                 ? "No orders match that search"

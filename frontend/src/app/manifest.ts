@@ -5,7 +5,7 @@ export default function manifest(): MetadataRoute.Manifest {
   return {
     name: "VerifyGH",
     short_name: "VerifyGH",
-    description: "Buy verification numbers with convenient Ghanaian payments.",
+    description: "US numbers for SMS verification codes, paid for in cedis with Mobile Money.",
     start_url: "/dashboard",
     scope: "/",
     display: "standalone",

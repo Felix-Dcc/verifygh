@@ -4,6 +4,7 @@ import Link from "next/link";
 import * as React from "react";
 
 import { useAuth } from "@/components/auth-provider";
+import { ThemeSwitcher } from "@/components/theme";
 import {
   GiftIcon,
   LogoutIcon,
@@ -74,7 +75,7 @@ export function AccountMenu() {
       >
         <span
           aria-hidden
-          className="flex h-7 w-7 items-center justify-center rounded-lg bg-brand-600 text-xs font-semibold text-white"
+          className="flex h-7 w-7 items-center justify-center rounded-lg bg-primary text-caption font-semibold text-white"
         >
           {initials(user.full_name, user.email)}
         </span>
@@ -100,13 +101,11 @@ export function AccountMenu() {
       {open ? (
         <div
           role="menu"
-          className="absolute right-0 z-50 mt-2 w-64 overflow-hidden rounded-xl border border-line bg-surface shadow-raised animate-fade-in"
+          className="absolute right-0 top-full z-50 mt-1.5 w-64 animate-fade-in overflow-hidden rounded-xl border border-line bg-raised shadow-pop"
         >
           <div className="border-b border-line px-4 py-3">
-            <p className="truncate text-sm font-semibold text-ink">
-              {user.full_name || "Your account"}
-            </p>
-            <p className="truncate text-xs text-ink-muted">{user.email}</p>
+            <p className="truncate text-sm font-medium text-ink">{user.full_name || "Your account"}</p>
+            <p className="truncate text-caption text-ink-muted">{user.email}</p>
           </div>
 
           <div className="py-1">
@@ -116,12 +115,17 @@ export function AccountMenu() {
                 href={link.href}
                 role="menuitem"
                 onClick={() => setOpen(false)}
-                className="flex items-center gap-2.5 px-4 py-2.5 text-sm text-ink-soft transition-colors hover:bg-sunken/60 hover:text-ink"
+                className="flex min-h-11 items-center gap-2.5 px-4 text-sm text-ink-soft transition-colors hover:bg-sunken hover:text-ink focus:bg-sunken focus:outline-none sm:min-h-9"
               >
                 <link.icon className="h-4 w-4 text-ink-faint" />
                 {link.label}
               </Link>
             ))}
+          </div>
+
+          <div className="flex items-center justify-between gap-3 border-t border-line px-4 py-2">
+            <span className="text-sm text-ink-soft">Theme</span>
+            <ThemeSwitcher compact />
           </div>
 
           <div className="border-t border-line py-1">
@@ -132,10 +136,10 @@ export function AccountMenu() {
                 setOpen(false);
                 void signOut();
               }}
-              className="flex w-full items-center gap-2.5 px-4 py-2.5 text-sm font-medium text-ink-soft transition-colors hover:bg-sunken/60 hover:text-ink"
+              className="flex min-h-11 w-full items-center gap-2.5 px-4 text-left text-sm text-ink-soft transition-colors hover:bg-sunken hover:text-ink focus:bg-sunken focus:outline-none sm:min-h-9"
             >
               <LogoutIcon className="h-4 w-4 text-ink-faint" />
-              Log out
+              Sign out
             </button>
           </div>
         </div>

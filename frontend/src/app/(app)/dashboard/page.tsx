@@ -8,7 +8,8 @@ import useSWR from "swr";
 import { PageHeader } from "@/components/app-shell";
 import { useAuth } from "@/components/auth-provider";
 import { CountryFlag } from "@/components/country-flag";
-import { ChevronRightIcon, ReceiptIcon, WalletIcon } from "@/components/icons";
+import { ChevronRightIcon } from "@/components/icons";
+import { PhoneMessageArt, StatementArt } from "@/components/illustrations";
 import { OrderStatusRow } from "@/components/orders/order-row";
 import { ServiceLogo } from "@/components/service-logo";
 import { TransactionRow } from "@/components/wallet/transaction-row";
@@ -218,7 +219,7 @@ function Dashboard() {
                 </p>
               ) : (
                 <EmptyState
-                  icon={<ReceiptIcon />}
+                  art={<PhoneMessageArt />}
                   title="No orders yet"
                   description="Your verification numbers will appear here, with their codes."
                   action={<ButtonLink href="/services" size="sm">Buy a number</ButtonLink>}
@@ -256,7 +257,7 @@ function Dashboard() {
                 <LoadError what="your transactions" onRetry={() => recentTransactions.mutate()} />
               ) : (recentTransactions.data?.results?.length ?? 0) === 0 ? (
                 <EmptyState
-                  icon={<WalletIcon />}
+                  art={<StatementArt />}
                   title="No transactions yet"
                   description="Deposits, purchases and refunds will be listed here."
                 />

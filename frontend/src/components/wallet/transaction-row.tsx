@@ -37,7 +37,7 @@ const ENTRY_ICONS: Record<LedgerEntryType, React.ComponentType<{ className?: str
  * own column.
  */
 export function entryTitle(entry: Transaction): string {
-  return entry.description.replace(/\s*\(?VGH-[A-Z0-9-]+\)?\s*$/, "") || entry.description;
+  return entry.description.replace(/\s*\(?\bVGH-[A-Z0-9-]+\)?\s*$/, "") || entry.description;
 }
 
 /** What kind of movement it was, at a glance: money in is green, the rest grey. */

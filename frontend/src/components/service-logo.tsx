@@ -61,10 +61,9 @@ export function ServiceLogo({
   if (missing) {
     return (
       <span
-        role="img"
-        aria-label={`${name} (no logo)`}
+        aria-hidden
         className={cn(
-          "inline-flex shrink-0 items-center justify-center rounded-[23%] border border-line bg-canvas text-ink-faint",
+          "inline-flex shrink-0 items-center justify-center rounded-[23%] bg-sunken text-ink-faint ring-1 ring-ink/10",
           SIZES[size],
           className,
         )}
@@ -81,7 +80,9 @@ export function ServiceLogo({
   return (
     <span
       className={cn(
-        "inline-flex shrink-0 overflow-hidden rounded-[23%] bg-line/50",
+        // One container for every logo: a hairline outline keeps a black tile
+        // (TikTok, X) visible on dark surfaces and a white one (Google) on light.
+        "inline-flex shrink-0 overflow-hidden rounded-[23%] bg-line/50 ring-1 ring-ink/10",
         SIZES[size],
         className,
       )}

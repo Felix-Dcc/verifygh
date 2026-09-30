@@ -3,35 +3,37 @@
 import Link from "next/link";
 import useSWR from "swr";
 
-import { ServiceLogo } from "@/components/service-logo";
+import { CountryFlag } from "@/components/country-flag";
 import { ArrowRightIcon } from "@/components/icons";
+import { AvailabilityLabel } from "@/components/marketplace/availability";
+import { ServiceLogo } from "@/components/service-logo";
 import { ButtonLink, Skeleton } from "@/components/ui/primitives";
 import { cedis } from "@/lib/format";
-import type { Service } from "@/lib/types";
+import type { MarketHome } from "@/lib/types";
 
 /**
- * Live availability on the landing page.
- *
- * Nothing here is hardcoded - it is the same catalogue and the same
- * server-computed prices the marketplace uses. If the catalogue is empty, the
- * section says so rather than showing a fictional price list.
+ * Popular services on the homepage: the same ranking and prices as the
+ * marketplace (services the team features, then what people actually bought
+ * in the last 30 days), live. If the catalogue is not reachable the section
+ * says so rather than showing a made-up price list.
  */
 export function FeaturedServices() {
-  const { data, isLoading, error } = useSWR<{ results: Service[] }>("/services/featured/");
-  const services = data?.results ?? [];
+  const { data, isLoading, error } = useSWR<MarketHome>("/marketplace/home/");
+  const rows = (data?.popular ?? []).filter((row) => !row.temporarily_unavailable).slice(0, 8);
+  const country = data?.countries.find((entry) => entry.code === data.country);
 
   return (
-    <section className="container-page py-16 sm:py-20" aria-labelledby="services-heading">
+    <section className="container-page py-16 sm:py-24" aria-labelledby="services-heading">
       <div className="flex flex-wrap items-end justify-between gap-4">
         <div className="max-w-xl">
           <h2
             id="services-heading"
             className="text-2xl font-semibold tracking-tight text-ink sm:text-3xl"
           >
-            Services and today&apos;s prices
+            Popular services
           </h2>
           <p className="mt-3 text-base text-ink-muted">
-            Live from our provider&apos;s stock. The price is what leaves your wallet.
+            Today&apos;s prices and stock. The price is exactly what leaves your wallet.
           </p>
         </div>
         <ButtonLink href="/services" variant="secondary" icon={<ArrowRightIcon className="h-4 w-4" />}>
@@ -40,16 +42,18 @@ export function FeaturedServices() {
       </div>
 
       {isLoading ? (
-        <div className="metric-group mt-8 grid-cols-1 sm:grid-cols-2 lg:grid-cols-4" aria-busy>
+        <ul className="mt-8 grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-4" aria-busy>
           {Array.from({ length: 8 }).map((_, index) => (
-            <div key={index} className="flex items-center gap-3 bg-surface p-4">
-              <Skeleton className="h-9 w-9 rounded-lg" />
-              <Skeleton className="h-3.5 flex-1" />
-              <Skeleton className="h-3.5 w-16" />
-            </div>
+            <li key={index} className="card flex items-center gap-3 p-4">
+              <Skeleton className="h-10 w-10 rounded-lg" />
+              <div className="flex-1 space-y-2">
+                <Skeleton className="h-3.5 w-24" />
+                <Skeleton className="h-3 w-16" />
+              </div>
+            </li>
           ))}
-        </div>
-      ) : error || services.length === 0 ? (
+        </ul>
+      ) : error || rows.length === 0 ? (
         <div className="card mt-8 p-6 text-center">
           <p className="text-sm font-medium text-ink">The catalogue is not available right now.</p>
           <p className="mt-1 text-sm text-ink-muted">
@@ -57,24 +61,34 @@ export function FeaturedServices() {
           </p>
         </div>
       ) : (
-        <ul className="metric-group mt-8 grid-cols-1 sm:grid-cols-2 lg:grid-cols-4">
-          {services.map((service) => (
-            <li key={service.slug} className="bg-surface">
+        <ul className="mt-8 grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-4">
+          {rows.map((row) => (
+            <li key={row.slug}>
               <Link
-                href={`/services?service=${service.slug}`}
-                className="flex min-h-16 items-center gap-3 px-4 py-3 transition-colors hover:bg-sunken/60"
+                href={`/services?service=${encodeURIComponent(row.slug)}&country=${data?.country ?? ""}`}
+                className="card group flex h-full flex-col gap-4 p-4 transition-colors hover:border-line-strong hover:bg-sunken/40"
               >
-                <ServiceLogo name={service.name} src={service.icon_url} slug={service.slug} size="sm" />
-                <span className="min-w-0 flex-1 truncate text-sm font-medium text-ink" title={service.name}>
-                  {service.name}
-                </span>
-                {service.available ? (
-                  <span className="tabular text-sm font-medium text-ink">
-                    {cedis(service.from_price)}
-                  </span>
-                ) : (
-                  <span className="text-caption text-ink-muted">Out of stock</span>
-                )}
+                <div className="flex items-center gap-3">
+                  <ServiceLogo name={row.name} src={row.icon_url} slug={row.slug} />
+                  <div className="min-w-0">
+                    <p className="truncate text-sm font-medium text-ink" title={row.name}>
+                      {row.name}
+                    </p>
+                    {country ? (
+                      <p className="flex items-center gap-1.5 text-caption text-ink-muted">
+                        <CountryFlag code={country.code} size="sm" />
+                        {country.name}
+                      </p>
+                    ) : null}
+                  </div>
+                </div>
+                <div className="mt-auto flex items-end justify-between gap-2">
+                  <div>
+                    <p className="tabular text-heading text-ink">{row.price ? cedis(row.price) : "—"}</p>
+                    <AvailabilityLabel availability={row.availability} count={row.available_count} />
+                  </div>
+                  <ArrowRightIcon className="h-4 w-4 text-ink-faint transition-transform group-hover:translate-x-0.5" />
+                </div>
               </Link>
             </li>
           ))}

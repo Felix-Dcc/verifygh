@@ -250,7 +250,7 @@ function RuleEditor({
         </Field>
 
         {isGlobal ? (
-          <p className="rounded-lg bg-sunken px-3.5 py-2.5 text-xs text-ink-muted">
+          <p className="rounded-lg bg-sunken px-3.5 py-2.5 text-caption text-ink-muted">
             This is the global default: it prices everything no narrower rule covers.
           </p>
         ) : (
@@ -350,11 +350,11 @@ function RuleEditor({
             type="checkbox"
             checked={form.allow_below_cost}
             onChange={(e) => set("allow_below_cost", e.target.checked)}
-            className="mt-0.5 h-5 w-5 rounded border-line-strong text-danger-600"
+            className="mt-0.5 h-5 w-5 rounded border-line-strong accent-danger-700"
           />
           <span>
             <span className="block text-sm font-medium text-danger-700">Allow selling below cost</span>
-            <span className="block text-xs text-danger-700">
+            <span className="block text-caption text-danger-700">
               Only for a deliberate promotion. Every sale under this rule can lose money.
             </span>
           </span>
@@ -456,12 +456,12 @@ export function PriceHistoryCard() {
             ) : (
               changes.map((change) => (
                 <tr key={change.id}>
-                  <td className="whitespace-nowrap px-5 py-2.5 text-xs text-ink-muted" title={formatDateTime(change.created_at)}>
+                  <td className="whitespace-nowrap px-5 py-2.5 text-caption text-ink-muted" title={formatDateTime(change.created_at)}>
                     {relativeTime(change.created_at)}
                   </td>
                   <td className="whitespace-nowrap px-5 py-2.5 text-ink">
                     {change.service_name}
-                    <span className="ml-1.5 text-xs text-ink-muted">{change.country_code}</span>
+                    <span className="ml-1.5 text-caption text-ink-muted">{change.country_code}</span>
                   </td>
                   <td className="tabular whitespace-nowrap px-5 py-2.5 text-right text-ink-muted">
                     {change.old_price ? cedis(change.old_price) : "-"}
@@ -472,7 +472,7 @@ export function PriceHistoryCard() {
                   <td className="px-5 py-2.5">
                     <Badge tone={SOURCE_TONE[change.source]}>{change.source_label}</Badge>
                   </td>
-                  <td className="max-w-[18rem] px-5 py-2.5 text-xs text-ink-muted">
+                  <td className="max-w-[18rem] px-5 py-2.5 text-caption text-ink-muted">
                     {change.changed_by_email ? (
                       <span className="block text-ink-soft">{change.changed_by_email}</span>
                     ) : null}

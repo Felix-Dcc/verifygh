@@ -13,6 +13,7 @@ import {
   LogoutIcon,
   ShieldIcon,
 } from "@/components/icons";
+import { ThemeSwitcher } from "@/components/theme";
 import { ConfirmDialog } from "@/components/ui/dialog";
 import {
   Alert,
@@ -236,6 +237,15 @@ export default function AccountPage() {
               </Button>
             </div>
           </form>
+        </SettingsSection>
+
+        <SettingsSection
+          title="Appearance"
+          description="Light, dark, or match your device. Saved on this device."
+        >
+          <div className="p-5 sm:p-6">
+            <ThemeSwitcher />
+          </div>
         </SettingsSection>
 
         <SettingsSection title="Notifications and policies">

@@ -18,7 +18,7 @@ export function LegalHeader({
       {/* These documents are a working draft. Ghanaian counsel should review
           them against the Data Protection Act (2012) and your aggregator's
           merchant terms before you take real payments. */}
-      <p className="mt-3 text-xs text-ink-faint">
+      <p className="mt-3 text-caption text-ink-faint">
         This document is a template prepared for VerifyGH and has not yet been reviewed by legal
         counsel. Have it reviewed before relying on it commercially.
       </p>

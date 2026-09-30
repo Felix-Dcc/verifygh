@@ -4,6 +4,7 @@ import * as React from "react";
 import { SWRConfig } from "swr";
 
 import { AuthProvider } from "@/components/auth-provider";
+import { ThemeProvider } from "@/components/theme";
 import { ToastProvider } from "@/components/ui/toast";
 import { fetcher } from "@/lib/api";
 
@@ -21,9 +22,11 @@ export function Providers({ children }: { children: React.ReactNode }) {
         errorRetryCount: 2,
       }}
     >
-      <ToastProvider>
-        <AuthProvider>{children}</AuthProvider>
-      </ToastProvider>
+      <ThemeProvider>
+        <ToastProvider>
+          <AuthProvider>{children}</AuthProvider>
+        </ToastProvider>
+      </ThemeProvider>
     </SWRConfig>
   );
 }

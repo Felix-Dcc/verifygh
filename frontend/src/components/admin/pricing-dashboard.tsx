@@ -99,7 +99,7 @@ export function PricingSummaryCards({ summary }: { summary?: PricingSummary }) {
           }
         />
       </div>
-      <div className="flex flex-wrap gap-2 text-xs">
+      <div className="flex flex-wrap gap-2 text-caption">
         <Badge tone="brand">
           VerifyGH Pricing FX Rate (USD): {usd?.pricing_rate ? fxRate(usd.pricing_rate) : usd?.error ?? "-"}
           {usd?.mode ? ` - ${usd.mode.toLowerCase()}` : ""}
@@ -275,7 +275,7 @@ export function PricingTable({
                   </td>
                   <td className="whitespace-nowrap px-3 py-2.5 text-ink-soft">
                     {row.provider.name}
-                    {row.provider.demo ? <span className="ml-1 text-xs text-ink-faint">(demo)</span> : null}
+                    {row.provider.demo ? <span className="ml-1 text-caption text-ink-faint">(demo)</span> : null}
                   </td>
                   <td className={cn("tabular whitespace-nowrap px-3 py-2.5 text-right", row.provider_cost ? "text-ink" : "text-warn-700")}>
                     {providerMoney(row.provider_cost, row.currency)}
@@ -286,7 +286,7 @@ export function PricingTable({
                   <td className="tabular whitespace-nowrap px-3 py-2.5 text-right text-ink-soft">{row.markup ?? "-"}</td>
                   <td className="tabular whitespace-nowrap px-3 py-2.5 text-right font-semibold text-ink">
                     {row.customer_price ? cedis(row.customer_price) : "-"}
-                    {row.override_price ? <span className="ml-1 text-xs font-normal text-warn-700">override</span> : null}
+                    {row.override_price ? <span className="ml-1 text-caption font-normal text-warn-700">override</span> : null}
                   </td>
                   <td className={cn("tabular whitespace-nowrap px-3 py-2.5 text-right", row.is_loss ? "text-danger-700" : "text-success-700")}>
                     {row.gross_profit ? cedis(row.gross_profit) : "-"}
@@ -378,7 +378,7 @@ function ImpactConfirm({
                 </span>
                 <span className="tabular">
                   {cedis(example.before)} &rarr; {cedis(example.after)}{" "}
-                  <span className="text-xs text-ink-muted">({percent(example.gross_margin_after)} margin)</span>
+                  <span className="text-caption text-ink-muted">({percent(example.gross_margin_after)} margin)</span>
                 </span>
               </li>
             ))}
@@ -517,7 +517,7 @@ export function FXPanel({ canManage }: { canManage: boolean }) {
                 <Info label="Effective pricing rate" value={effective ? fxRate(effective) : "-"} />
               </div>
               {mode === "AUTOMATIC" ? (
-                <p className="text-xs text-ink-muted">
+                <p className="text-caption text-ink-muted">
                   Automatic mode stops pricing if the market rate is more than 36 hours old, rather than price
                   off a stale rate. Manual mode never goes stale.
                 </p>
@@ -554,9 +554,9 @@ export function FXPanel({ canManage }: { canManage: boolean }) {
 function Info({ label, value, hint }: { label: string; value: React.ReactNode; hint?: string }) {
   return (
     <div className="rounded-lg bg-sunken px-3.5 py-3">
-      <p className="text-xs text-ink-muted">{label}</p>
+      <p className="text-caption text-ink-muted">{label}</p>
       <p className="tabular mt-0.5 text-heading text-ink">{value}</p>
-      {hint ? <p className="text-xs text-ink-faint">{hint}</p> : null}
+      {hint ? <p className="text-caption text-ink-faint">{hint}</p> : null}
     </div>
   );
 }
@@ -721,7 +721,7 @@ export function ReviewPanel({ summary, canManage }: { summary?: PricingSummary; 
                 {rows.map((row) => (
                   <tr key={row.id}>
                     <td className="px-4 py-2 text-ink">
-                      {row.service.name} <span className="text-xs text-ink-muted">{row.country.code}</span>
+                      {row.service.name} <span className="text-caption text-ink-muted">{row.country.code}</span>
                     </td>
                     <td className="tabular px-3 py-2 text-right">{row.customer_price ? cedis(row.customer_price) : "not sold"}</td>
                     <td className="tabular px-3 py-2 text-right font-semibold">{row.recommended_price ? cedis(row.recommended_price) : "-"}</td>
@@ -841,7 +841,7 @@ function Check({
       <input type="checkbox" checked={checked} disabled={disabled} onChange={(e) => onChange(e.target.checked)} className="mt-0.5 h-5 w-5 rounded border-line-strong text-brand-600" />
       <span>
         <span className="block text-sm font-medium text-ink">{label}</span>
-        <span className="block text-xs text-ink-muted">{description}</span>
+        <span className="block text-caption text-ink-muted">{description}</span>
       </span>
     </label>
   );
@@ -949,12 +949,12 @@ function HistoryTable({
         <tbody className="divide-y divide-line">
           {rows.map((row) => (
             <tr key={row.id}>
-              <td className="whitespace-nowrap px-4 py-2 text-xs text-ink-muted" title={formatDateTime(row.at)}>
+              <td className="whitespace-nowrap px-4 py-2 text-caption text-ink-muted" title={formatDateTime(row.at)}>
                 {relativeTime(row.at)}
               </td>
               <td className="px-3 py-2 text-ink">{row.what}</td>
-              <td className="tabular max-w-[22rem] px-3 py-2 text-xs text-ink-soft">{row.change}</td>
-              <td className="max-w-[18rem] px-3 py-2 text-xs text-ink-muted">
+              <td className="tabular max-w-[22rem] px-3 py-2 text-caption text-ink-soft">{row.change}</td>
+              <td className="max-w-[18rem] px-3 py-2 text-caption text-ink-muted">
                 <span className="block text-ink-soft">{row.who}</span>
                 <span className="block">{row.why}</span>
               </td>

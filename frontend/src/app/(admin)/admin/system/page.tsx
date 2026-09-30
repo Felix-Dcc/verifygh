@@ -162,7 +162,7 @@ function HealthTab() {
                   <div className="flex items-center justify-between gap-3">
                     <div className="min-w-0">
                       <p className="truncate text-sm font-medium text-ink">{provider.name}</p>
-                      <p className="tabular text-xs text-ink-muted">{provider.adapter_key}</p>
+                      <p className="tabular text-caption text-ink-muted">{provider.adapter_key}</p>
                     </div>
                     {provider.is_enabled ? (
                       <Badge tone="success" dot>
@@ -172,12 +172,12 @@ function HealthTab() {
                       <Badge tone="neutral">Disabled</Badge>
                     )}
                   </div>
-                  <p className="mt-1 text-xs text-ink-muted">
+                  <p className="mt-1 text-caption text-ink-muted">
                     Last synced{" "}
                     {provider.last_synced_at ? relativeTime(provider.last_synced_at) : "never"}
                   </p>
                   {provider.last_sync_error ? (
-                    <p className="mt-1.5 rounded-lg bg-danger-50 px-2.5 py-1.5 text-xs text-danger-700">
+                    <p className="mt-1.5 rounded-lg bg-danger-50 px-2.5 py-1.5 text-caption text-danger-700">
                       {provider.last_sync_error}
                     </p>
                   ) : null}
@@ -234,7 +234,7 @@ function ProviderCard({
         {isMock ? <Badge tone="warn">Mock</Badge> : <Badge tone="brand">Live</Badge>}
       </div>
 
-      {isMock ? <p className="mt-3 text-xs leading-relaxed text-ink-muted">{mockNote}</p> : null}
+      {isMock ? <p className="mt-3 text-caption leading-relaxed text-ink-muted">{mockNote}</p> : null}
     </Card>
   );
 }
@@ -351,7 +351,7 @@ function FlagsTab() {
                       </span>
                     </div>
                     <p className="mt-1 text-sm text-ink-soft">{flag.description}</p>
-                    <p className="mt-1 text-xs text-ink-muted">
+                    <p className="mt-1 text-caption text-ink-muted">
                       {flag.user_email || "no account"}
                       <span className="mx-1.5" aria-hidden>
                         &middot;
@@ -359,7 +359,7 @@ function FlagsTab() {
                       {formatDateTime(flag.created_at)}
                     </p>
                     {flag.resolved && flag.resolution_note ? (
-                      <p className="mt-2 rounded-lg bg-sunken px-3 py-2 text-xs text-ink-soft">
+                      <p className="mt-2 rounded-lg bg-sunken px-3 py-2 text-caption text-ink-soft">
                         Resolved: {flag.resolution_note}
                       </p>
                     ) : null}
@@ -450,19 +450,19 @@ function AuditTab({ canView }: { canView: boolean }) {
           <ul className="divide-y divide-line">
             {data.results.map((entry) => (
               <li key={entry.id} className="flex items-start gap-3 px-4 py-3 sm:px-5">
-                <span className="tabular w-44 shrink-0 text-xs text-ink-faint">
+                <span className="tabular w-44 shrink-0 text-caption text-ink-faint">
                   {formatDateTime(entry.created_at)}
                 </span>
                 <span className="min-w-0 flex-1">
                   <span className="block text-sm font-medium text-ink">{entry.action}</span>
-                  <span className="block truncate text-xs text-ink-muted">
+                  <span className="block truncate text-caption text-ink-muted">
                     {entry.actor_email || "system"}
                     {entry.target_type ? ` - ${entry.target_type}` : ""}
                     {entry.target_id ? ` ${entry.target_id.slice(0, 12)}` : ""}
                   </span>
                 </span>
                 {entry.ip_address ? (
-                  <span className="tabular hidden shrink-0 text-xs text-ink-faint sm:block">
+                  <span className="tabular hidden shrink-0 text-caption text-ink-faint sm:block">
                     {entry.ip_address}
                   </span>
                 ) : null}
@@ -521,11 +521,11 @@ function ActionsTab({ canView }: { canView: boolean }) {
               <li key={entry.id} className="px-4 py-3.5 sm:px-5">
                 <div className="flex flex-wrap items-center justify-between gap-2">
                   <span className="text-sm font-medium text-ink">{entry.action}</span>
-                  <span className="tabular text-xs text-ink-faint">
+                  <span className="tabular text-caption text-ink-faint">
                     {formatDateTime(entry.created_at)}
                   </span>
                 </div>
-                <p className="mt-0.5 text-xs text-ink-muted">
+                <p className="mt-0.5 text-caption text-ink-muted">
                   {entry.admin_email}
                   {entry.target_type ? ` - ${entry.target_type} ${entry.target_id.slice(0, 12)}` : ""}
                 </p>

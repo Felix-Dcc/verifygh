@@ -123,17 +123,24 @@ const FAQ_ITEMS: { question: string; answer: React.ReactNode }[] = [
   },
 ];
 
-export function Faq() {
+export function Faq({ embedded = false }: { embedded?: boolean }) {
   const [openIndex, setOpenIndex] = React.useState<number | null>(0);
 
   return (
-    <section id="faq" className="container-page scroll-mt-20 py-16 sm:py-20">
-      <div className="mx-auto max-w-3xl">
-        <h2 className="text-2xl font-semibold tracking-tight text-ink sm:text-3xl">
+    <section
+      id="faq"
+      className={embedded ? "scroll-mt-20" : "container-page scroll-mt-20 py-16 sm:py-24"}
+    >
+      <div className={embedded ? "" : "mx-auto max-w-3xl"}>
+        <h2
+          className={
+            embedded ? "text-heading text-ink" : "text-2xl font-semibold tracking-tight text-ink sm:text-3xl"
+          }
+        >
           Questions people ask
         </h2>
 
-        <dl className="mt-8 divide-y divide-line border-y border-line">
+        <dl className={cn("divide-y divide-line border-y border-line", embedded ? "mt-3" : "mt-8")}>
           {FAQ_ITEMS.map((item, index) => {
             const open = openIndex === index;
             return (

@@ -316,7 +316,7 @@ function ReferralDialog({
                 </li>
               ))}
             </ul>
-            <p className="mt-2 text-xs text-ink-muted">
+            <p className="mt-2 text-caption text-ink-muted">
               A shared IP address is never blocking on its own - homes, offices, schools and
               mobile networks all share addresses.
             </p>
@@ -367,7 +367,7 @@ function ReferralDialog({
 function Detail({ label, value }: { label: string; value: string }) {
   return (
     <div>
-      <dt className="text-xs text-ink-muted">{label}</dt>
+      <dt className="text-caption text-ink-muted">{label}</dt>
       <dd className="mt-0.5 font-medium text-ink">{value}</dd>
     </div>
   );

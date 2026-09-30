@@ -11,31 +11,19 @@ export { cn };
  * Button
  * ---------------------------------------------------------------------- */
 
-type ButtonVariant =
-  | "primary"
-  | "secondary"
-  | "ghost"
-  | "danger"
-  | "subtle"
-  // For use on a brand-coloured surface, where the usual variants vanish.
-  | "inverse"
-  | "ghostInverse";
+type ButtonVariant = "primary" | "secondary" | "ghost" | "danger" | "subtle";
 type ButtonSize = "sm" | "md" | "lg";
 
 const VARIANTS: Record<ButtonVariant, string> = {
   primary:
-    "bg-brand-600 text-white hover:bg-brand-700 active:bg-brand-800 disabled:bg-brand-600/50",
+    "bg-primary text-white hover:bg-primary-hover active:bg-primary-active disabled:bg-primary/50",
   secondary:
     "bg-surface text-ink border border-line-strong hover:bg-sunken active:bg-line/60 disabled:opacity-50",
   ghost: "bg-transparent text-ink-soft hover:bg-sunken hover:text-ink active:bg-line/60 disabled:opacity-50",
   danger:
-    "bg-danger-700 text-white hover:bg-danger-500 active:bg-danger-700 disabled:bg-danger-700/50",
+    "bg-danger-solid text-white hover:bg-danger-solid/90 active:bg-danger-solid disabled:bg-danger-solid/50",
   subtle:
     "bg-brand-50 text-brand-700 hover:bg-brand-100 active:bg-brand-200 disabled:opacity-50",
-  inverse:
-    "bg-white text-brand-700 hover:bg-brand-50 active:bg-brand-100 disabled:opacity-60",
-  ghostInverse:
-    "bg-transparent text-white hover:bg-white/10 active:bg-white/20 disabled:opacity-50",
 };
 
 const SIZES: Record<ButtonSize, string> = {
@@ -560,12 +548,16 @@ export function Alert({
 
 export function EmptyState({
   icon,
+  art,
   title,
   description,
   action,
   className,
 }: {
   icon?: React.ReactNode;
+  /** An illustration from components/illustrations - for the empty states
+   *  a customer sees first (no orders, no transactions). Replaces the icon. */
+  art?: React.ReactNode;
   title: string;
   description?: string;
   action?: React.ReactNode;
@@ -573,7 +565,9 @@ export function EmptyState({
 }) {
   return (
     <div className={cn("flex flex-col items-center px-6 py-12 text-center", className)}>
-      {icon ? (
+      {art ? (
+        <div className="mb-4">{art}</div>
+      ) : icon ? (
         <div className="mb-3 flex h-10 w-10 items-center justify-center rounded-lg border border-line bg-sunken text-ink-muted [&_svg]:h-5 [&_svg]:w-5">
           {icon}
         </div>

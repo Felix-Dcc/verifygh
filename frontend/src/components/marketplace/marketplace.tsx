@@ -8,6 +8,7 @@ import useSWRInfinite from "swr/infinite";
 import { useAuth } from "@/components/auth-provider";
 import { CountryFlag } from "@/components/country-flag";
 import { SearchIcon, StarIcon } from "@/components/icons";
+import { PhoneMessageArt, SearchArt } from "@/components/illustrations";
 import { AvailabilityLabel, TemporarilyUnavailableBadge } from "@/components/marketplace/availability";
 import { BuyDialog } from "@/components/marketplace/buy-dialog";
 import { Alert, Button, Card, EmptyState, LoadError, Skeleton, cn } from "@/components/ui/primitives";
@@ -29,11 +30,12 @@ const PAGE_SIZE = 40;
 /**
  * SMS Verifications: find a service, pick a country, get a number.
  *
- * Built for speed on a phone: compact rows rather than cards. Quick picks
- * (the customer's recent services, then popular ones) sit above favourites and
- * the full list, and nothing appears twice as a row. Search runs on the
- * server, so it stays fast however large the catalogue grows, and every price,
- * stock figure and "popular" rank comes from the backend.
+ * Built for speed on a phone. Popular services (the team's picks plus what
+ * people actually bought in the last 30 days) come first as tiles, then the
+ * customer's own "Buy again" and favourites, then the full catalogue as
+ * compact rows - a service is never shown twice in the same form. Search runs
+ * on the server, and every price, stock figure and rank comes from the
+ * backend.
  */
 export function Marketplace() {
   const router = useRouter();
@@ -129,32 +131,38 @@ export function Marketplace() {
   // The list needs a country, and the country comes from this request.
   const homeFailed = Boolean(homeError) && !home && !activeCountry;
 
-  // "Recently used": the customer's own last orders, one entry per service.
+  const countryName = home?.countries.find((entry) => entry.code === activeCountry)?.name;
+
+  // Popular, as tiles. Favourites have their own list, so they are left out.
+  const pinnedSlugs = new Set(pinned.map((row) => row.slug));
+  const popularAll = (home?.popular ?? [])
+    .filter((row) => !pinnedSlugs.has(row.slug) && !row.temporarily_unavailable)
+    .slice(0, 8);
+  // Whole rows only (four across on desktop, two on phones): a lone tile on a
+  // second row looks like a mistake.
+  const popular =
+    popularAll.length >= 4 ? popularAll.slice(0, popularAll.length - (popularAll.length % 4)) : popularAll;
+
+  // "Buy again": the customer's own recent services - not ones already shown
+  // above as favourites or popular tiles.
   const { data: recent } = useSWR<Paginated<OrderSummary>>(
     user ? ["/orders/", { page_size: 20 }] : null,
   );
-  // Quick picks: what this customer bought before, then what most people buy.
-  // One row of chips instead of a "Popular" list that repeated rows already in
-  // "All services".
-  const quickPicks = React.useMemo(() => {
-    // Favourites have their own list just below; they are not repeated here.
-    const seen = new Set<string>((home?.pinned ?? []).map((row) => row.slug));
+  const buyAgain = React.useMemo(() => {
+    const seen = new Set<string>([...pinnedSlugs, ...popular.map((row) => row.slug)]);
     const out: { slug: string; name: string; icon: string }[] = [];
     for (const order of recent?.results ?? []) {
       if (seen.has(order.service_slug) || order.country_code !== activeCountry) continue;
       seen.add(order.service_slug);
       out.push({ slug: order.service_slug, name: order.service_name, icon: order.service_icon });
     }
-    for (const row of home?.popular ?? []) {
-      if (seen.has(row.slug) || row.temporarily_unavailable) continue;
-      seen.add(row.slug);
-      out.push({ slug: row.slug, name: row.name, icon: row.icon_url });
-    }
     return out.slice(0, 6);
-  }, [recent, home?.popular, home?.pinned, activeCountry]);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [recent, home, activeCountry]);
 
   const rowProps = (row: MarketRow) => ({
     row,
+    countryName,
     pinned: isPinned(row),
     onOpen: () => setBuying(row.slug),
     onPin: () => togglePin(row),
@@ -194,18 +202,31 @@ export function Marketplace() {
         </div>
       </div>
 
-      {!searching && quickPicks.length > 0 ? (
-        <section aria-labelledby="quick-heading">
-          <h2 id="quick-heading" className="mb-2 text-label text-ink-muted">
-            Quick picks
+      {!searching && popular.length > 0 ? (
+        <section aria-labelledby="popular-heading">
+          <h2 id="popular-heading" className="mb-3 text-heading text-ink">
+            Popular
+          </h2>
+          <ul className="grid grid-cols-2 gap-3 md:grid-cols-4">
+            {popular.map((row) => (
+              <PopularTile key={row.slug} {...rowProps(row)} />
+            ))}
+          </ul>
+        </section>
+      ) : null}
+
+      {!searching && buyAgain.length > 0 ? (
+        <section aria-labelledby="again-heading">
+          <h2 id="again-heading" className="mb-2 text-label text-ink-muted">
+            Buy again
           </h2>
           <div className="no-scrollbar -mx-4 flex gap-2 overflow-x-auto px-4 sm:mx-0 sm:flex-wrap sm:px-0">
-            {quickPicks.map((service) => (
+            {buyAgain.map((service) => (
               <button
                 key={service.slug}
                 type="button"
                 onClick={() => setBuying(service.slug)}
-                className="flex h-11 shrink-0 items-center gap-2 rounded-lg border border-line bg-surface pl-2 pr-3 sm:h-10 sm:pl-1.5 text-sm font-medium text-ink transition-colors hover:border-line-strong hover:bg-sunken"
+                className="flex h-11 shrink-0 items-center gap-2 rounded-lg border border-line bg-surface pl-2 pr-3 text-sm font-medium text-ink transition-colors hover:border-line-strong hover:bg-sunken sm:h-10 sm:pl-1.5"
               >
                 <ServiceLogo name={service.name} src={service.icon} slug={service.slug} size="xs" />
                 {service.name}
@@ -235,7 +256,7 @@ export function Marketplace() {
           <LoadError what="the services" onRetry={() => list.mutate()} />
         ) : rows.length === 0 ? (
           <EmptyState
-            icon={<SearchIcon />}
+            art={searching ? <SearchArt /> : <PhoneMessageArt />}
             title={searching ? `Nothing matches "${query}"` : "Nothing on sale here right now"}
             description={
               searching
@@ -329,89 +350,130 @@ function ServiceList({
 }) {
   return (
     <section>
-      <h2 className="mb-2 text-label text-ink-muted">
+      <h2 className="mb-3 text-heading text-ink">
         {title}
-        {count !== undefined ? <span className="tabular ml-1.5 text-ink-faint">{count}</span> : null}
+        {count !== undefined ? (
+          <span className="tabular ml-2 text-sm font-normal text-ink-faint">{count}</span>
+        ) : null}
       </h2>
       <Card className="divide-y divide-line overflow-hidden">{children}</Card>
     </section>
   );
 }
 
-function ServiceRow({
-  row,
-  pinned,
-  onOpen,
-  onPin,
-}: {
+type ServiceItemProps = {
   row: MarketRow;
+  countryName?: string;
   pinned: boolean;
   onOpen: () => void;
   onPin: () => void;
-}) {
-  const paused = Boolean(row.temporarily_unavailable);
-  const unavailable = row.availability === "UNAVAILABLE" || row.unavailable_here || paused;
-  const [popping, setPopping] = React.useState(false);
+};
 
+/** Where a service stands right now: its stock, or why it cannot be bought. */
+function Stock({ row }: { row: MarketRow }) {
+  return row.temporarily_unavailable ? (
+    <TemporarilyUnavailableBadge />
+  ) : (
+    <AvailabilityLabel
+      availability={row.unavailable_here ? "UNAVAILABLE" : row.availability}
+      count={row.available_count}
+    />
+  );
+}
+
+function priceOf(row: MarketRow): string {
+  return row.price && !row.unavailable_here && !row.temporarily_unavailable ? cedis(row.price) : "—";
+}
+
+/** ☆ to ★, with one short pop when a service is added. */
+function FavouriteButton({ row, pinned, onPin }: Pick<ServiceItemProps, "row" | "pinned" | "onPin">) {
+  const [popping, setPopping] = React.useState(false);
   return (
-    <div className="group flex items-center gap-1 pr-1.5 transition-colors hover:bg-sunken/60">
+    <button
+      type="button"
+      onClick={(event) => {
+        event.stopPropagation();
+        if (!pinned) setPopping(true);
+        onPin();
+      }}
+      onAnimationEnd={() => setPopping(false)}
+      aria-pressed={pinned}
+      aria-label={pinned ? `Remove ${row.name} from favourites` : `Add ${row.name} to favourites`}
+      className={cn(
+        "flex h-11 w-11 shrink-0 items-center justify-center rounded-lg transition-colors hover:bg-sunken",
+        pinned ? "text-gold-500" : "text-ink-faint hover:text-ink-muted",
+      )}
+    >
+      <StarIcon filled={pinned} className={cn("h-5 w-5", popping && "animate-pin-pop")} />
+    </button>
+  );
+}
+
+/** One service in the catalogue: logo, name, country and stock, price, favourite. */
+function ServiceRow({ row, countryName, pinned, onOpen, onPin }: ServiceItemProps) {
+  const unavailable =
+    row.availability === "UNAVAILABLE" || row.unavailable_here || row.temporarily_unavailable;
+  return (
+    <div className="flex items-center gap-1 pr-1.5 transition-colors hover:bg-sunken/60">
       <button
         type="button"
         onClick={onOpen}
-        className="flex min-h-14 min-w-0 flex-1 items-center gap-3 py-2 pl-4 text-left sm:pl-5"
+        className="flex min-h-16 min-w-0 flex-1 items-center gap-3 py-2.5 pl-4 text-left sm:pl-5"
       >
-        <ServiceLogo name={row.name} src={row.icon_url} slug={row.slug} size="sm" />
+        <ServiceLogo name={row.name} src={row.icon_url} slug={row.slug} />
         <span className="min-w-0 flex-1">
           <span className={cn("block truncate text-sm font-medium", unavailable ? "text-ink-muted" : "text-ink")}>
             {row.name}
           </span>
-          <span className="mt-0.5 block sm:hidden">
-            {paused ? (
-              <TemporarilyUnavailableBadge />
-            ) : (
-              <AvailabilityLabel
-                availability={row.unavailable_here ? "UNAVAILABLE" : row.availability}
-                count={row.available_count}
-              />
-            )}
+          <span className="mt-0.5 flex flex-wrap items-center gap-x-2 gap-y-0.5">
+            {countryName ? <span className="text-caption text-ink-muted">{countryName}</span> : null}
+            {countryName ? <span aria-hidden className="text-caption text-ink-faint">&middot;</span> : null}
+            <Stock row={row} />
           </span>
-        </span>
-        <span className="hidden w-40 shrink-0 sm:block">
-          {paused ? (
-            <TemporarilyUnavailableBadge />
-          ) : (
-            <AvailabilityLabel
-              availability={row.unavailable_here ? "UNAVAILABLE" : row.availability}
-              count={row.available_count}
-            />
-          )}
         </span>
         <span
           className={cn(
-            "tabular w-24 shrink-0 text-right text-sm font-semibold",
+            "tabular shrink-0 text-right text-sm font-semibold",
             unavailable ? "text-ink-faint" : "text-ink",
           )}
         >
-          {row.price && !row.unavailable_here && !paused ? cedis(row.price) : "-"}
+          {priceOf(row)}
         </span>
       </button>
+      <FavouriteButton row={row} pinned={pinned} onPin={onPin} />
+    </div>
+  );
+}
+
+/** A popular service as a tile: the same facts as a row, given more room. */
+function PopularTile({ row, countryName, pinned, onOpen, onPin }: ServiceItemProps) {
+  return (
+    <li className="relative">
       <button
         type="button"
-        onClick={() => {
-          if (!pinned) setPopping(true);
-          onPin();
-        }}
-        onAnimationEnd={() => setPopping(false)}
-        aria-pressed={pinned}
-        aria-label={pinned ? `Remove ${row.name} from favourites` : `Add ${row.name} to favourites`}
-        className={cn(
-          "flex h-11 w-11 shrink-0 items-center justify-center rounded-lg transition-colors",
-          pinned ? "text-gold-500" : "text-ink-faint hover:text-ink-muted",
-        )}
+        onClick={onOpen}
+        className="card flex h-full w-full flex-col gap-3 p-4 text-left transition-colors hover:border-line-strong hover:bg-sunken/40"
       >
-        <StarIcon filled={pinned} className={cn("h-5 w-5", popping && "animate-pin-pop")} />
+        {/* Logo on its own row (the star sits beside it), so the name gets the
+            tile's full width - on a phone the two-column tiles are narrow. */}
+        <ServiceLogo name={row.name} src={row.icon_url} slug={row.slug} />
+        <span className="min-w-0">
+          <span className="block truncate text-sm font-medium text-ink" title={row.name}>
+            {row.name}
+          </span>
+          {countryName ? (
+            <span className="block truncate text-caption text-ink-muted">{countryName}</span>
+          ) : null}
+        </span>
+        <span className="mt-auto">
+          <span className="tabular block text-heading text-ink">{priceOf(row)}</span>
+          <Stock row={row} />
+        </span>
       </button>
-    </div>
+      <span className="absolute right-1 top-1">
+        <FavouriteButton row={row} pinned={pinned} onPin={onPin} />
+      </span>
+    </li>
   );
 }
 
@@ -419,8 +481,8 @@ function RowSkeletons() {
   return (
     <>
       {Array.from({ length: 8 }).map((_, index) => (
-        <div key={index} className="flex min-h-14 items-center gap-3 px-4 sm:px-5" aria-hidden>
-          <Skeleton className="h-8 w-8 rounded-lg" />
+        <div key={index} className="flex min-h-16 items-center gap-3 px-4 sm:px-5" aria-hidden>
+          <Skeleton className="h-10 w-10 rounded-lg" />
           <Skeleton className="h-3.5 flex-1 sm:max-w-40" />
           <Skeleton className="hidden h-3 w-24 sm:block" />
           <Skeleton className="h-4 w-16" />

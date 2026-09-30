@@ -44,6 +44,8 @@ export default function AdminOverviewPage() {
         description="Revenue, orders, payments and everything that needs attention."
       />
 
+      <PlatformStatus health={health} overview={overview} />
+
       {usingMocks ? (
         <Alert tone="warn" title="Running on mock providers">
           {health?.payment_provider.is_mock && health?.verification_provider.is_mock
@@ -263,5 +265,97 @@ function TileSkeletons() {
         </div>
       ))}
     </>
+  );
+}
+
+/**
+ * The four things an operator checks first: can we get numbers, can we take
+ * money, is pricing configured, is anything suspicious open. Straight from
+ * /admin/health/ and the overview - nothing inferred.
+ */
+function PlatformStatus({
+  health,
+  overview,
+}: {
+  health: AdminSystemHealth | undefined;
+  overview: AdminOverview | undefined;
+}) {
+  const rate = health?.exchange_rate;
+  return (
+    <div className="metric-group grid-cols-1 sm:grid-cols-2 lg:grid-cols-4">
+      <StatusCell
+        label="Verification provider"
+        href="/admin/providers"
+        state={providerState(health?.verification_provider)}
+        value={health ? humanKey(health.verification_provider.key) : ""}
+        note={health?.verification_provider.is_mock ? "Mock - no real numbers" : health?.verification_provider.healthy ? "Reachable" : "Not reachable"}
+      />
+      <StatusCell
+        label="Payment provider"
+        href="/admin/system"
+        state={providerState(health?.payment_provider)}
+        value={health ? humanKey(health.payment_provider.key) : ""}
+        note={health?.payment_provider.is_mock ? "Mock - no real money" : health?.payment_provider.healthy ? "Reachable" : "Not reachable"}
+      />
+      <StatusCell
+        label="Pricing exchange rate"
+        href="/admin/pricing"
+        state={!health ? "loading" : rate?.configured ? "ok" : "bad"}
+        value={rate?.configured && rate.rate ? `GH₵ ${Number.parseFloat(rate.rate).toFixed(2)} per US$1` : "Not set"}
+        note={rate?.configured ? `Source: ${rate.source ?? "manual"}` : "Nothing can be sold until it is set"}
+      />
+      <StatusCell
+        label="Security signals"
+        href="/admin/system"
+        state={!overview ? "loading" : overview.flags.high > 0 ? "bad" : overview.flags.open > 0 ? "warn" : "ok"}
+        value={overview ? (overview.flags.open === 0 ? "None open" : `${overview.flags.open} open`) : ""}
+        note={overview ? `${overview.flags.high} high severity` : ""}
+      />
+    </div>
+  );
+}
+
+/** A mock is "working" but never what production should run on: amber. */
+function providerState(provider: { healthy: boolean; is_mock: boolean } | undefined) {
+  if (!provider) return "loading" as const;
+  if (!provider.healthy) return "bad" as const;
+  return provider.is_mock ? ("warn" as const) : ("ok" as const);
+}
+
+function humanKey(key: string): string {
+  const names: Record<string, string> = { textverified: "TextVerified", onlinesim: "OnlineSIM", paystack: "Paystack", mock: "Mock" };
+  return names[key] ?? key;
+}
+
+function StatusCell({
+  label,
+  value,
+  note,
+  state,
+  href,
+}: {
+  label: string;
+  value: string;
+  note: string;
+  state: "ok" | "warn" | "bad" | "loading";
+  href: string;
+}) {
+  const dot = { ok: "bg-success-500", warn: "bg-warn-500", bad: "bg-danger-500", loading: "bg-line-strong" }[state];
+  return (
+    <Link href={href} className="block bg-surface p-4 transition-colors hover:bg-sunken/60">
+      <p className="text-caption text-ink-muted">{label}</p>
+      {state === "loading" ? (
+        <Skeleton className="mt-2 h-5 w-28" />
+      ) : (
+        <p className="mt-1 flex items-center gap-2 text-sm font-semibold text-ink">
+          <span aria-hidden className={`h-2 w-2 shrink-0 rounded-full ${dot}`} />
+          <span className="truncate">{value}</span>
+          <span className="sr-only">
+            {state === "ok" ? "(healthy)" : state === "warn" ? "(needs a look)" : "(needs attention)"}
+          </span>
+        </p>
+      )}
+      <p className="mt-0.5 truncate text-caption text-ink-muted">{note}</p>
+    </Link>
   );
 }

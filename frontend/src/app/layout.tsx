@@ -2,6 +2,8 @@ import type { Metadata, Viewport } from "next";
 import { IBM_Plex_Mono, IBM_Plex_Sans } from "next/font/google";
 import { headers } from "next/headers";
 
+import { THEME_SCRIPT } from "@/lib/theme";
+
 import { Providers } from "./providers";
 import "./globals.css";
 
@@ -42,7 +44,7 @@ const mono = IBM_Plex_Mono({
 export const dynamic = "force-dynamic";
 
 const SITE_URL = process.env.NEXT_PUBLIC_SITE_ORIGIN || "https://www.getverifygh.com";
-const DESCRIPTION = "Buy verification numbers with convenient Ghanaian payments.";
+const DESCRIPTION = "US numbers for SMS verification codes, paid for in cedis with Mobile Money.";
 
 /**
  * Titles read "VerifyGH — Wallet" and so on: each route's layout supplies the
@@ -83,21 +85,33 @@ export const viewport: Viewport = {
   initialScale: 1,
   // Never lock zoom: pinch-to-zoom is an accessibility feature.
   maximumScale: 5,
-  themeColor: "#0B6446",
+  // The page background of each theme; the theme provider updates it when a
+  // visitor picks a theme that differs from their device's.
+  themeColor: [
+    { media: "(prefers-color-scheme: light)", color: "#F6F8F7" },
+    { media: "(prefers-color-scheme: dark)", color: "#0B100E" },
+  ],
 };
 
 export default function RootLayout({ children }: { children: React.ReactNode }) {
   // Reading the request headers is what ties rendering to the request. Next
   // picks the nonce up from the CSP header and stamps it on its own scripts.
-  headers().get("x-nonce");
+  const nonce = headers().get("x-nonce") ?? undefined;
 
   return (
-    <html lang="en-GH" className={`${sans.variable} ${mono.variable}`}>
+    // The head script adds "dark" before React hydrates, so the server's
+    // className legitimately differs from the client's on first render.
+    <html lang="en-GH" className={`${sans.variable} ${mono.variable}`} suppressHydrationWarning>
+      <head>
+        {/* Browsers hide a script's nonce from the DOM once it has run, so the
+            client never sees the value the server rendered - not a mismatch. */}
+        <script nonce={nonce} suppressHydrationWarning dangerouslySetInnerHTML={{ __html: THEME_SCRIPT }} />
+      </head>
       <body className="min-h-dvh">
         {/* First stop for keyboard users, before the whole navigation. */}
         <a
           href="#main"
-          className="sr-only focus:not-sr-only focus:absolute focus:left-4 focus:top-4 focus:z-50 focus:rounded-lg focus:bg-brand-600 focus:px-4 focus:py-2 focus:text-sm focus:font-medium focus:text-white"
+          className="sr-only focus:not-sr-only focus:absolute focus:left-4 focus:top-4 focus:z-50 focus:rounded-lg focus:bg-primary focus:px-4 focus:py-2 focus:text-sm focus:font-medium focus:text-white"
         >
           Skip to content
         </a>

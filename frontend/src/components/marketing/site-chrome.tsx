@@ -7,6 +7,7 @@ import { AccountMenu } from "@/components/account-menu";
 import { useAuth } from "@/components/auth-provider";
 import { Logo } from "@/components/brand";
 import { CloseIcon, LogoutIcon, MenuIcon } from "@/components/icons";
+import { ThemeSwitcher } from "@/components/theme";
 import { ButtonLink, cn } from "@/components/ui/primitives";
 
 const LINKS = [
@@ -151,6 +152,7 @@ const FOOTER_SECTIONS = [
   {
     title: "Support",
     links: [
+      { href: "/help", label: "Help centre" },
       { href: "/#faq", label: "FAQ" },
       { href: "/#security", label: "Security" },
       { href: "mailto:support@getverifygh.com", label: "Contact support" },
@@ -198,10 +200,13 @@ export function SiteFooter() {
         </div>
 
         <div className="mt-10 border-t border-line pt-6">
-          <p className="text-sm text-ink-muted">
-            &copy; {new Date().getFullYear()} VerifyGH. All rights reserved.
-          </p>
-          <p className="mt-3 max-w-3xl text-xs leading-relaxed text-ink-faint">
+          <div className="flex flex-wrap items-center justify-between gap-3">
+            <p className="text-sm text-ink-muted">
+              &copy; {new Date().getFullYear()} VerifyGH. All rights reserved.
+            </p>
+            <ThemeSwitcher compact />
+          </div>
+          <p className="mt-3 max-w-3xl text-caption leading-relaxed text-ink-faint">
             VerifyGH provides access to verification services supplied by authorised third-party
             providers. We are not affiliated with, endorsed by, or acting on behalf of any of the
             services a number may be used to verify. You remain responsible for complying with the

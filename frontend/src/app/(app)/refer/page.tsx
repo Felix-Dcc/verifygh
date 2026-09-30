@@ -5,7 +5,8 @@ import useSWR from "swr";
 import * as React from "react";
 
 import { PageHeader } from "@/components/app-shell";
-import { CheckIcon, CopyIcon, MessageIcon, ShareIcon, UsersIcon } from "@/components/icons";
+import { CheckIcon, CopyIcon, MessageIcon, ShareIcon } from "@/components/icons";
+import { InviteArt } from "@/components/illustrations";
 import {
   Alert,
   Button,
@@ -233,7 +234,7 @@ export default function ReferPage() {
             </div>
           ) : history.results.length === 0 ? (
             <EmptyState
-              icon={<UsersIcon />}
+              art={<InviteArt />}
               title="No invitations yet"
               description="Share your link and your friends' sign-ups will appear here."
             />

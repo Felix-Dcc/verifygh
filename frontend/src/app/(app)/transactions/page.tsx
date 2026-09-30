@@ -4,7 +4,8 @@ import * as React from "react";
 import useSWR from "swr";
 
 import { PageHeader } from "@/components/app-shell";
-import { PlusIcon, WalletIcon } from "@/components/icons";
+import { PlusIcon } from "@/components/icons";
+import { StatementArt } from "@/components/illustrations";
 import {
   Badge,
   Button,
@@ -87,7 +88,7 @@ export default function TransactionsPage() {
           <LoadError what="your transactions" onRetry={() => mutate()} />
         ) : entries.length === 0 ? (
           <EmptyState
-            icon={<WalletIcon />}
+            art={<StatementArt />}
             title={filter ? "Nothing of that type yet" : "No transactions yet"}
             description="Deposits, purchases, refunds and adjustments all show up here."
             action={

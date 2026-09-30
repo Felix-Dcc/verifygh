@@ -18,7 +18,7 @@ export default function AuthLayout({ children }: { children: React.ReactNode }) 
       </main>
 
       <footer className="border-t border-line/70 py-5">
-        <div className="container-page flex flex-wrap items-center justify-between gap-3 text-xs text-ink-faint">
+        <div className="container-page flex flex-wrap items-center justify-between gap-3 text-caption text-ink-faint">
           <span>&copy; {new Date().getFullYear()} VerifyGH</span>
           <span className="flex gap-4">
             <Link href="/terms" className="inline-flex min-h-11 items-center hover:text-ink-muted sm:min-h-0">

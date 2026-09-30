@@ -307,3 +307,30 @@ export const StarIcon = ({ className, filled }: IconProps & { filled?: boolean }
     <path d="M12 3.6l2.47 5.01 5.53.8-4 3.9.94 5.5L12 16.21l-4.94 2.6.94-5.5-4-3.9 5.53-.8z" />
   </svg>
 );
+
+export const SunIcon = (p: IconProps) => (
+  <Svg {...p}>
+    <circle cx="12" cy="12" r="4" />
+    <path d="M12 2.5v2M12 19.5v2M4.6 4.6l1.4 1.4M18 18l1.4 1.4M2.5 12h2M19.5 12h2M4.6 19.4 6 18M18 6l1.4-1.4" />
+  </Svg>
+);
+
+export const MoonIcon = (p: IconProps) => (
+  <Svg {...p}>
+    <path d="M20 14.5A8 8 0 0 1 9.5 4a8 8 0 1 0 10.5 10.5z" />
+  </Svg>
+);
+
+export const MonitorIcon = (p: IconProps) => (
+  <Svg {...p}>
+    <rect x="3" y="4" width="18" height="12.5" rx="2" />
+    <path d="M9 20.5h6M12 16.5v4" />
+  </Svg>
+);
+
+export const GlobeIcon = (p: IconProps) => (
+  <Svg {...p}>
+    <circle cx="12" cy="12" r="8.5" />
+    <path d="M3.5 12h17M12 3.5c2.3 2.4 3.5 5.2 3.5 8.5s-1.2 6.1-3.5 8.5c-2.3-2.4-3.5-5.2-3.5-8.5s1.2-6.1 3.5-8.5z" />
+  </Svg>
+);

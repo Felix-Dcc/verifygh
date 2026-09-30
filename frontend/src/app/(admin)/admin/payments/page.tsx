@@ -108,7 +108,7 @@ export default function AdminPaymentsPage() {
                     <td className="tabular whitespace-nowrap px-5 py-3.5 font-medium text-ink">
                       {payment.reference}
                       {payment.provider_reference ? (
-                        <span className="block text-xs font-normal text-ink-faint">
+                        <span className="block text-caption font-normal text-ink-faint">
                           {payment.provider}: {payment.provider_reference}
                         </span>
                       ) : null}
@@ -151,7 +151,7 @@ export default function AdminPaymentsPage() {
         />
       ) : null}
 
-      <p className="text-xs leading-relaxed text-ink-muted">
+      <p className="text-caption leading-relaxed text-ink-muted">
         A payment is credited only by a signature-verified provider callback, or by our own
         reconciliation call to the provider. A payment showing Successful but not Credited is
         worth investigating immediately.

@@ -28,6 +28,7 @@ import {
   UsersIcon,
   WalletIcon,
 } from "@/components/icons";
+import { ThemeSwitcher } from "@/components/theme";
 import { ButtonLink, Skeleton, cn } from "@/components/ui/primitives";
 import { cedis } from "@/lib/format";
 import type { Wallet } from "@/lib/types";
@@ -155,6 +156,7 @@ export function AppShell({
 
 function Sidebar({ groups, variant }: { groups: NavGroup[]; variant: "user" | "admin" }) {
   const { isStaff } = useAuth();
+  const pathname = usePathname();
   const { data: unread } = useSWR<{ count: number }>(
     variant === "user" ? "/notifications/unread/" : null,
     { refreshInterval: 60_000 },
@@ -197,13 +199,17 @@ function Sidebar({ groups, variant }: { groups: NavGroup[]; variant: "user" | "a
 
       <div className="border-t border-line px-3 py-3">
         {variant === "user" ? (
-          <a
-            href="/#faq"
-            className="flex h-9 items-center gap-3 rounded-lg px-2.5 text-sm font-medium text-ink-soft transition-colors hover:bg-sunken hover:text-ink"
+          <Link
+            href="/help"
+            aria-current={pathname === "/help" ? "page" : undefined}
+            className={cn(
+              "flex h-9 items-center gap-3 rounded-lg px-2.5 text-sm font-medium transition-colors hover:bg-sunken hover:text-ink",
+              pathname === "/help" ? "bg-sunken text-ink" : "text-ink-soft",
+            )}
           >
-            <HelpIcon className="h-5 w-5 text-ink-faint" />
+            <HelpIcon className={cn("h-5 w-5", pathname === "/help" ? "text-brand-600" : "text-ink-faint")} />
             Help &amp; FAQ
-          </a>
+          </Link>
         ) : null}
         {isStaff ? (
           <Link
@@ -243,7 +249,7 @@ function SidebarLink({ item, badge }: { item: NavItem; badge?: number }) {
       />
       <span className="truncate">{item.label}</span>
       {badge ? (
-        <span className="tabular ml-auto rounded-md bg-brand-600 px-1.5 text-2xs font-semibold leading-5 text-white">
+        <span className="tabular ml-auto rounded-md bg-primary px-1.5 text-2xs font-semibold leading-5 text-white">
           {badge > 99 ? "99+" : badge}
           <span className="sr-only"> unread</span>
         </span>
@@ -270,7 +276,7 @@ function TopBar({ variant }: { variant: "user" | "admin" }) {
       <div className="flex h-14 items-center gap-3 px-4 sm:px-6 lg:px-10">
         <Link href={variant === "admin" ? "/admin" : "/dashboard"} className="rounded-md lg:hidden">
           <span className="flex min-h-11 items-center gap-2">
-            <Logomark className="h-7 w-7 text-brand-600" />
+            <Logomark className="h-7 w-7 text-primary" />
             {variant === "admin" ? (
               <span className="text-sm font-semibold text-ink">Admin</span>
             ) : (
@@ -414,7 +420,7 @@ function UserMenu({ variant }: { variant: "user" | "admin" }) {
         <div
           role="menu"
           aria-label="Account"
-          className="absolute right-0 top-full z-50 mt-1.5 w-64 animate-fade-in overflow-hidden rounded-xl border border-line bg-surface shadow-pop"
+          className="absolute right-0 top-full z-50 mt-1.5 w-64 animate-fade-in overflow-hidden rounded-xl border border-line bg-raised shadow-pop"
         >
           <div className="border-b border-line px-4 py-3">
             <p className="truncate text-sm font-medium text-ink">{user?.full_name || "Your account"}</p>
@@ -431,6 +437,10 @@ function UserMenu({ variant }: { variant: "user" | "admin" }) {
                 {item.label}
               </Link>
             ))}
+          </div>
+          <div className="flex items-center justify-between gap-3 border-t border-line px-4 py-2">
+            <span className="text-sm text-ink-soft">Theme</span>
+            <ThemeSwitcher compact />
           </div>
           <div className="border-t border-line py-1">
             <button
@@ -536,10 +546,10 @@ function AdminBottomNav({ groups }: { groups: NavGroup[] }) {
           <button
             type="button"
             aria-label="Close"
-            className="absolute inset-0 bg-ink/30"
+            className="absolute inset-0 bg-scrim/40"
             onClick={() => setOpen(false)}
           />
-          <div className="absolute inset-x-0 bottom-0 max-h-[80dvh] animate-slide-up overflow-y-auto rounded-t-2xl border-t border-line bg-surface pb-safe">
+          <div className="absolute inset-x-0 bottom-0 max-h-[80dvh] animate-slide-up overflow-y-auto rounded-t-2xl border-t border-line bg-raised pb-safe">
             <div className="flex items-center justify-between px-4 py-3">
               <p className="text-heading">All sections</p>
               <button

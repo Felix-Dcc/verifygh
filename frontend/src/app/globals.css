@@ -3,6 +3,118 @@
 @tailwind utilities;
 
 @layer base {
+  /* Theme tokens. Each colour is an "R G B" triplet so Tailwind's opacity
+     modifiers work (bg-sunken/60). Light is the default; .dark on <html> is
+     set before first paint by the script in layout.tsx. Dark is its own
+     palette, not an inversion: deep green-grey surfaces (never pure black),
+     text at AA or better, fills deep enough to carry white text, and brand,
+     status and reward text turned light so it reads on dark surfaces. */
+  :root {
+    --c-canvas: 246 248 247;
+    --c-sunken: 240 243 241;
+    --c-surface: 255 255 255;
+    --c-raised: 255 255 255;
+    --c-scrim: 15 27 23;
+    --c-ink: 15 27 23;
+    --c-ink-soft: 52 67 60;
+    --c-ink-muted: 86 100 93;
+    --c-ink-faint: 104 118 111;
+    --c-line: 227 232 229;
+    --c-line-strong: 201 210 205;
+    --c-primary: 11 100 70;
+    --c-primary-hover: 9 79 55;
+    --c-primary-active: 7 60 42;
+    --c-brand-50: 237 246 242;
+    --c-brand-100: 211 233 223;
+    --c-brand-200: 166 211 191;
+    --c-brand-300: 111 183 154;
+    --c-brand-400: 61 154 118;
+    --c-brand-500: 15 122 85;
+    --c-brand-600: 11 100 70;
+    --c-brand-700: 9 79 55;
+    --c-brand-800: 7 60 42;
+    --c-brand-900: 5 42 30;
+    --c-gold-100: 251 242 220;
+    --c-gold-300: 233 206 135;
+    --c-gold-500: 199 154 46;
+    --c-gold-700: 143 109 27;
+    --c-danger-50: 254 243 242;
+    --c-danger-200: 254 205 202;
+    --c-danger-500: 217 45 32;
+    --c-danger-700: 180 35 24;
+    --c-danger-solid: 180 35 24;
+    --c-success-50: 236 253 243;
+    --c-success-200: 171 239 198;
+    --c-success-500: 23 178 106;
+    --c-success-700: 6 118 71;
+    --c-warn-50: 255 250 235;
+    --c-warn-200: 254 223 137;
+    --c-warn-500: 247 144 9;
+    --c-warn-700: 181 71 8;
+    --c-info-50: 239 248 255;
+    --c-info-200: 178 221 255;
+    --c-info-500: 46 144 250;
+    --c-info-700: 23 92 211;
+    --shadow-card: 0 1px 0 rgb(15 27 23 / 0.03);
+    --shadow-raised: 0 4px 12px rgb(15 27 23 / 0.07), 0 1px 3px rgb(15 27 23 / 0.05);
+    --shadow-pop: 0 16px 40px rgb(15 27 23 / 0.14), 0 2px 8px rgb(15 27 23 / 0.06);
+    --shimmer: rgb(255 255 255 / 0.6);
+    color-scheme: light;
+  }
+
+  .dark {
+    --c-canvas: 11 16 14;
+    --c-sunken: 25 33 29;
+    --c-surface: 18 24 21;
+    --c-raised: 23 32 25;
+    --c-scrim: 0 0 0;
+    --c-ink: 230 236 233;
+    --c-ink-soft: 194 204 199;
+    --c-ink-muted: 152 165 159;
+    --c-ink-faint: 127 140 134;
+    --c-line: 36 45 41;
+    --c-line-strong: 52 64 58;
+    --c-primary: 24 126 88;
+    --c-primary-hover: 27 134 93;
+    --c-primary-active: 22 111 79;
+    --c-brand-50: 15 36 27;
+    --c-brand-100: 20 49 37;
+    --c-brand-200: 30 74 55;
+    --c-brand-300: 46 117 86;
+    --c-brand-400: 60 157 120;
+    --c-brand-500: 61 184 134;
+    --c-brand-600: 68 181 132;
+    --c-brand-700: 95 203 156;
+    --c-brand-800: 143 221 185;
+    --c-brand-900: 184 235 211;
+    --c-gold-100: 42 34 16;
+    --c-gold-300: 107 84 35;
+    --c-gold-500: 217 174 69;
+    --c-gold-700: 226 189 94;
+    --c-danger-50: 43 20 19;
+    --c-danger-200: 92 37 33;
+    --c-danger-500: 240 88 75;
+    --c-danger-700: 255 139 126;
+    --c-danger-solid: 200 55 43;
+    --c-success-50: 13 37 26;
+    --c-success-200: 26 74 51;
+    --c-success-500: 47 199 127;
+    --c-success-700: 92 212 151;
+    --c-warn-50: 42 32 12;
+    --c-warn-200: 90 68 21;
+    --c-warn-500: 245 165 36;
+    --c-warn-700: 245 185 79;
+    --c-info-50: 13 29 48;
+    --c-info-200: 30 61 96;
+    --c-info-500: 77 163 255;
+    --c-info-700: 124 183 255;
+    --shadow-card: 0 1px 0 rgb(0 0 0 / 0.25);
+    --shadow-raised: 0 6px 16px rgb(0 0 0 / 0.35), 0 1px 3px rgb(0 0 0 / 0.3);
+    --shadow-pop: 0 20px 48px rgb(0 0 0 / 0.55), 0 2px 8px rgb(0 0 0 / 0.35);
+    --shimmer: rgb(255 255 255 / 0.05);
+    color-scheme: dark;
+  }
+
   :root {
     /* Safe-area insets, so the bottom navigation clears the iOS home bar. */
     --safe-bottom: env(safe-area-inset-bottom, 0px);
@@ -98,9 +210,9 @@
     @apply absolute inset-0 -translate-x-full animate-shimmer;
     background-image: linear-gradient(
       90deg,
-      rgba(255, 255, 255, 0) 0,
-      rgba(255, 255, 255, 0.6) 50%,
-      rgba(255, 255, 255, 0) 100%
+      transparent 0,
+      var(--shimmer) 50%,
+      transparent 100%
     );
   }
 

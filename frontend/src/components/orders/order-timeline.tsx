@@ -119,7 +119,7 @@ function Timeline({
                 <p className="mt-0.5 text-caption text-ink-muted">{moneyText(row.detail)}</p>
               ) : null}
               {row.at ? (
-                <p className="tabular mt-0.5 text-xs text-ink-faint">{formatTime(row.at)}</p>
+                <p className="tabular mt-0.5 text-caption text-ink-faint">{formatTime(row.at)}</p>
               ) : null}
             </div>
           </li>
@@ -132,7 +132,7 @@ function Timeline({
 function Marker({ state }: { state: StepState }) {
   if (state === "done") {
     return (
-      <span className="relative z-10 flex h-6 w-6 shrink-0 items-center justify-center rounded-full bg-brand-600 text-white">
+      <span className="relative z-10 flex h-6 w-6 shrink-0 items-center justify-center rounded-full bg-primary text-white">
         <svg viewBox="0 0 16 16" fill="none" className="h-3.5 w-3.5" aria-hidden>
           <path d="M3.5 8.5l3 3 6-6.5" stroke="currentColor" strokeWidth="2"
             strokeLinecap="round" strokeLinejoin="round" />
@@ -143,7 +143,7 @@ function Marker({ state }: { state: StepState }) {
 
   if (state === "failed") {
     return (
-      <span className="relative z-10 flex h-6 w-6 shrink-0 items-center justify-center rounded-full bg-danger-700 text-white">
+      <span className="relative z-10 flex h-6 w-6 shrink-0 items-center justify-center rounded-full bg-danger-solid text-white">
         <svg viewBox="0 0 16 16" fill="none" className="h-3 w-3" aria-hidden>
           <path d="M4 4l8 8M12 4l-8 8" stroke="currentColor" strokeWidth="2"
             strokeLinecap="round" />

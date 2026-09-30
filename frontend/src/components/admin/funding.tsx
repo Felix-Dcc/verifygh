@@ -291,7 +291,7 @@ export function ProviderAccountCard({
 function Level({ label, value, warn }: { label: string; value: React.ReactNode; warn?: boolean }) {
   return (
     <div>
-      <dt className="text-xs text-ink-muted">{label}</dt>
+      <dt className="text-caption text-ink-muted">{label}</dt>
       <dd className={warn ? "tabular font-medium text-danger-700" : "tabular font-medium text-ink"}>{value}</dd>
     </div>
   );
@@ -307,7 +307,7 @@ function TopUpHistory({ adapterKey }: { adapterKey: string }) {
     <div className="overflow-x-auto">
       <table className="w-full min-w-[560px] text-sm">
         <thead>
-          <tr className="text-left text-xs text-ink-muted">
+          <tr className="text-left text-caption text-ink-muted">
             <th className="py-2 pr-3 font-medium">Recorded</th>
             <th className="py-2 pr-3 font-medium">Amount</th>
             <th className="py-2 pr-3 font-medium">Paid</th>
@@ -321,7 +321,7 @@ function TopUpHistory({ adapterKey }: { adapterKey: string }) {
             <tr key={row.id}>
               <td className="py-2 pr-3">
                 {formatDateTime(row.created_at)}
-                <span className="block text-xs text-ink-muted">{row.recorded_by}</span>
+                <span className="block text-caption text-ink-muted">{row.recorded_by}</span>
               </td>
               <td className="tabular py-2 pr-3">{providerMoney(row.amount, row.currency)}</td>
               <td className="tabular py-2 pr-3">{row.paid_ghs ? cedis(row.paid_ghs) : "—"}</td>
@@ -590,13 +590,13 @@ export function CashFlowCard({ flow }: { flow: CashFlow }) {
             />
           </div>
           {flow.provider_balance_unread.length ? (
-            <p className="text-xs text-ink-muted">
+            <p className="text-caption text-ink-muted">
               Balance not read yet: {flow.provider_balance_unread.join(", ")} - the shortfall cannot be worked out
               until it is.
             </p>
           ) : null}
           {flow.provider_balance_unconverted.length ? (
-            <p className="text-xs text-ink-muted">
+            <p className="text-caption text-ink-muted">
               Not converted (no pricing rate): {flow.provider_balance_unconverted.join(", ")}.
             </p>
           ) : null}
@@ -644,7 +644,7 @@ export function FundingAlerts({ alerts }: { alerts: FundingAlert[] }) {
                   <Badge tone={alert.severity === "CRITICAL" ? "danger" : alert.severity === "WARNING" ? "warn" : "info"}>
                     {alert.kind_label}
                   </Badge>
-                  <span className="text-xs text-ink-muted">
+                  <span className="text-caption text-ink-muted">
                     {alert.provider} · {formatDateTime(alert.created_at)}
                   </span>
                 </div>

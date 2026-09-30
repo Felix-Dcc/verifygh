@@ -118,7 +118,7 @@ export default function AdminUsersPage() {
                       <span className="block truncate text-sm font-medium text-ink">
                         {user.full_name || user.email}
                       </span>
-                      <span className="block truncate text-xs text-ink-muted">{user.email}</span>
+                      <span className="block truncate text-caption text-ink-muted">{user.email}</span>
                     </span>
                     <span className="shrink-0 text-right">
                       <span className="tabular block text-sm font-semibold text-ink">
@@ -157,7 +157,7 @@ export default function AdminUsersPage() {
                             <p className="truncate font-medium text-ink">
                               {user.full_name || "-"}
                             </p>
-                            <p className="truncate text-xs text-ink-muted">{user.email}</p>
+                            <p className="truncate text-caption text-ink-muted">{user.email}</p>
                           </div>
                         </div>
                       </td>
@@ -214,7 +214,7 @@ function Avatar({ user }: { user: AdminUser }) {
   return (
     <span
       className={cn(
-        "flex h-9 w-9 shrink-0 items-center justify-center rounded-full text-xs font-semibold",
+        "flex h-9 w-9 shrink-0 items-center justify-center rounded-full text-caption font-semibold",
         user.is_suspended ? "bg-danger-50 text-danger-700" : "bg-brand-100 text-brand-700",
       )}
     >
@@ -349,7 +349,7 @@ function UserDetailDialog({
                     <li key={entry.id} className="flex items-center gap-3 px-3.5 py-2.5 text-sm">
                       <span className="min-w-0 flex-1">
                         <span className="block truncate text-ink">{entry.description}</span>
-                        <span className="tabular block text-xs text-ink-muted">
+                        <span className="tabular block text-caption text-ink-muted">
                           {entry.reference}
                         </span>
                       </span>
@@ -386,7 +386,7 @@ function UserDetailDialog({
             </div>
 
             {!canSuspend && !canAdjust ? (
-              <p className="text-xs text-ink-muted">
+              <p className="text-caption text-ink-muted">
                 Your role can view this account but not change it.
               </p>
             ) : null}

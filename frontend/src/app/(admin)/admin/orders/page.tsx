@@ -285,7 +285,7 @@ function OrderDialog({
 
             <PricingSnapshot order={order} />
 
-            <p className="text-xs text-ink-muted">
+            <p className="text-caption text-ink-muted">
               The verification code itself is never shown here. Support can confirm that a message
               arrived without being able to read a customer&apos;s one-time code.
             </p>
@@ -299,13 +299,13 @@ function OrderDialog({
                       <span className="min-w-0">
                         <span className="block text-ink">{entry.label}</span>
                         {entry.detail ? (
-                          <span className="block text-xs text-ink-muted">{entry.detail}</span>
+                          <span className="block text-caption text-ink-muted">{entry.detail}</span>
                         ) : null}
                         {!entry.is_system && entry.actor ? (
-                          <span className="block text-xs text-ink-faint">by {entry.actor}</span>
+                          <span className="block text-caption text-ink-faint">by {entry.actor}</span>
                         ) : null}
                       </span>
-                      <span className="tabular shrink-0 text-xs text-ink-faint">
+                      <span className="tabular shrink-0 text-caption text-ink-faint">
                         {formatDateTime(entry.created_at)}
                       </span>
                     </li>

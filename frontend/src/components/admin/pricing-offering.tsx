@@ -170,7 +170,7 @@ function Step({
     >
       <dt className="min-w-0">
         <span className={cn("block text-ink-soft", strong && "font-medium text-ink")}>{label}</span>
-        {hint ? <span className="block truncate text-xs text-ink-faint">{hint}</span> : null}
+        {hint ? <span className="block truncate text-caption text-ink-faint">{hint}</span> : null}
       </dt>
       <dd className={cn("tabular shrink-0 text-right text-ink", strong && "font-semibold")}>{children}</dd>
     </div>
@@ -563,11 +563,11 @@ function Comparison({ detail }: { detail: PricingOfferingDetail }) {
             {comparison.providers.map((p) => (
               <tr key={p.provider_key} className={p.this ? "bg-brand-50/50" : undefined}>
                 <td className="px-3 py-2 text-ink">
-                  {p.provider} {p.this ? <span className="text-xs text-ink-muted">(this)</span> : null}
+                  {p.provider} {p.this ? <span className="text-caption text-ink-muted">(this)</span> : null}
                 </td>
                 <td className="tabular px-3 py-2 text-right">{providerMoney(p.cost, p.currency)}</td>
                 <td className="tabular px-3 py-2 text-right">{p.ghs_cost ? cedis(p.ghs_cost) : "-"}</td>
-                <td className="px-3 py-2 text-xs text-ink-muted">
+                <td className="px-3 py-2 text-caption text-ink-muted">
                   {!p.enabled ? "disabled" : p.available ? "in stock" : "out of stock"}
                 </td>
               </tr>
@@ -575,7 +575,7 @@ function Comparison({ detail }: { detail: PricingOfferingDetail }) {
           </tbody>
         </table>
       </div>
-      <p className="mt-1.5 text-xs text-ink-muted">
+      <p className="mt-1.5 text-caption text-ink-muted">
         Lowest available provider cost: {comparison.lowest_available_ghs_cost ? cedis(comparison.lowest_available_ghs_cost) : "-"}.{" "}
         {comparison.routing}
       </p>
@@ -625,9 +625,9 @@ function History({ detail }: { detail: PricingOfferingDetail }) {
             <li key={index} className="flex items-start justify-between gap-3 px-3 py-2">
               <span className="min-w-0">
                 <span className="tabular block text-ink">{item.text}</span>
-                <span className="block text-xs text-ink-muted">{item.meta}</span>
+                <span className="block text-caption text-ink-muted">{item.meta}</span>
               </span>
-              <span className="shrink-0 text-xs text-ink-faint">{formatDateTime(item.at)}</span>
+              <span className="shrink-0 text-caption text-ink-faint">{formatDateTime(item.at)}</span>
             </li>
           ))}
         </ul>

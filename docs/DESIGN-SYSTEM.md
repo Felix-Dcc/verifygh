@@ -35,17 +35,45 @@ numbers (`.code`: slashed zero, tabular). Both are self-hosted by `next/font`.
 
 Money uses `.tabular` everywhere so columns do not jitter.
 
-## Colour
+## Colour and themes
 
-Neutrals are chosen for WCAG AA on both white and the page background:
-`ink` 17.7:1, `ink-soft` 10.4:1, `ink-muted` 6.2:1, `ink-faint` 4.8:1 (least
-important text only). Surfaces: `canvas` (page), `surface` (white panels),
-`sunken` (table heads, hover rows, active nav). Borders: `line`, `line-strong`.
+Every colour is a token (`tailwind.config.ts`) backed by a CSS variable
+(`globals.css`) that holds an "R G B" triplet, defined once for light (`:root`)
+and once for dark (`.dark`). Components use the token - `bg-surface`,
+`text-ink-muted`, `border-line` - and never name a theme. `dark:` variants are
+not needed and should not appear.
+
+| Token | Use |
+|---|---|
+| `canvas` / `surface` / `sunken` | Page, panels, table heads and hover rows |
+| `raised` | Things that float: menus, dialogs, sheets |
+| `scrim` | Behind a dialog, always with an opacity (`bg-scrim/50`) |
+| `ink`, `ink-soft`, `ink-muted`, `ink-faint` | Text, most to least important |
+| `line`, `line-strong` | Borders and dividers |
+| `primary` (+ `-hover`, `-active`) | Filled primary buttons - white text on it |
+| `danger-solid` | Filled destructive buttons - white text on it |
+| `brand-*`, `success-*`, `warn-*`, `info-*`, `gold-*` | 50: tint backgrounds; 200: tint borders; 500: dots, rings, focus; 700: text on surfaces or tints |
+
+Why `primary` exists apart from `brand-600/700`: in dark mode a button fill must
+stay deep (white text on it) while brand *text* must turn light. One token can
+not do both. Never put `text-white` on a `brand-*` fill - use `bg-primary`.
+
+Dark is its own palette, not an inversion: deep green-grey surfaces (never pure
+black), text at AA or better (`ink-muted` 7.0:1, `ink-faint` 5.1:1 on
+`surface`), fills deep enough for white text (`primary` 5.0:1), and deeper,
+softer shadows. Light keeps the values in docs/UI-AUDIT.md section 5.
+
+The theme is chosen per device (Light / Dark / System - `ThemeSwitcher` in the
+account menus, Settings and the site footer) and stored in localStorage.
+`THEME_SCRIPT` in `lib/theme.ts` runs in `<head>` with the CSP nonce and sets
+the class before the first paint, so there is no flash. On "System" the page
+follows the device live and re-checks whenever the tab comes back into view.
 
 ## Shape and elevation
 
 Radius: 8px (`rounded-lg`) for controls and badges; 10-12px (`rounded-xl`,
-`rounded-2xl`) for panels; `rounded-full` only for avatars and dots. Larger
+`rounded-2xl`) for panels; `rounded-full` only for avatars and dots. `rounded-device`
+(2rem) is for phone mockups on marketing pages only. Larger
 aliases are pinned to 12px. Borders separate surfaces; shadows (`shadow-raised`,
 `shadow-pop`) are only for things that float - menus, dialogs, toasts.
 
@@ -78,6 +106,8 @@ aliases are pinned to 12px. Borders separate surfaces; shadows (`shadow-raised`,
 | `MetricTile` (+ the `.metric-group` class) | `components/admin/charts.tsx`, `globals.css` |
 | `ServiceLogo` | `components/service-logo.tsx` |
 | `CountryFlag` | `components/country-flag.tsx` |
+| `ThemeProvider`, `ThemeSwitcher`, `useTheme` | `components/theme.tsx` |
+| Illustrations (`PhoneMessageArt`, `StatementArt`, `WalletArt`, `BellArt`, `SearchArt`, `InviteArt`, `SupportArt`) | `components/illustrations.tsx` |
 | Icons (one hand-drawn set, 1.7 stroke) | `components/icons.tsx` |
 
 ## Rules that are easy to break
@@ -112,6 +142,27 @@ aliases are pinned to 12px. Borders separate surfaces; shadows (`shadow-raised`,
   (`aria-describedby`).
 * **Gold is for rewards only** - promotional credit, referral bonuses (`Badge
   tone="gold"`).
+
+## Imagery
+
+No stock photography and no raster images. Two kinds of picture, both drawn
+in code with theme tokens so they work in light and dark and weigh bytes, not
+megabytes:
+
+* **The product itself.** The homepage hero, the "How it works" steps and the
+  payment section show real screens as mockups - with live data where the
+  screen shows data (today's popular services and prices from
+  `/marketplace/home/`, the supported networks from `/payments/options/`). The
+  only invented values are an example order's number, from the 555 range
+  reserved for fiction, and its code, and the mockup says so.
+* **Illustrations** (`components/illustrations.tsx`), for empty states and
+  help: 1.5px outlines in `line-strong`, one soft `brand-50` shape, one
+  `brand-500` accent. Customer empty states use them (`EmptyState art=`); the
+  admin console keeps compact icons.
+
+Service logos sit in one container everywhere (`ServiceLogo`): the squircle,
+a hairline outline, never stretched. Payment networks are named, not shown as
+logos - their marks are not ours to use.
 
 ## Motion
 

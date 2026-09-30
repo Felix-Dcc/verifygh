@@ -145,7 +145,7 @@ function ServicesTab({ canManage }: { canManage: boolean }) {
                 <ServiceLogo name={service.name} src={service.icon_url} slug={service.slug} />
                 <div className="min-w-0 flex-1">
                   <p className="truncate text-sm font-medium text-ink">{service.name}</p>
-                  <p className="text-xs text-ink-muted">
+                  <p className="text-caption text-ink-muted">
                     {service.available_count}/{service.offering_count} in stock
                     <span className="mx-1.5" aria-hidden>
                       &middot;
@@ -275,7 +275,7 @@ function ServiceEditor({
           <p className="mb-2.5 text-sm font-medium text-ink">Logo</p>
           <div className="flex items-center gap-4">
             <ServiceLogo name={service.name} src={service.icon_url} slug={service.slug} size="xl" />
-            <div className="min-w-0 flex-1 space-y-1 text-xs text-ink-muted">
+            <div className="min-w-0 flex-1 space-y-1 text-caption text-ink-muted">
               <p>
                 {service.has_uploaded_logo
                   ? "Uploaded logo."
@@ -483,7 +483,7 @@ function CountriesTab({ canManage }: { canManage: boolean }) {
               <CountryFlag code={country.code} />
               <div className="min-w-0 flex-1">
                 <p className="text-sm font-medium text-ink">{country.name}</p>
-                <p className="tabular text-xs text-ink-muted">
+                <p className="tabular text-caption text-ink-muted">
                   {country.code} {country.dial_code}
                 </p>
               </div>
@@ -538,7 +538,7 @@ function Toggle({
       />
       <span>
         <span className="block text-sm font-medium text-ink">{label}</span>
-        <span className="block text-xs text-ink-muted">{description}</span>
+        <span className="block text-caption text-ink-muted">{description}</span>
       </span>
     </label>
   );

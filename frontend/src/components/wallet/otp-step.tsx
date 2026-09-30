@@ -128,14 +128,14 @@ export function OtpStep({
         {/* The single most important sentence on this screen. */}
         <p
           id="otp-help"
-          className="mt-5 max-w-sm rounded-xl bg-warn-50 px-4 py-3 text-xs leading-relaxed text-warn-700"
+          className="mt-5 max-w-sm rounded-xl bg-warn-50 px-4 py-3 text-caption leading-relaxed text-warn-700"
         >
           This is the one-time code from the payment message. It is{" "}
           <strong>not your Mobile Money PIN</strong>. VerifyGH will never ask for your PIN &mdash;
           only enter that on your own phone.
         </p>
 
-        <p className="tabular mt-4 text-xs text-ink-faint">Reference {payment.reference}</p>
+        <p className="tabular mt-4 text-caption text-ink-faint">Reference {payment.reference}</p>
       </div>
     </Card>
   );

@@ -4,7 +4,7 @@ import Link from "next/link";
 import useSWR from "swr";
 
 import { PageHeader } from "@/components/app-shell";
-import { ReceiptIcon, WalletIcon } from "@/components/icons";
+import { StatementArt, WalletArt } from "@/components/illustrations";
 import {
   Alert,
   Amount,
@@ -106,7 +106,7 @@ export default function WalletPage() {
               <RowSkeletons />
             ) : transactions.data.results.length === 0 ? (
               <EmptyState
-                icon={<WalletIcon />}
+                art={<StatementArt />}
                 title="No transactions yet"
                 description="Your deposits, purchases and refunds all appear here."
               />
@@ -128,7 +128,7 @@ export default function WalletPage() {
               <RowSkeletons />
             ) : payments.data.results.length === 0 ? (
               <EmptyState
-                icon={<ReceiptIcon />}
+                art={<WalletArt />}
                 title="No top-ups yet"
                 description="Add funds from MTN MoMo, Telecel Cash or AT Money."
                 action={

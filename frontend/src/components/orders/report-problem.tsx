@@ -63,7 +63,7 @@ export function ReportProblem({ order, onReported }: { order: Order; onReported:
           <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
             <div>
               <p className="text-sm font-medium text-ink">Number not working as expected?</p>
-              <p className="mt-0.5 text-xs text-ink-muted">
+              <p className="mt-0.5 text-caption text-ink-muted">
                 {order.report_window_ends_at
                   ? `You can report a problem until ${formatDateTime(order.report_window_ends_at)}.`
                   : "Tell us what happened and we'll review it."}
@@ -158,7 +158,7 @@ function ReportDialog({
               </p>
             </div>
           </div>
-          <p className="text-xs text-ink-muted">Report reference: {filed.reference}</p>
+          <p className="text-caption text-ink-muted">Report reference: {filed.reference}</p>
           <div className="flex justify-end">
             <Button onClick={onClose}>Done</Button>
           </div>
@@ -194,7 +194,7 @@ function ReportDialog({
                   />
                   <span>
                     <span className="block text-sm font-medium text-ink">{option.label}</span>
-                    <span className="block text-xs text-ink-muted">{option.hint}</span>
+                    <span className="block text-caption text-ink-muted">{option.hint}</span>
                   </span>
                 </label>
               ))}
@@ -207,7 +207,7 @@ function ReportDialog({
                 Did {order.service_name} ask you for an existing password instead of allowing you
                 to create an account?
               </p>
-              <p className="text-xs text-ink-muted">
+              <p className="text-caption text-ink-muted">
                 Don&apos;t try to guess or reset that password - the account isn&apos;t yours. We
                 never need your password for {order.service_name} or any other service.
               </p>
@@ -257,7 +257,7 @@ function IssueStatusCard({ issue }: { issue: OrderIssue }) {
       <div className="flex items-start justify-between gap-3">
         <div className="min-w-0">
           <p className="text-sm font-medium text-ink">Problem reported</p>
-          <p className="mt-0.5 text-xs text-ink-muted">
+          <p className="mt-0.5 text-caption text-ink-muted">
             {issue.reason_label} &middot; {formatDateTime(issue.created_at)}
           </p>
         </div>

@@ -255,7 +255,7 @@ export function ProviderCard({
 function Row({ label, value, warn }: { label: string; value: React.ReactNode; warn?: boolean }) {
   return (
     <div>
-      <dt className="text-xs text-ink-muted">{label}</dt>
+      <dt className="text-caption text-ink-muted">{label}</dt>
       <dd className={warn ? "text-danger-700" : "text-ink"}>{value}</dd>
     </div>
   );
