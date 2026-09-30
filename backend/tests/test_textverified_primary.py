@@ -115,12 +115,16 @@ def authorise(provider: Provider) -> Provider:
     return provider
 
 
-def verification_routes(tv, *, state="verificationPending", code=None, vid="ver_1"):
+def verification_routes(tv, *, state="verificationPending", code=None, vid="ver_1",
+                        number="+12025550123", reusable_until=None):
     tv["routes"][("POST", "/api/pub/v2/verifications")] = Reply(
         201, {"href": f"/api/pub/v2/verifications/{vid}", "method": "GET"})
-    details = {"id": vid, "number": "+12025550123", "serviceName": "tiktok", "state": state,
+    details = {"id": vid, "number": number, "serviceName": "tiktok", "state": state,
                "totalCost": 0.50, "endsAt": "2099-01-01T00:10:00Z",
-               "sms": {"href": f"/api/pub/v2/sms?reservationId={vid}", "method": "GET"}}
+               "sms": {"href": f"/api/pub/v2/sms?reservationId={vid}", "method": "GET"},
+               "reuse": {"reusableUntil": reusable_until,
+                         "link": {"href": f"/api/pub/v2/verifications/{vid}/reuse",
+                                  "method": "POST"}}}
     tv["routes"][("GET", f"/api/pub/v2/verifications/{vid}")] = Reply(200, details)
     sms = {"data": [{"id": "sms_1", "from": "TikTok", "to": "+12025550123",
                      "createdAt": "2026-09-29T20:00:00Z", "smsContent": f"Your code is {code}",
@@ -614,3 +618,123 @@ def test_the_providers_page_reports_measured_figures(tv, tv_catalog, auth, admin
     # The sync above went through the budgeted wrapper, so calls were measured.
     assert row["api"]["calls"] >= 1 and row["api"]["last_success_at"]
     assert row["api"]["average_ms"] is not None
+
+
+# ---------------------------------------------------------------------------
+# Numbers and codes as the customer needs them
+# ---------------------------------------------------------------------------
+
+
+def test_numbers_and_codes_are_stored_ready_to_paste(tv, tv_catalog, buyer, auth,
+                                                     django_capture_on_commit_callbacks):
+    """TextVerified returns "5128033513" and a parsedCode of "708 609 "."""
+    authorise(tv_catalog)
+    verification_routes(tv, number="5128033513")
+    order = Order.objects.get(
+        reference=buy(auth(buyer), django_capture_on_commit_callbacks).data["reference"])
+    assert order.phone_number == "+15128033513"
+
+    verification_routes(tv, number="5128033513", state="verificationCompleted", code="708 609 ")
+    order = poll_order(order)
+    assert order.verification_code == "708609"
+
+
+# ---------------------------------------------------------------------------
+# Reusing a number
+# ---------------------------------------------------------------------------
+
+
+def _delivered_order(tv, tv_catalog, buyer, auth, capture, *, window_seconds=90):
+    from datetime import timedelta
+
+    from django.utils import timezone
+
+    authorise(tv_catalog)
+    verification_routes(tv)
+    order = Order.objects.get(reference=buy(auth(buyer), capture).data["reference"])
+    until = (timezone.now() + timedelta(seconds=window_seconds)).isoformat()
+    verification_routes(tv, state="verificationCompleted", code="482913", reusable_until=until)
+    return poll_order(order)
+
+
+def reuses(tv) -> list[dict]:
+    return [c for c in tv["calls"] if c["path"].endswith("/reuse")]
+
+
+def test_a_number_is_reused_within_its_window(tv, tv_catalog, buyer, auth,
+                                              django_capture_on_commit_callbacks):
+    original = _delivered_order(tv, tv_catalog, buyer, auth, django_capture_on_commit_callbacks)
+    assert original.status == OrderStatus.CODE_RECEIVED and original.reusable_until
+
+    client = auth(buyer)
+    detail = client.get(f"{ORDERS}{original.reference}/").data
+    assert detail["can_reuse"] is True
+    assert detail["reuse_price"] == str(original.price)
+
+    tv["routes"][("POST", "/api/pub/v2/verifications/ver_1/reuse")] = Reply(
+        201, {"href": "/api/pub/v2/verifications/ver_2", "method": "GET"})
+    verification_routes(tv, vid="ver_2")  # the new verification, same number
+    with django_capture_on_commit_callbacks(execute=True):
+        first = client.post(f"{ORDERS}{original.reference}/reuse/",
+                            {"idempotency_key": "reuse-tap-1"}, format="json")
+    with django_capture_on_commit_callbacks(execute=True):
+        again = client.post(f"{ORDERS}{original.reference}/reuse/",
+                            {"idempotency_key": "reuse-tap-1"}, format="json")
+
+    assert first.status_code == 201, first.data
+    assert again.data["reference"] == first.data["reference"]
+    assert len(reuses(tv)) == 1
+    reused = Order.objects.get(reference=first.data["reference"])
+    assert reused.provider_order_id == "ver_2"
+    assert reused.phone_number == original.phone_number
+    assert reused.status == OrderStatus.WAITING_FOR_CODE
+    assert reused.metadata["reuse_of"] == original.reference
+    assert reused.price == original.price
+    assert WalletLedgerEntry.objects.filter(
+        wallet__user=buyer, entry_type=LedgerEntryType.PURCHASE).count() == 2
+    assert creates(tv) and len(creates(tv)) == 1  # the reuse bought no new number
+
+
+def test_after_the_window_the_number_cannot_be_reused(tv, tv_catalog, buyer, auth,
+                                                      django_capture_on_commit_callbacks):
+    original = _delivered_order(tv, tv_catalog, buyer, auth, django_capture_on_commit_callbacks,
+                                window_seconds=-5)
+    client = auth(buyer)
+    balance = get_or_create_wallet(buyer).balance
+
+    assert client.get(f"{ORDERS}{original.reference}/").data["can_reuse"] is False
+    response = client.post(f"{ORDERS}{original.reference}/reuse/", {}, format="json")
+
+    assert response.status_code == 409
+    assert response.data["error"]["code"] == "REUSE_NOT_AVAILABLE"
+    assert get_or_create_wallet(buyer).balance == balance
+    assert reuses(tv) == []
+
+
+def test_a_reuse_the_provider_refuses_is_refunded(tv, tv_catalog, buyer, auth,
+                                                  django_capture_on_commit_callbacks):
+    original = _delivered_order(tv, tv_catalog, buyer, auth, django_capture_on_commit_callbacks)
+    tv["routes"][("POST", "/api/pub/v2/verifications/ver_1/reuse")] = Reply(
+        400, {"errorCode": "NotReusable", "errorDescription": "Reuse window expired."})
+    balance = get_or_create_wallet(buyer).balance
+
+    with django_capture_on_commit_callbacks(execute=True):
+        response = auth(buyer).post(f"{ORDERS}{original.reference}/reuse/", {}, format="json")
+
+    reused = Order.objects.get(reference=response.data["reference"])
+    assert reused.status == OrderStatus.REFUNDED
+    wallet = get_or_create_wallet(buyer)
+    assert wallet.balance == balance
+    assert verify_wallet_integrity(wallet)["ok"] is True
+
+
+def test_only_the_owner_can_reuse_a_number(tv, tv_catalog, buyer, other_user, auth, api,
+                                           django_capture_on_commit_callbacks):
+    original = _delivered_order(tv, tv_catalog, buyer, auth, django_capture_on_commit_callbacks)
+    api.credentials()
+    stranger = auth(other_user, "Correct-Horse-Battery-2")
+
+    response = stranger.post(f"{ORDERS}{original.reference}/reuse/", {}, format="json")
+
+    assert response.status_code == 404
+    assert reuses(tv) == []

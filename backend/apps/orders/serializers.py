@@ -71,6 +71,9 @@ class OrderDetailSerializer(OrderListSerializer):
     report_window_ends_at = serializers.SerializerMethodField()
     issue = serializers.SerializerMethodField()
     replacement_for = serializers.SerializerMethodField()
+    can_reuse = serializers.SerializerMethodField()
+    reuse_price = serializers.SerializerMethodField()
+    reuse_of = serializers.SerializerMethodField()
 
     class Meta(OrderListSerializer.Meta):
         # provider_cost, provider_currency and exchange_rate stay on the order
@@ -92,8 +95,35 @@ class OrderDetailSerializer(OrderListSerializer):
             "report_window_ends_at",
             "issue",
             "replacement_for",
+            "reusable_until",
+            "can_reuse",
+            "reuse_price",
+            "reuse_of",
         ]
         read_only_fields = fields
+
+    def get_can_reuse(self, obj: Order) -> bool:
+        from apps.orders.services import reuse_blocker
+
+        return self._is_owner(obj) and not reuse_blocker(obj)
+
+    def get_reuse_price(self, obj: Order) -> str | None:
+        """What reusing would cost now - the service's current price."""
+        if not self.get_can_reuse(obj):
+            return None
+        from apps.common.errors import APIError
+        from apps.orders.services import candidate_offerings
+        from apps.pricing.engine import quote_for_offering
+
+        try:
+            offering = next((o for o in candidate_offerings(obj.service.slug, obj.country.code)
+                             if o.provider_id == obj.provider_id), None)
+            return str(quote_for_offering(offering).customer_price) if offering else None
+        except APIError:
+            return None
+
+    def get_reuse_of(self, obj: Order) -> str | None:
+        return (obj.metadata or {}).get("reuse_of")
 
     def get_can_report(self, obj: Order) -> bool:
         from apps.numbers.services import can_report

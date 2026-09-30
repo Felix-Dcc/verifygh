@@ -1,7 +1,7 @@
 "use client";
 
 import Link from "next/link";
-import { useParams } from "next/navigation";
+import { useParams, useRouter } from "next/navigation";
 import * as React from "react";
 import useSWR, { mutate as globalMutate } from "swr";
 
@@ -28,6 +28,7 @@ import {
   countdown,
   formatDateTime,
   groupInternational,
+  nationalNumber,
 } from "@/lib/format";
 import type { Order, OrderLiveStatus } from "@/lib/types";
 
@@ -192,6 +193,16 @@ export default function OrderDetailPage() {
         </Alert>
       ) : null}
 
+      {order.reuse_of ? (
+        <Alert tone="info" title="Same number again">
+          This order reuses the number from order{" "}
+          <Link href={`/orders/${order.reuse_of}`} className="underline">
+            {order.reuse_of}
+          </Link>{" "}
+          for another code.
+        </Alert>
+      ) : null}
+
       {order.failure_reason ? (
         <Alert tone="warn" title="What happened">
           {order.failure_reason}
@@ -216,6 +227,15 @@ export default function OrderDetailPage() {
             status={status}
             message={order.verification_message}
           />
+
+          {order.can_reuse && order.reusable_until && order.reuse_price ? (
+            <ReuseCard
+              reference={order.reference}
+              until={order.reusable_until}
+              price={order.reuse_price}
+              onClosed={() => mutate()}
+            />
+          ) : null}
 
           {order.can_complete || order.can_cancel ? (
             <Card className="p-4 sm:p-5">
@@ -333,7 +353,9 @@ function PhoneCard({
 
   async function copy() {
     if (!phone) return;
-    const ok = await copyToClipboard(phone);
+    // The national digits, as providers copy them: sign-up forms take the
+    // country from their own picker and reject a pasted "+1".
+    const ok = await copyToClipboard(nationalNumber(phone, dialCode) || phone);
     if (ok) {
       setCopied(true);
       window.setTimeout(() => setCopied(false), 2000);
@@ -372,7 +394,9 @@ function PhoneCard({
             </Button>
           </div>
           <p className="mt-2 text-sm text-ink-muted">
-            Enter this number on the service you are verifying with.
+            Choose {dialCode === "+1" || dialCode === "1" ? "United States (+1)" : "the country"} on
+            the service you are verifying with, then paste the number. Copy gives you the number
+            without the country code.
           </p>
         </>
       ) : (
@@ -395,6 +419,73 @@ function PhoneCard({
           </span>
         </div>
       ) : null}
+    </Card>
+  );
+}
+
+function ReuseCard({
+  reference,
+  until,
+  price,
+  onClosed,
+}: {
+  reference: string;
+  until: string;
+  price: string;
+  onClosed: () => void;
+}) {
+  const toast = useToast();
+  const router = useRouter();
+  const [busy, setBusy] = React.useState(false);
+  // One key per card, so a double tap or a retry buys once.
+  const [key] = React.useState(() =>
+    typeof crypto !== "undefined" && "randomUUID" in crypto
+      ? crypto.randomUUID()
+      : `${reference}-${Date.now()}`,
+  );
+  const secondsLeft = () => Math.max(0, Math.floor((new Date(until).getTime() - Date.now()) / 1000));
+  const [left, setLeft] = React.useState(secondsLeft);
+
+  React.useEffect(() => {
+    const timer = window.setInterval(() => {
+      const value = secondsLeft();
+      setLeft(value);
+      if (value <= 0) {
+        window.clearInterval(timer);
+        onClosed();
+      }
+    }, 1000);
+    return () => window.clearInterval(timer);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [until]);
+
+  if (left <= 0) return null;
+
+  async function reuse() {
+    setBusy(true);
+    try {
+      const next = await api.post<Order>(`/orders/${reference}/reuse/`, { idempotency_key: key });
+      await globalMutate("/wallet/");
+      router.push(`/orders/${next.reference}`);
+    } catch (caught) {
+      toast.error(
+        "Could not use the number again",
+        caught instanceof ApiError ? caught.message : "Please try again.",
+      );
+      setBusy(false);
+    }
+  }
+
+  return (
+    <Card className="p-4 sm:p-5">
+      <Button fullWidth variant="secondary" loading={busy} onClick={reuse}>
+        Use this number again for {cedis(price)} ({countdown(left)})
+      </Button>
+      <p className="mt-2 text-xs text-ink-muted">
+        Need another code on the same number - to sign in again, or for a second step? You can reuse it
+        for a short time after the code arrives. It is a new order, refunded automatically if no code
+        comes.
+      </p>
     </Card>
   );
 }

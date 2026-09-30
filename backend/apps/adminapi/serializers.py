@@ -58,6 +58,7 @@ class AdminOrderSerializer(serializers.ModelSerializer):
     service_name = serializers.CharField(source="service.name", read_only=True)
     service_icon = serializers.CharField(source="service.icon_url", read_only=True)
     country_code = serializers.CharField(source="country.code", read_only=True)
+    country_dial_code = serializers.CharField(source="country.dial_code", read_only=True)
     provider_name = serializers.CharField(source="provider.name", read_only=True)
     has_code = serializers.SerializerMethodField()
 
@@ -65,7 +66,8 @@ class AdminOrderSerializer(serializers.ModelSerializer):
         model = Order
         fields = [
             "id", "reference", "user_id", "user_email", "service_name", "service_icon",
-            "country_code", "provider_name", "provider_order_id", "phone_number", "price", "currency",
+            "country_code", "country_dial_code", "provider_name", "provider_order_id",
+            "phone_number", "price", "currency",
             "provider_cost", "provider_currency", "exchange_rate", "status", "refund_status",
             "failure_reason", "has_code", "expires_at", "completed_at", "created_at",
             # The full pricing snapshot frozen at purchase: provider cost, the

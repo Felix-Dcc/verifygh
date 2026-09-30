@@ -405,6 +405,18 @@ def create_order(*, user, service_slug: str, country_code: str, idempotency_key:
     # slug and a country code, nothing else.
     offering = purchasable_offering(service_slug, country_code)
     priced = quote_for_offering(offering)
+    return _place_order(user=user, offering=offering, priced=priced,
+                        idempotency_key=idempotency_key, request=request)
+
+
+def _place_order(*, user, offering, priced, idempotency_key: str, request=None,
+                 metadata: dict | None = None, created_detail: str = "") -> Order:
+    """Charge the wallet and create the order, in one transaction.
+
+    Shared by a new purchase and a number reuse, so both move money the same
+    way: ledger-first, idempotent on (user, key), and never holding a wallet
+    lock across a provider call.
+    """
     price = priced.customer_price
 
     wallet = get_or_create_wallet(user)
@@ -434,6 +446,7 @@ def create_order(*, user, service_slug: str, country_code: str, idempotency_key:
                 idempotency_key=idempotency_key,
                 expires_at=timezone.now() + timedelta(minutes=offering.ttl_minutes),
                 ip_address=getattr(request, "client_ip", None) or None,
+                metadata=metadata or {},
             )
 
             # Raises InsufficientFunds before anything else is written.
@@ -458,7 +471,7 @@ def create_order(*, user, service_slug: str, country_code: str, idempotency_key:
                 order=order,
                 status=OrderStatus.CREATED,
                 label=STATUS_LABELS[OrderStatus.CREATED],
-                detail=f"{offering.service.name} - {offering.country.name}",
+                detail=created_detail or f"{offering.service.name} - {offering.country.name}",
             )
             OrderEvent.objects.create(
                 order=order,
@@ -496,6 +509,86 @@ def create_order(*, user, service_slug: str, country_code: str, idempotency_key:
     return order
 
 
+# ---------------------------------------------------------------------------
+# Reusing a number
+# ---------------------------------------------------------------------------
+
+
+REUSABLE_STATUSES = {OrderStatus.CODE_RECEIVED, OrderStatus.COMPLETED}
+
+
+def reuse_blocker(order: Order) -> str:
+    """Why this order's number cannot be used again right now, or "" if it can.
+
+    Reuse is offered only where the provider documents it and says, per
+    verification, until when (TextVerified: `reuse.reusableUntil`, a couple
+    of minutes after the code arrives).
+    """
+    from apps.verification.registry import available_adapters, get_provider
+
+    if order.status not in REUSABLE_STATUSES:
+        return "Only a number that has received its code can be used again."
+    if not order.provider_order_id or not order.phone_number:
+        return "This number cannot be used again."
+    if not order.reusable_until or order.reusable_until <= timezone.now():
+        return "The window to use this number again has closed."
+    provider = order.provider
+    if not (provider.is_enabled and provider.resale_authorized
+            and provider.adapter_key in available_adapters()):
+        return "This number cannot be used again right now."
+    if not get_provider(provider.adapter_key).supports_reuse:
+        return "This number cannot be used again."
+    return ""
+
+
+def reuse_number(*, user, original: Order, idempotency_key: str, request=None) -> Order:
+    """Buy another code on the same number, while the provider allows it.
+
+    A new order, charged and refunded exactly like a purchase: the same
+    eligibility, the same authorisation and funding checks before any money
+    moves, and an automatic refund if the provider then refuses. Priced at the
+    service's normal price - the provider does not publish a reuse price in
+    advance - and the order records what the reuse actually cost us.
+    """
+    from apps.funding import services as funding
+
+    existing = Order.objects.filter(user=user, idempotency_key=idempotency_key).first()
+    if existing is not None:
+        return existing
+    if original.user_id != user.id:
+        raise NotFound("We could not find that order.")
+    blocker = reuse_blocker(original)
+    if blocker:
+        raise Conflict(blocker, code="REUSE_NOT_AVAILABLE")
+
+    check_purchase_eligibility(user)
+
+    offering = next(
+        (candidate for candidate in candidate_offerings(original.service.slug,
+                                                        original.country.code)
+         if candidate.provider_id == original.provider_id),
+        None,
+    )
+    if offering is None:
+        raise ServiceUnavailable(
+            "This number cannot be used again right now. Nothing was charged.",
+            code="REUSE_NOT_AVAILABLE",
+        )
+    check = funding.check_funding(offering)
+    if not check.ok:
+        funding.purchase_blocked(offering, check)
+        raise ServiceUnavailable(funding.CUSTOMER_UNAVAILABLE, code="TEMPORARILY_UNAVAILABLE")
+
+    priced = quote_for_offering(offering)
+    return _place_order(
+        user=user, offering=offering, priced=priced, idempotency_key=idempotency_key,
+        request=request,
+        metadata={"reuse_of": original.reference,
+                  "reuse_of_provider_order_id": original.provider_order_id},
+        created_detail=f"{offering.service.name} - same number again ({original.reference})",
+    )
+
+
 def fulfil_order(order: Order) -> Order:
     """Reserve a number with the provider.
 
@@ -504,6 +597,8 @@ def fulfil_order(order: Order) -> Order:
     """
     if order.status != OrderStatus.PROCESSING:
         return order
+
+    reuse_of = (order.metadata or {}).get("reuse_of_provider_order_id", "")
 
     if not (order.provider.is_enabled and order.provider.resale_authorized):
         # Checked again here, not only when the order was priced: a provider can
@@ -518,12 +613,16 @@ def fulfil_order(order: Order) -> Order:
         # the registry must be refunded like any other provider failure, not
         # left in PROCESSING by an exception.
         provider = get_provider(order.provider.adapter_key)
-        result = provider.create_order(
-            order.provider_service_code or order.service.slug,
-            order.country.code,
-            # Deterministic, so a retried task cannot reserve two numbers.
-            idempotency_key=f"vgh:{order.id}",
-        )
+        if reuse_of:
+            # The same number again, through the provider's documented reuse.
+            result = provider.reuse_order(reuse_of, idempotency_key=f"vgh:{order.id}")
+        else:
+            result = provider.create_order(
+                order.provider_service_code or order.service.slug,
+                order.country.code,
+                # Deterministic, so a retried task cannot reserve two numbers.
+                idempotency_key=f"vgh:{order.id}",
+            )
     except (ProviderError, ServiceUnavailable) as exc:
         logger.warning(
             "order_provider_create_failed",
@@ -552,7 +651,9 @@ def fulfil_order(order: Order) -> Order:
     from apps.numbers import services as numbers
 
     redraws = 0
-    while result.phone_number and numbers.is_excluded(order, result.phone_number):
+    # A reuse is the customer asking for this very number again: never screened out.
+    while (not reuse_of and result.phone_number
+           and numbers.is_excluded(order, result.phone_number)):
         numbers.turn_away(order, provider, result)
         if redraws >= int(settings.VERIFYGH["NUMBER_QUALITY_MAX_REDRAWS"]):
             return fail_order(
@@ -642,7 +743,7 @@ def poll_order(order: Order) -> Order:
         return order
 
     if result.state == ProviderOrderState.CODE_RECEIVED and result.code:
-        return record_code(order, result.code)
+        return record_code(order, result.code, reusable_until=result.reusable_until)
 
     if result.state == ProviderOrderState.EXPIRED:
         return expire_order(order)
@@ -680,7 +781,7 @@ def poll_order(order: Order) -> Order:
     return order
 
 
-def record_code(order: Order, code_dto) -> Order:
+def record_code(order: Order, code_dto, *, reusable_until=None) -> Order:
     """Store a received code.
 
     Whether the *user* may see it is decided at serialisation time by
@@ -694,6 +795,7 @@ def record_code(order: Order, code_dto) -> Order:
             "verification_code": (code_dto.code or "")[:32],
             "verification_message": (code_dto.full_text or "")[:2000],
             "code_received_at": code_dto.received_at or timezone.now(),
+            "reusable_until": reusable_until,
         },
     )
 

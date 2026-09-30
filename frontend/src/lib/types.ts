@@ -243,6 +243,14 @@ export type Order = OrderSummary & {
   issue: OrderIssue | null;
   /** Set on a free replacement: the reference of the order it replaces. */
   replacement_for: string | null;
+  /** Until when the provider lets this number receive another code. */
+  reusable_until: string | null;
+  /** Whether "Use this number again" is offered right now. */
+  can_reuse: boolean;
+  /** What reusing would cost now; null unless can_reuse. */
+  reuse_price: string | null;
+  /** Set on a reuse: the reference of the order whose number it reused. */
+  reuse_of: string | null;
   events: OrderEvent[];
   refund: {
     reference: string;
@@ -580,6 +588,7 @@ export type AdminOrder = {
   service_name: string;
   service_icon: string;
   country_code: string;
+  country_dial_code: string;
   provider_name: string;
   provider_order_id: string;
   phone_number: string;

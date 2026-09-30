@@ -167,6 +167,7 @@ class RateLimitedProvider(VerificationProvider):
         self.supports_webhooks = inner.supports_webhooks
         self.supports_issue_reports = inner.supports_issue_reports
         self.supports_balance = inner.supports_balance
+        self.supports_reuse = inner.supports_reuse
         self.supports_account_funding = inner.supports_account_funding
         self._limiter = ProviderRateLimiter(
             inner.key, settings.VERIFYGH["PROVIDER_RATE_LIMIT_PER_MINUTE"]
@@ -238,6 +239,11 @@ class RateLimitedProvider(VerificationProvider):
 
     def release_retry_after_seconds(self, service_code: str) -> int:
         return self._inner.release_retry_after_seconds(service_code)
+
+    def reuse_order(self, provider_order_id: str, idempotency_key: str):
+        if not self._inner.supports_reuse:
+            raise NotImplementedError(f"{self.display_name} documents no number reuse.")
+        return self._call("reuse_order", provider_order_id, idempotency_key)
 
     def get_balance(self):
         if not self._inner.supports_balance:

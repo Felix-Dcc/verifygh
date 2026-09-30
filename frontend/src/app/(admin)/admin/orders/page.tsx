@@ -262,7 +262,11 @@ function OrderDialog({
               <Row label="Provider order id" value={order.provider_order_id || "-"} />
               <Row
                 label="Number"
-                value={order.phone_number ? groupInternational(order.phone_number) : "-"}
+                value={
+                  order.phone_number
+                    ? groupInternational(order.phone_number, order.country_dial_code)
+                    : "-"
+                }
               />
               <Row label="Code received" value={order.has_code ? "Yes" : "No"} />
               <Row label="Refund" value={order.refund_status} />

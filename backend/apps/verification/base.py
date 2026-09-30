@@ -94,6 +94,9 @@ class ProviderOrderDTO:
     currency: str = "USD"
     code: CodeDTO | None = None
     failure_reason: str = ""
+    #: Until when the number may be reused for another code, where the
+    #: provider documents reuse. None otherwise.
+    reusable_until: datetime | None = None
     raw: dict = field(default_factory=dict)
 
 
@@ -188,6 +191,20 @@ class VerificationProvider(abc.ABC):
     @abc.abstractmethod
     def refund_order(self, provider_order_id: str) -> bool:
         """Ask the provider to refund a failed reservation, where its policy allows."""
+
+    # -- reuse -------------------------------------------------------------
+
+    #: Whether the provider documents reusing a finished verification's number
+    #: for another code.
+    supports_reuse: bool = False
+
+    def reuse_order(self, provider_order_id: str, idempotency_key: str) -> ProviderOrderDTO:
+        """Ask for another code on the number of a finished verification.
+
+        Returns the new reservation. Only adapters with a documented reuse call
+        implement this.
+        """
+        raise NotImplementedError(f"{self.display_name} documents no number reuse.")
 
     # -- number quality ----------------------------------------------------
 

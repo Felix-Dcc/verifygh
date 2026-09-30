@@ -44,6 +44,7 @@ import hmac
 import json
 import logging
 import random
+import re
 import time
 from datetime import UTC, datetime, timedelta
 from decimal import ROUND_CEILING, Decimal, InvalidOperation
@@ -153,6 +154,9 @@ class TextVerifiedProvider(VerificationProvider):
     PATH_CREATE_ORDER = "/api/pub/v2/verifications"
     PATH_ORDER_STATUS = "/api/pub/v2/verifications/{id}"
     PATH_ORDER_CANCEL = "/api/pub/v2/verifications/{id}/cancel"
+    #: "Reuse Verification": another code on the same number, only shortly
+    #: after a verification completes (the details' `reuse.reusableUntil`).
+    PATH_ORDER_REUSE = "/api/pub/v2/verifications/{id}/reuse"
     #: Their mechanism for "this number did not work" - the state machine has a
     #: verificationRefunded state that follows a report.
     PATH_ORDER_REFUND = "/api/pub/v2/verifications/{id}/report"
@@ -508,6 +512,24 @@ class TextVerifiedProvider(VerificationProvider):
                                 else f"{self.base_url}{href}")
         return self._order_from_details(details)
 
+    supports_reuse = True
+
+    def reuse_order(self, provider_order_id: str, idempotency_key: str) -> ProviderOrderDTO:
+        """`POST /verifications/{id}/reuse`, then read the new verification.
+
+        The docs give reuse no Idempotency-Key and no price in advance: a new
+        verification is created and its `totalCost` says what it cost. A 400
+        means the verification is no longer eligible (the window closed).
+        """
+        self._require_configured("reusing a number")
+        created = self._request("POST", self._url(self.PATH_ORDER_REUSE, id=provider_order_id))
+        href = str(created.get("href") or "")
+        if not href:
+            raise _provider_error("The verification provider did not return the reuse.")
+        details = self._request("GET", href if href.startswith("http")
+                                else f"{self.base_url}{href}")
+        return self._order_from_details(details)
+
     def get_order_status(self, provider_order_id: str) -> ProviderOrderDTO:
         self._require_configured("order status")
         details = self._request(
@@ -516,7 +538,7 @@ class TextVerifiedProvider(VerificationProvider):
         return self._order_from_details(details)
 
     def _order_from_details(self, details: dict) -> ProviderOrderDTO:
-        number = str(details.get("number") or "")
+        number = _e164(details.get("number"))
         state = self._map_state(details.get("state"), has_number=bool(number))
 
         code = None
@@ -531,6 +553,7 @@ class TextVerifiedProvider(VerificationProvider):
             cost=_decimal(details.get("totalCost"), Decimal("0")) or None,
             currency="USD",
             code=code,
+            reusable_until=_parse_time((details.get("reuse") or {}).get("reusableUntil")),
             raw={"state": str(details.get("state") or ""),
                  "serviceName": str(details.get("serviceName") or "")},
         )
@@ -556,7 +579,7 @@ class TextVerifiedProvider(VerificationProvider):
             return None
         message = messages[0]
         text = str(message.get("smsContent") or "")
-        parsed = str(message.get("parsedCode") or "")
+        parsed = _clean_code(message.get("parsedCode"))
         if not parsed and not text:
             return None
         return CodeDTO(
@@ -691,6 +714,34 @@ class TextVerifiedProvider(VerificationProvider):
             return self.get_balance().available
         except Exception:
             return None
+
+
+def _e164(value) -> str:
+    """TextVerified numbers are US numbers, returned as 10 bare digits.
+
+    Stored in full international form (+1...), like every other provider's, so
+    the number means the same thing everywhere it is shown, copied or matched.
+    """
+    digits = re.sub(r"\D", "", str(value or ""))
+    if len(digits) == 10:
+        return f"+1{digits}"
+    if len(digits) == 11 and digits.startswith("1"):
+        return f"+{digits}"
+    return f"+{digits}" if digits else ""
+
+
+def _clean_code(value) -> str:
+    """A code the customer can paste as it is.
+
+    TextVerified's `parsedCode` keeps the SMS's own spacing ("708 609 "); a
+    6-digit field rejects or truncates that. A code of digits with spaces or
+    dashes between them becomes the bare digits; anything else (such as
+    Google's "G-123456") keeps its characters and loses only surrounding space.
+    """
+    text = str(value or "").strip()
+    if re.fullmatch(r"\d[\d\s-]*\d", text):
+        return re.sub(r"\D", "", text)
+    return text
 
 
 #: Documented create-error codes, translated into something a customer can read.

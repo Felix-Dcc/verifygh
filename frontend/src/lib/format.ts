@@ -31,6 +31,20 @@ export function localPhone(phone: string | null | undefined): string {
 }
 
 /**
+ * The number without its country code - what a sign-up form wants once the
+ * country has been picked from its own list. Falls back to all digits.
+ */
+export function nationalNumber(phone: string | null | undefined, dialCode?: string | null): string {
+  const digits = (phone ?? "").replace(/\D/g, "");
+  const code = (dialCode ?? "").replace(/\D/g, "");
+  if (code === "1" && digits.length === 10) return digits;
+  if (code && digits.startsWith(code) && digits.length > code.length) {
+    return digits.slice(code.length);
+  }
+  return digits;
+}
+
+/**
  * Group an international number for reading and copying.
  *
  * The dial code must be supplied: you cannot tell from the digits alone where
@@ -48,13 +62,18 @@ export function groupInternational(
 
   const code = (dialCode ?? "").replace(/\D/g, "");
 
+  // US/Canada: "+1 (512) 803-3513", the way the numbers are written there and
+  // the way providers show them. Also accepts the 10 national digits alone.
+  if (code === "1") {
+    const national = nationalNumber(phone, dialCode);
+    if (national.length === 10) {
+      return `+1 (${national.slice(0, 3)}) ${national.slice(3, 6)}-${national.slice(6)}`;
+    }
+  }
+
   if (code && digits.startsWith(code)) {
     const national = digits.slice(code.length);
-    // NANP numbers read as 3-3-4; everything else in threes.
-    const grouped =
-      national.length === 10
-        ? `${national.slice(0, 3)} ${national.slice(3, 6)} ${national.slice(6)}`
-        : national.replace(/(\d{3})(?=\d)/g, "$1 ");
+    const grouped = national.replace(/(\d{3})(?=\d)/g, "$1 ");
     return `+${code} ${grouped}`.trim();
   }
 

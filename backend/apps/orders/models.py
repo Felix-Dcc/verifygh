@@ -146,6 +146,9 @@ class Order(BaseModel):
     verification_code = models.CharField(max_length=32, blank=True, default="")
     verification_message = models.TextField(blank=True, default="")
     code_received_at = models.DateTimeField(null=True, blank=True)
+    #: Until when the provider lets this number receive another code (its
+    #: documented reuse window). Null when it offers none.
+    reusable_until = models.DateTimeField(null=True, blank=True)
 
     expires_at = models.DateTimeField(null=True, blank=True, db_index=True)
     completed_at = models.DateTimeField(null=True, blank=True)
