@@ -15,6 +15,7 @@ import {
   Section,
   Skeleton,
   StatusBadge,
+  buttonClasses,
 } from "@/components/ui/primitives";
 import { cedis, relativeTime } from "@/lib/format";
 import type { MyReferral, ReferralHistoryItem } from "@/lib/types";
@@ -88,7 +89,7 @@ export default function ReferPage() {
         </Alert>
       ) : null}
 
-      <Card className="grid overflow-hidden md:grid-cols-5">
+      <Card className="grid grid-cols-1 overflow-hidden md:grid-cols-5">
         <div className="p-5 sm:p-6 md:col-span-3">
           <h2 className="text-heading text-ink">
             {bonus ? `Your friend gets ${bonus} to start` : "Invite a friend"}
@@ -150,15 +151,20 @@ export default function ReferPage() {
           </div>
 
           <div className="mt-5 flex flex-wrap gap-2">
-            <a href={`https://wa.me/?text=${encodeURIComponent(message)}`} target="_blank" rel="noopener noreferrer">
-              <Button tabIndex={-1} icon={<MessageIcon className="h-4 w-4" />}>
-                Share on WhatsApp
-              </Button>
+            <a
+              href={`https://wa.me/?text=${encodeURIComponent(message)}`}
+              target="_blank"
+              rel="noopener noreferrer"
+              className={buttonClasses({})}
+            >
+              <MessageIcon className="h-4 w-4" />
+              Share on WhatsApp
             </a>
-            <a href={`sms:?&body=${encodeURIComponent(message)}`}>
-              <Button tabIndex={-1} variant="secondary">
-                Send by SMS
-              </Button>
+            <a
+              href={`sms:?&body=${encodeURIComponent(message)}`}
+              className={buttonClasses({ variant: "secondary" })}
+            >
+              Send by SMS
             </a>
             {canShare ? (
               <Button variant="secondary" onClick={share} icon={<ShareIcon className="h-4 w-4" />}>

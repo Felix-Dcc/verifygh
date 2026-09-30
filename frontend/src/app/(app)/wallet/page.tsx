@@ -8,7 +8,7 @@ import { ReceiptIcon, WalletIcon } from "@/components/icons";
 import {
   Alert,
   Amount,
-  Button,
+  ButtonLink,
   Card,
   EmptyState,
   Section,
@@ -43,7 +43,7 @@ export default function WalletPage() {
         </Alert>
       ) : null}
 
-      <Card className="grid gap-6 p-5 sm:p-6 md:grid-cols-5">
+      <Card className="grid grid-cols-1 gap-6 p-5 sm:p-6 md:grid-cols-5">
         <div className="md:col-span-3">
           <p className="text-sm text-ink-muted">{hasPromo ? "Available to spend" : "Available balance"}</p>
           <div className="mt-1.5 min-h-10">
@@ -63,12 +63,8 @@ export default function WalletPage() {
             </p>
           ) : null}
           <div className="mt-5 flex flex-wrap gap-2">
-            <Link href="/wallet/deposit">
-              <Button>Add funds</Button>
-            </Link>
-            <Link href="/services">
-              <Button variant="secondary">Buy a number</Button>
-            </Link>
+            <ButtonLink href="/wallet/deposit">Add funds</ButtonLink>
+            <ButtonLink href="/services" variant="secondary">Buy a number</ButtonLink>
           </div>
         </div>
 
@@ -88,7 +84,7 @@ export default function WalletPage() {
         </dl>
       </Card>
 
-      <div className="grid gap-8 lg:grid-cols-2">
+      <div className="grid grid-cols-1 gap-8 lg:grid-cols-2">
         <Section
           title="Recent transactions"
           action={
@@ -126,9 +122,7 @@ export default function WalletPage() {
                 title="No top-ups yet"
                 description="Add funds from MTN MoMo, Telecel Cash or AT Money."
                 action={
-                  <Link href="/wallet/deposit">
-                    <Button size="sm">Add funds</Button>
-                  </Link>
+                  <ButtonLink href="/wallet/deposit" size="sm">Add funds</ButtonLink>
                 }
               />
             ) : (

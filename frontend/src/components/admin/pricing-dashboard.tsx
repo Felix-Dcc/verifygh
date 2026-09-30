@@ -59,7 +59,7 @@ export async function refreshPricing() {
 export function PricingSummaryCards({ summary }: { summary?: PricingSummary }) {
   if (!summary) {
     return (
-      <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
+      <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-4">
         {Array.from({ length: 4 }).map((_, index) => (
           <Skeleton key={index} className="h-24 rounded-2xl" />
         ))}
@@ -69,7 +69,7 @@ export function PricingSummaryCards({ summary }: { summary?: PricingSummary }) {
   const usd = summary.fx.find((row) => row.currency === "USD");
   return (
     <div className="space-y-3">
-      <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
+      <div className="metric-group grid-cols-1 sm:grid-cols-2 lg:grid-cols-4">
         <MetricTile
           label="Total services"
           value={summary.total_services}
@@ -192,7 +192,7 @@ export function PricingTable({
             className="pl-11"
           />
         </div>
-        <div className="grid grid-cols-2 gap-2 md:grid-cols-4 lg:grid-cols-8">
+        <div className="grid grid-cols-2 gap-2 md:grid-cols-4">
           <Select aria-label="Provider" value={filters.provider} onChange={(e) => set("provider", e.target.value)} className="h-9 text-sm">
             <option value="">All providers</option>
             {summary?.providers.map((p) => (
@@ -239,8 +239,8 @@ export function PricingTable({
       ) : (
         <div className="overflow-x-auto">
           <table className="w-full min-w-[74rem] text-left text-sm">
-            <thead className="border-y border-line bg-canvas">
-              <tr className="text-xs uppercase tracking-wide text-ink-muted">
+            <thead className="border-y border-line bg-sunken">
+              <tr className="text-caption text-ink-muted">
                 <th className="px-4 py-2.5 font-medium">Service</th>
                 <th className="px-3 py-2.5 font-medium">Country</th>
                 <th className="px-3 py-2.5 font-medium">Provider</th>
@@ -257,7 +257,7 @@ export function PricingTable({
             </thead>
             <tbody className="divide-y divide-line">
               {rows.map((row) => (
-                <tr key={row.id} onClick={() => setSelected(row.id)} className="cursor-pointer transition-colors hover:bg-canvas">
+                <tr key={row.id} onClick={() => setSelected(row.id)} className="cursor-pointer transition-colors hover:bg-sunken/60">
                   <td className="whitespace-nowrap px-4 py-2.5 font-medium text-ink">
                     <span className="inline-flex items-center gap-2.5">
                       <ServiceLogo name={row.service.name} src={row.service.icon_url} slug={row.service.slug} size="sm" />
@@ -484,7 +484,7 @@ export function FXPanel({ canManage }: { canManage: boolean }) {
         </div>
       ) : (
         <div className="space-y-4 p-4 sm:p-5">
-          <div className="grid gap-3 sm:grid-cols-3">
+          <div className="grid grid-cols-1 gap-3 sm:grid-cols-3">
             <Info label="Market / reference rate (USD)" value={usd.market_rate ? fxRate(usd.market_rate) : "Not recorded"} hint={usd.market_rate_at ? `${usd.market_rate_source}, ${relativeTime(usd.market_rate_at)}` : "No market feed configured"} />
             <Info label="VerifyGH Pricing FX Rate in use" value={usd.effective_rate ? fxRate(usd.effective_rate) : "Unavailable"} hint={usd.error || `${usd.mode.toLowerCase()}${usd.updated_by ? `, set by ${usd.updated_by}` : ""}`} />
             <Info
@@ -495,7 +495,7 @@ export function FXPanel({ canManage }: { canManage: boolean }) {
 
           {canManage ? (
             <div className="space-y-3 rounded-xl border border-line p-3.5">
-              <div className="grid gap-3 sm:grid-cols-3">
+              <div className="grid grid-cols-1 gap-3 sm:grid-cols-3">
                 <Field label="FX source" htmlFor="fx-mode">
                   <Select id="fx-mode" value={mode} onChange={(e) => setMode(e.target.value as typeof mode)}>
                     <option value="MANUAL">Manual pricing rate</option>
@@ -503,7 +503,7 @@ export function FXPanel({ canManage }: { canManage: boolean }) {
                   </Select>
                 </Field>
                 {mode === "MANUAL" ? (
-                  <Field label="Pricing FX rate (GHS per USD)" htmlFor="fx-manual">
+                  <Field label="Pricing FX rate (GH₵ per US$1)" htmlFor="fx-manual">
                     <Input id="fx-manual" inputMode="decimal" value={manualRate} onChange={(e) => setManualRate(e.target.value)} className="tabular" />
                   </Field>
                 ) : (
@@ -550,7 +550,7 @@ export function FXPanel({ canManage }: { canManage: boolean }) {
 
 function Info({ label, value, hint }: { label: string; value: React.ReactNode; hint?: string }) {
   return (
-    <div className="rounded-xl bg-canvas px-3.5 py-3">
+    <div className="rounded-lg bg-sunken px-3.5 py-3">
       <p className="text-xs text-ink-muted">{label}</p>
       <p className="tabular mt-0.5 text-lg font-semibold text-ink">{value}</p>
       {hint ? <p className="text-xs text-ink-faint">{hint}</p> : null}
@@ -609,7 +609,7 @@ export function BulkMarkupPanel({ summary }: { summary?: PricingSummary }) {
         description="Set one markup for a whole scope - all US services, everything from one provider, or one service everywhere. Leave a field on 'All' to include everything. Nothing changes until you confirm."
       />
       <div className="space-y-3 p-4 sm:p-5">
-        <div className="grid gap-3 sm:grid-cols-3">
+        <div className="grid grid-cols-1 gap-3 sm:grid-cols-3">
           <Field label="Provider" htmlFor="bulk-provider">
             <Select id="bulk-provider" value={scope.provider} onChange={(e) => setScope({ ...scope, provider: e.target.value })}>
               <option value="">All providers</option>
@@ -630,7 +630,7 @@ export function BulkMarkupPanel({ summary }: { summary?: PricingSummary }) {
             <Input id="bulk-service" value={scope.service} onChange={(e) => setScope({ ...scope, service: e.target.value.trim().toLowerCase() })} />
           </Field>
         </div>
-        <div className="grid gap-3 sm:grid-cols-3">
+        <div className="grid grid-cols-1 gap-3 sm:grid-cols-3">
           <Field label="Markup type" htmlFor="bulk-type">
             <Select id="bulk-type" value={markupType} onChange={(e) => setMarkupType(e.target.value)}>
               <option value="PERCENTAGE">Percentage</option>
@@ -644,7 +644,7 @@ export function BulkMarkupPanel({ summary }: { summary?: PricingSummary }) {
             </Field>
           ) : null}
           {markupType !== "PERCENTAGE" ? (
-            <Field label="Fixed markup (₵)" htmlFor="bulk-fixed">
+            <Field label="Fixed markup (GH₵)" htmlFor="bulk-fixed">
               <Input id="bulk-fixed" inputMode="decimal" value={markupFixed} onChange={(e) => setMarkupFixed(e.target.value)} className="tabular" />
             </Field>
           ) : null}
@@ -706,7 +706,7 @@ export function ReviewPanel({ summary, canManage }: { summary?: PricingSummary; 
         <>
           <div className="overflow-x-auto">
             <table className="w-full min-w-[40rem] text-left text-sm">
-              <thead className="border-y border-line bg-canvas text-xs uppercase tracking-wide text-ink-muted">
+              <thead className="border-y border-line bg-sunken text-caption text-ink-muted">
                 <tr>
                   <th className="px-4 py-2 font-medium">Service</th>
                   <th className="px-3 py-2 text-right font-medium">Published</th>
@@ -935,7 +935,7 @@ function HistoryTable({
   return (
     <div className="overflow-x-auto">
       <table className="w-full min-w-[52rem] text-left text-sm">
-        <thead className="border-y border-line bg-canvas text-xs uppercase tracking-wide text-ink-muted">
+        <thead className="border-y border-line bg-sunken text-caption text-ink-muted">
           <tr>
             <th className="px-4 py-2 font-medium">When</th>
             <th className="px-3 py-2 font-medium">What</th>

@@ -1,5 +1,6 @@
 "use client";
 
+import Link from "next/link";
 import * as React from "react";
 
 import { cn } from "@/lib/cn";
@@ -38,8 +39,9 @@ const VARIANTS: Record<ButtonVariant, string> = {
 };
 
 const SIZES: Record<ButtonSize, string> = {
-  // 44px minimum touch target on every size: this is a phone-first product.
-  sm: "h-10 px-3 text-sm gap-1.5",
+  // 44px touch targets on phones for every size; the small size tightens to
+  // 40px only where there is a mouse-sized screen.
+  sm: "h-11 px-3 text-sm gap-1.5 sm:h-10",
   md: "h-11 px-4 text-sm gap-2",
   lg: "h-12 px-5 text-base gap-2",
 };
@@ -52,6 +54,29 @@ export type ButtonProps = React.ButtonHTMLAttributes<HTMLButtonElement> & {
   icon?: React.ReactNode;
 };
 
+/** Button styling for elements that cannot be a Button or ButtonLink - an
+ *  external <a> with a non-http scheme such as sms:. */
+export function buttonClasses({
+  variant = "primary",
+  size = "md",
+  fullWidth,
+  className,
+}: {
+  variant?: ButtonVariant;
+  size?: ButtonSize;
+  fullWidth?: boolean;
+  className?: string;
+}) {
+  return cn(
+    "inline-flex select-none items-center justify-center whitespace-nowrap rounded-lg font-medium",
+    "transition-colors duration-150 ease-out disabled:cursor-not-allowed",
+    VARIANTS[variant],
+    SIZES[size],
+    fullWidth && "w-full",
+    className,
+  );
+}
+
 export const Button = React.forwardRef<HTMLButtonElement, ButtonProps>(function Button(
   { className, variant = "primary", size = "md", loading, fullWidth, icon, children,
     disabled, type = "button", ...props },
@@ -63,14 +88,7 @@ export const Button = React.forwardRef<HTMLButtonElement, ButtonProps>(function 
       type={type}
       disabled={disabled || loading}
       aria-busy={loading || undefined}
-      className={cn(
-        "inline-flex select-none items-center justify-center whitespace-nowrap rounded-lg font-medium",
-        "transition-colors duration-150 ease-out disabled:cursor-not-allowed",
-        VARIANTS[variant],
-        SIZES[size],
-        fullWidth && "w-full",
-        className,
-      )}
+      className={buttonClasses({ variant, size, fullWidth, className })}
       {...props}
     >
       {loading ? <Spinner className="h-4 w-4" /> : icon}
@@ -78,6 +96,37 @@ export const Button = React.forwardRef<HTMLButtonElement, ButtonProps>(function 
     </button>
   );
 });
+
+export type ButtonLinkProps = Omit<React.ComponentProps<typeof Link>, "className"> & {
+  variant?: ButtonVariant;
+  size?: ButtonSize;
+  fullWidth?: boolean;
+  icon?: React.ReactNode;
+  className?: string;
+};
+
+/**
+ * A link that looks like a button - for "Add funds", "Buy a number" and every
+ * other action that goes somewhere. One element, so one tab stop and a real
+ * link for screen readers and middle-click; a <button> inside an <a> is
+ * neither.
+ */
+export function ButtonLink({
+  variant,
+  size,
+  fullWidth,
+  icon,
+  className,
+  children,
+  ...props
+}: ButtonLinkProps) {
+  return (
+    <Link className={buttonClasses({ variant, size, fullWidth, className })} {...props}>
+      {icon}
+      {children}
+    </Link>
+  );
+}
 
 export function Spinner({ className }: { className?: string }) {
   return (
@@ -160,6 +209,16 @@ export function Field({
   children: React.ReactNode;
   className?: string;
 }) {
+  // Point the control at its error or hint, so a screen reader reads it when
+  // the field is focused - not only when the error first appears.
+  const describedBy = error ? `${htmlFor}-error` : hint ? `${htmlFor}-hint` : undefined;
+  const control =
+    describedBy && React.isValidElement<{ "aria-describedby"?: string }>(children)
+      ? React.cloneElement(children, {
+          "aria-describedby": cn(children.props["aria-describedby"], describedBy),
+        })
+      : children;
+
   return (
     <div className={cn("space-y-1.5", className)}>
       <label htmlFor={htmlFor} className="block text-label text-ink-soft">
@@ -170,7 +229,7 @@ export function Field({
           </span>
         ) : null}
       </label>
-      {children}
+      {control}
       {error ? (
         <p id={`${htmlFor}-error`} role="alert" className="text-sm text-danger-700">
           {error}
@@ -221,7 +280,7 @@ export const Input = React.forwardRef<HTMLInputElement, InputProps>(function Inp
         className={cn(base, prefix ? "px-2" : "px-3.5", suffix && "pr-1")}
         {...props}
       />
-      {suffix ? <span className="flex shrink-0 self-stretch p-0.5">{suffix}</span> : null}
+      {suffix ? <span className="flex shrink-0 self-stretch">{suffix}</span> : null}
     </div>
   );
 });
@@ -247,7 +306,7 @@ export const PasswordInput = React.forwardRef<HTMLInputElement, Omit<InputProps,
             onClick={() => setVisible((value) => !value)}
             aria-pressed={visible}
             aria-label={visible ? "Hide password" : "Show password"}
-            className="min-w-14 rounded-md px-2 text-caption font-medium text-ink-muted transition-colors hover:bg-sunken hover:text-ink"
+            className="min-w-14 rounded-r-lg px-2 text-caption font-medium text-ink-muted transition-colors hover:bg-sunken hover:text-ink"
           >
             {visible ? "Hide" : "Show"}
           </button>

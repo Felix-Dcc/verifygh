@@ -108,7 +108,7 @@ export default function AdminUsersPage() {
                   <button
                     type="button"
                     onClick={() => setSelected(user)}
-                    className="flex w-full items-center gap-3 px-4 py-3.5 text-left transition-colors hover:bg-canvas"
+                    className="flex w-full items-center gap-3 px-4 py-3.5 text-left transition-colors hover:bg-sunken/60"
                   >
                     <Avatar user={user} />
                     <span className="min-w-0 flex-1">
@@ -130,8 +130,8 @@ export default function AdminUsersPage() {
 
             <div className="hidden md:block">
               <table className="w-full text-left text-sm">
-                <thead className="border-b border-line bg-canvas">
-                  <tr className="text-xs uppercase tracking-wide text-ink-muted">
+                <thead className="border-b border-line bg-sunken">
+                  <tr className="text-caption text-ink-muted">
                     <th scope="col" className="px-5 py-3 font-medium">User</th>
                     <th scope="col" className="px-5 py-3 font-medium">Phone</th>
                     <th scope="col" className="px-5 py-3 text-right font-medium">Balance</th>
@@ -145,7 +145,7 @@ export default function AdminUsersPage() {
                     <tr
                       key={user.id}
                       onClick={() => setSelected(user)}
-                      className="cursor-pointer transition-colors hover:bg-canvas"
+                      className="cursor-pointer transition-colors hover:bg-sunken/60"
                     >
                       <td className="px-5 py-3.5">
                         <div className="flex items-center gap-3">
@@ -482,7 +482,7 @@ function UserDetailDialog({
                 id="amount"
                 inputMode="decimal"
                 required
-                prefix="&#8373;"
+                prefix="GH₵"
                 value={amount}
                 onChange={(event) => setAmount(event.target.value.replace(/[^\d.]/g, ""))}
                 className="tabular"

@@ -88,8 +88,8 @@ export default function AdminPaymentsPage() {
         ) : (
           <div className="overflow-x-auto">
             <table className="w-full min-w-[52rem] text-left text-sm">
-              <thead className="border-b border-line bg-canvas">
-                <tr className="text-xs uppercase tracking-wide text-ink-muted">
+              <thead className="border-b border-line bg-sunken">
+                <tr className="text-caption text-ink-muted">
                   <th scope="col" className="px-5 py-3 font-medium">Reference</th>
                   <th scope="col" className="px-5 py-3 font-medium">User</th>
                   <th scope="col" className="px-5 py-3 text-right font-medium">Amount</th>
@@ -101,7 +101,7 @@ export default function AdminPaymentsPage() {
               </thead>
               <tbody className="divide-y divide-line">
                 {payments.map((payment) => (
-                  <tr key={payment.id} className="transition-colors hover:bg-canvas">
+                  <tr key={payment.id} className="transition-colors hover:bg-sunken/60">
                     <td className="tabular whitespace-nowrap px-5 py-3.5 font-medium text-ink">
                       {payment.reference}
                       {payment.provider_reference ? (

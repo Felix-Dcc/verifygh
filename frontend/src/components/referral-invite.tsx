@@ -82,7 +82,7 @@ export function ReferralInviteBanner({ invite }: { invite: InviteState }) {
     // Deliberately gentle: an expired or mistyped link must not look like a
     // problem with their sign-up, because it changes nothing about it.
     return (
-      <div className="rounded-xl border border-line bg-surface-muted px-4 py-3 text-sm text-ink-muted">
+      <div className="rounded-xl border border-line bg-sunken px-4 py-3 text-sm text-ink-muted">
         We could not find that invitation, but you can still create your account.
       </div>
     );

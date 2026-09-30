@@ -146,7 +146,7 @@ export function ProviderCard({
           </p>
         )}
 
-        <div className="grid grid-cols-2 gap-3 lg:grid-cols-4">
+        <div className="metric-group grid-cols-2 lg:grid-cols-4">
           <MetricTile
             label="Purchase success"
             value={percent(p.orders.purchase_success_rate)}
@@ -173,7 +173,7 @@ export function ProviderCard({
           />
         </div>
 
-        <dl className="grid gap-x-6 gap-y-2 text-sm sm:grid-cols-2">
+        <dl className="grid grid-cols-1 gap-x-6 gap-y-2 text-sm sm:grid-cols-2">
           <Row label="Last successful call" value={
             p.api.last_success_at
               ? `${when(p.api.last_success_at)} - ${p.api.last_success_operation}`

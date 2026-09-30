@@ -16,6 +16,7 @@ import {
   Alert,
   Amount,
   Button,
+  ButtonLink,
   Card,
   EmptyState,
   Section,
@@ -155,7 +156,7 @@ function Dashboard() {
         </div>
       ) : null}
 
-      <div className="grid gap-4 lg:grid-cols-3">
+      <div className="grid grid-cols-1 gap-4 lg:grid-cols-3">
         <BalancePanel summary={summary} loading={summaryLoading} />
         <AtAGlance summary={summary} loading={summaryLoading} emailVerified={user?.is_email_verified} />
       </div>
@@ -195,7 +196,7 @@ function Dashboard() {
         </Section>
       ) : null}
 
-      <div className="grid gap-8 lg:grid-cols-5 lg:gap-6">
+      <div className="grid grid-cols-1 gap-8 lg:grid-cols-5 lg:gap-6">
         <Section
           className="lg:col-span-3"
           title="Recent orders"
@@ -214,9 +215,7 @@ function Dashboard() {
                 title="No orders yet"
                 description="Your verification numbers will appear here, with their codes."
                 action={
-                  <Link href="/services">
-                    <Button size="sm">Buy a number</Button>
-                  </Link>
+                  <ButtonLink href="/services" size="sm">Buy a number</ButtonLink>
                 }
               />
             ) : (
@@ -292,23 +291,11 @@ function BalancePanel({ summary, loading }: { summary: WalletSummary | undefined
         </p>
       </div>
       <div className="flex flex-wrap items-center gap-2">
-        <Link href="/wallet/deposit">
-          <Button>Add funds</Button>
-        </Link>
-        <Link href="/services">
-          <Button variant="secondary">Buy a number</Button>
-        </Link>
+        <ButtonLink href="/wallet/deposit">Add funds</ButtonLink>
+        <ButtonLink href="/services" variant="secondary">Buy a number</ButtonLink>
         <div className="ml-auto hidden items-center gap-1 sm:flex">
-          <Link href="/orders">
-            <Button variant="ghost" size="sm">
-              Orders
-            </Button>
-          </Link>
-          <Link href="/transactions">
-            <Button variant="ghost" size="sm">
-              Transactions
-            </Button>
-          </Link>
+          <ButtonLink href="/orders" variant="ghost" size="sm">Orders</ButtonLink>
+          <ButtonLink href="/transactions" variant="ghost" size="sm">Transactions</ButtonLink>
         </div>
       </div>
     </Card>
@@ -382,11 +369,9 @@ function PopularServices({ market }: { market: MarketHome | undefined }) {
             title="Nothing popular yet"
             description="The most-bought services will show here. Browse everything on sale meanwhile."
             action={
-              <Link href="/services">
-                <Button size="sm" variant="secondary">
-                  Browse services
-                </Button>
-              </Link>
+              <ButtonLink href="/services" size="sm" variant="secondary">
+                Browse services
+              </ButtonLink>
             }
           />
         ) : (

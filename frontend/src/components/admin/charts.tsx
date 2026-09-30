@@ -1,7 +1,9 @@
 "use client";
 
+import Link from "next/link";
 import * as React from "react";
 
+import { ChevronRightIcon } from "@/components/icons";
 import { cn } from "@/components/ui/primitives";
 import { cedis, formatDate } from "@/lib/format";
 
@@ -270,27 +272,40 @@ export function MetricTile({
   value,
   sublabel,
   tone = "default",
+  href,
   className,
 }: {
   label: string;
   value: React.ReactNode;
   sublabel?: React.ReactNode;
   tone?: "default" | "positive" | "negative";
+  /** Where the figure is broken down, when there is such a screen. */
+  href?: string;
   className?: string;
 }) {
-  return (
-    <div className={cn("card p-4", className)}>
-      <p className="text-xs text-ink-muted">{label}</p>
+  const body = (
+    <>
+      <p className="flex items-center justify-between gap-2 text-caption text-ink-muted">
+        {label}
+        {href ? <ChevronRightIcon className="h-3.5 w-3.5 text-ink-faint" /> : null}
+      </p>
       <p
         className={cn(
-          "tabular mt-1 text-2xl font-semibold tracking-tight",
+          "tabular mt-1 truncate text-title",
           tone === "positive" ? "text-success-700" : tone === "negative" ? "text-danger-700" : "text-ink",
         )}
       >
         {value}
       </p>
-      {sublabel ? <p className="mt-1 text-xs text-ink-muted">{sublabel}</p> : null}
-    </div>
+      {sublabel ? <p className="mt-0.5 text-caption text-ink-muted">{sublabel}</p> : null}
+    </>
+  );
+  return href ? (
+    <Link href={href} className={cn("card block p-4 transition-colors hover:bg-sunken/60", className)}>
+      {body}
+    </Link>
+  ) : (
+    <div className={cn("card p-4", className)}>{body}</div>
   );
 }
 

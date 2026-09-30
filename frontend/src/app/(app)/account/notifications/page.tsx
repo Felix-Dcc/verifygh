@@ -24,7 +24,7 @@ import {
 } from "@/components/icons";
 import { Button, Card, EmptyState, Skeleton, cn } from "@/components/ui/primitives";
 import { api } from "@/lib/api";
-import { dayGroup, formatDateTime, formatTime } from "@/lib/format";
+import { dayGroup, formatDateTime, formatTime, moneyText } from "@/lib/format";
 import type { Notification, Paginated } from "@/lib/types";
 
 type Kind = {
@@ -239,7 +239,7 @@ function NotificationRow({
           </span>
         </span>
         {notification.body ? (
-          <span className="mt-0.5 block text-sm text-ink-muted">{notification.body}</span>
+          <span className="mt-0.5 block text-sm text-ink-muted">{moneyText(notification.body)}</span>
         ) : null}
       </span>
       <span className="flex w-4 shrink-0 flex-col items-center gap-2 self-stretch pt-1.5">

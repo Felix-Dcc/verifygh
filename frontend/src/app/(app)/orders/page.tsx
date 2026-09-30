@@ -12,6 +12,7 @@ import { OrderStatusRow } from "@/components/orders/order-row";
 import { ServiceLogo } from "@/components/service-logo";
 import {
   Button,
+  ButtonLink,
   Card,
   EmptyState,
   Input,
@@ -84,9 +85,7 @@ function Orders() {
         title="Orders"
         description="Every number you have bought, and how each one turned out."
         action={
-          <Link href="/services">
-            <Button>Buy a number</Button>
-          </Link>
+          <ButtonLink href="/services">Buy a number</ButtonLink>
         }
       />
 
@@ -136,9 +135,7 @@ function Orders() {
                   Show all orders
                 </Button>
               ) : (
-                <Link href="/services">
-                  <Button>Buy a number</Button>
-                </Link>
+                <ButtonLink href="/services">Buy a number</ButtonLink>
               )
             }
           />

@@ -132,3 +132,34 @@ keeps it possible later without touching components.
 3. Sections and dividers instead of cards; cards only where a group needs a
    boundary.
 4. Keep every data flow and API call exactly as it is.
+
+## Outcome (September 2026)
+
+What each finding became. Details of the rules are in `docs/DESIGN-SYSTEM.md`.
+
+| Finding | Resolution |
+|---|---|
+| No brand typeface | IBM Plex Sans and Mono, self-hosted with `next/font` |
+| `ink-faint` 2.52:1, `ink-muted` 4.27:1 | Neutrals re-picked: every text token passes AA on white and on the page background |
+| ₵ / GHS / GH₵ mixed | `GH₵ 1,250.00` everywhere, in the app and in backend-written notifications, errors and order events (`format_ghs`); older stored text is shown the same way (`moneyText`) |
+| Emoji flags render as letters on Windows | `CountryFlag` SVGs on every screen, admin included |
+| Raw statuses (`WAITING_FOR_CODE`) | `statusLabel()` - "Waiting for SMS", "Code received" |
+| Everything in a card; green slabs | Sections and dividers; the wallet, dashboard and referral slabs are plain panels; admin figures sit in one `metric-group` per group |
+| Buy dialog lacked the balance after purchase | Number price, current balance and after purchase; the button carries the amount |
+| Deposit: one long form, no amount on the button | Three numbered steps, a review, and "Pay GH₵ 50.00" |
+| Verification session: six equal cards | Number, code, reuse and actions in one panel; the code is the loudest thing on the page |
+| Wallet: two row designs for one kind of data | One `TransactionRow` on the wallet, dashboard and statement |
+| Notifications flat | Grouped Today / Yesterday / Earlier with an icon per kind; rows open their order |
+| Account: stacked cards | Settings in labelled sections: Profile, Security, Notifications and policies, Sign out |
+| Mobile: seven cards before activity; Account missing | Balance, at-a-glance, then activity; bottom nav includes Account |
+| Touch targets | Every control 44px tall on phones (audited per page at 375px) |
+| Layout at 360px | Breakpoint-only grids get `grid-cols-1`, so nothing forces a sideways scroll |
+
+Still open, deliberately:
+
+* **Dark mode** - out of scope; the tokens keep it possible.
+* **Active sessions list** - the backend has no sessions endpoint, and the redesign
+  does not invent one. "Change password" still signs every other session out.
+* **Legal pages** still use the `verifygh.example` placeholder addresses; they need
+  the real support and privacy contacts.
+

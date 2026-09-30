@@ -5,9 +5,10 @@ import useSWR from "swr";
 
 import { Pagination } from "@/components/admin/pagination";
 import { PageHeader } from "@/components/app-shell";
-import { ServiceLogo } from "@/components/service-logo";
 import { useAuth } from "@/components/auth-provider";
+import { CountryFlag } from "@/components/country-flag";
 import { ReceiptIcon, SearchIcon } from "@/components/icons";
+import { ServiceLogo } from "@/components/service-logo";
 import { Dialog } from "@/components/ui/dialog";
 import {
   Alert,
@@ -109,8 +110,8 @@ export default function AdminOrdersPage() {
         ) : (
           <div className="overflow-x-auto">
             <table className="w-full min-w-[56rem] text-left text-sm">
-              <thead className="border-b border-line bg-canvas">
-                <tr className="text-xs uppercase tracking-wide text-ink-muted">
+              <thead className="border-b border-line bg-sunken">
+                <tr className="text-caption text-ink-muted">
                   <th scope="col" className="px-5 py-3 font-medium">Reference</th>
                   <th scope="col" className="px-5 py-3 font-medium">User</th>
                   <th scope="col" className="px-5 py-3 font-medium">Service</th>
@@ -125,7 +126,7 @@ export default function AdminOrdersPage() {
                   <tr
                     key={order.id}
                     onClick={() => setSelected(order)}
-                    className="cursor-pointer transition-colors hover:bg-canvas"
+                    className="cursor-pointer transition-colors hover:bg-sunken/60"
                   >
                     <td className="tabular whitespace-nowrap px-5 py-3.5 font-medium text-ink">
                       {order.reference}
@@ -137,7 +138,10 @@ export default function AdminOrdersPage() {
                       <span className="inline-flex items-center gap-2.5">
                         <ServiceLogo name={order.service_name} src={order.service_icon} size="sm" />
                         {order.service_name}
-                        <span className="text-xs text-ink-muted">{order.country_code}</span>
+                        <span className="inline-flex items-center gap-1.5 text-caption text-ink-muted">
+                          <CountryFlag code={order.country_code} size="sm" />
+                          {order.country_code}
+                        </span>
                       </span>
                     </td>
                     <td className="tabular whitespace-nowrap px-5 py-3.5 text-right font-medium text-ink">
@@ -350,7 +354,7 @@ function OrderDialog({
                 id="refund-amount"
                 inputMode="decimal"
                 required
-                prefix="&#8373;"
+                prefix="GH₵"
                 value={amount}
                 onChange={(event) => setAmount(event.target.value.replace(/[^\d.]/g, ""))}
                 className="tabular"

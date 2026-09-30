@@ -73,7 +73,7 @@ function HealthTab() {
 
   if (isLoading || !data) {
     return (
-      <div className="grid gap-4 lg:grid-cols-2">
+      <div className="grid grid-cols-1 gap-4 lg:grid-cols-2">
         <Card className="h-40 p-5">
           <Skeleton className="h-full w-full" />
         </Card>
@@ -94,7 +94,7 @@ function HealthTab() {
         </Alert>
       ) : null}
 
-      <div className="grid gap-4 lg:grid-cols-2">
+      <div className="grid grid-cols-1 gap-4 lg:grid-cols-2">
         <ProviderCard
           title="Verification provider"
           providerKey={data.verification_provider.key}
@@ -111,7 +111,7 @@ function HealthTab() {
         />
       </div>
 
-      <div className="grid gap-4 lg:grid-cols-2">
+      <div className="grid grid-cols-1 gap-4 lg:grid-cols-2">
         <Card>
           <CardHeader title="Pricing" />
           <dl className="divide-y divide-line px-4 sm:px-5">
@@ -119,7 +119,7 @@ function HealthTab() {
               label="Exchange rate"
               value={
                 data.exchange_rate.configured
-                  ? `1 USD = ${Number.parseFloat(data.exchange_rate.rate ?? "0").toFixed(4)} GHS`
+                  ? `US$1 = GH₵ ${Number.parseFloat(data.exchange_rate.rate ?? "0").toFixed(4)}`
                   : "Not configured"
               }
               tone={data.exchange_rate.configured ? "ok" : "bad"}
@@ -348,7 +348,7 @@ function FlagsTab() {
                       {formatDateTime(flag.created_at)}
                     </p>
                     {flag.resolved && flag.resolution_note ? (
-                      <p className="mt-2 rounded-lg bg-canvas px-3 py-2 text-xs text-ink-soft">
+                      <p className="mt-2 rounded-lg bg-sunken px-3 py-2 text-xs text-ink-soft">
                         Resolved: {flag.resolution_note}
                       </p>
                     ) : null}
@@ -514,7 +514,7 @@ function ActionsTab({ canView }: { canView: boolean }) {
                   {entry.admin_email}
                   {entry.target_type ? ` - ${entry.target_type} ${entry.target_id.slice(0, 12)}` : ""}
                 </p>
-                <p className="mt-1.5 rounded-lg bg-canvas px-3 py-2 text-sm text-ink-soft">
+                <p className="mt-1.5 rounded-lg bg-sunken px-3 py-2 text-sm text-ink-soft">
                   {entry.reason}
                 </p>
               </li>

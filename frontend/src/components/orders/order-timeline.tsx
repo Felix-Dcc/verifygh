@@ -1,5 +1,5 @@
 import { cn } from "@/lib/cn";
-import { formatTime } from "@/lib/format";
+import { formatTime, moneyText } from "@/lib/format";
 import type { OrderEvent, OrderStatus } from "@/lib/types";
 
 /**
@@ -116,7 +116,7 @@ function Timeline({
                 {row.label}
               </p>
               {row.detail ? (
-                <p className="mt-0.5 text-xs text-ink-muted">{row.detail}</p>
+                <p className="mt-0.5 text-caption text-ink-muted">{moneyText(row.detail)}</p>
               ) : null}
               {row.at ? (
                 <p className="tabular mt-0.5 text-xs text-ink-faint">{formatTime(row.at)}</p>

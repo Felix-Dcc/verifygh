@@ -194,7 +194,7 @@ export function Marketplace() {
                 key={service.slug}
                 type="button"
                 onClick={() => setBuying(service.slug)}
-                className="flex h-10 shrink-0 items-center gap-2 rounded-lg border border-line bg-surface pl-1.5 pr-3 text-sm font-medium text-ink transition-colors hover:border-line-strong hover:bg-sunken"
+                className="flex h-11 shrink-0 items-center gap-2 rounded-lg border border-line bg-surface pl-2 pr-3 sm:h-10 sm:pl-1.5 text-sm font-medium text-ink transition-colors hover:border-line-strong hover:bg-sunken"
               >
                 <ServiceLogo name={service.name} src={service.icon} slug={service.slug} size="xs" />
                 {service.name}

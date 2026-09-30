@@ -103,8 +103,8 @@ export function PricingRulesCard() {
       ) : (
         <div className="mt-2 overflow-x-auto">
           <table className="w-full min-w-[50rem] text-left text-sm">
-            <thead className="border-y border-line bg-canvas">
-              <tr className="text-xs uppercase tracking-wide text-ink-muted">
+            <thead className="border-y border-line bg-sunken">
+              <tr className="text-caption text-ink-muted">
                 <th scope="col" className="px-5 py-3 font-medium">Rule</th>
                 <th scope="col" className="px-5 py-3 font-medium">Applies to</th>
                 <th scope="col" className="px-5 py-3 font-medium">Margin</th>
@@ -116,7 +116,7 @@ export function PricingRulesCard() {
             </thead>
             <tbody className="divide-y divide-line">
               {rules.map((rule) => (
-                <tr key={rule.id} className="transition-colors hover:bg-canvas">
+                <tr key={rule.id} className="transition-colors hover:bg-sunken/60">
                   <td className="px-5 py-3 font-medium text-ink">{rule.name}</td>
                   <td className="px-5 py-3 text-ink-soft">
                     {rule.service || rule.country || rule.provider ? (
@@ -250,11 +250,11 @@ function RuleEditor({
         </Field>
 
         {isGlobal ? (
-          <p className="rounded-xl bg-canvas px-3.5 py-2.5 text-xs text-ink-muted">
+          <p className="rounded-lg bg-sunken px-3.5 py-2.5 text-xs text-ink-muted">
             This is the global default: it prices everything no narrower rule covers.
           </p>
         ) : (
-          <div className="grid gap-3 sm:grid-cols-2">
+          <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
             <Field label="Service" htmlFor="rule-service">
               <Select id="rule-service" value={form.service} onChange={(e) => set("service", e.target.value)}>
                 <option value="">Any service</option>
@@ -278,7 +278,7 @@ function RuleEditor({
           </div>
         )}
 
-        <div className="grid gap-3 sm:grid-cols-3">
+        <div className="grid grid-cols-1 gap-3 sm:grid-cols-3">
           <Field label="Margin type" htmlFor="rule-type">
             <Select
               id="rule-type"
@@ -297,14 +297,14 @@ function RuleEditor({
             </Field>
           ) : null}
           {form.markup_type !== "PERCENTAGE" ? (
-            <Field label="Fixed margin (₵)" htmlFor="rule-fixed">
+            <Field label="Fixed margin (GH₵)" htmlFor="rule-fixed">
               <Input id="rule-fixed" inputMode="decimal" value={form.markup_fixed}
                 onChange={(e) => set("markup_fixed", e.target.value)} className="tabular" />
             </Field>
           ) : null}
         </div>
 
-        <div className="grid gap-3 sm:grid-cols-2">
+        <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
           <Field label="Collection fee %" htmlFor="rule-fee" hint="Paystack Mobile Money fee.">
             <Input id="rule-fee" inputMode="decimal" value={form.payment_fee_percent}
               onChange={(e) => set("payment_fee_percent", e.target.value)} className="tabular" />
@@ -315,7 +315,7 @@ function RuleEditor({
           </Field>
         </div>
 
-        <div className="grid gap-3 sm:grid-cols-3">
+        <div className="grid grid-cols-1 gap-3 sm:grid-cols-3">
           <Field label="Rounding" htmlFor="rule-rounding">
             <Select id="rule-rounding" value={form.rounding} onChange={(e) => set("rounding", e.target.value)}>
               {ROUNDING.map(([value, label]) => (
@@ -325,11 +325,11 @@ function RuleEditor({
               ))}
             </Select>
           </Field>
-          <Field label="Minimum price (₵)" htmlFor="rule-min">
+          <Field label="Minimum price (GH₵)" htmlFor="rule-min">
             <Input id="rule-min" inputMode="decimal" value={form.min_price}
               onChange={(e) => set("min_price", e.target.value)} className="tabular" />
           </Field>
-          <Field label="Maximum price (₵)" htmlFor="rule-max">
+          <Field label="Maximum price (GH₵)" htmlFor="rule-max">
             <Input id="rule-max" inputMode="decimal" value={form.max_price}
               onChange={(e) => set("max_price", e.target.value)} className="tabular" />
           </Field>
@@ -430,8 +430,8 @@ export function PriceHistoryCard() {
       />
       <div className="mt-2 overflow-x-auto">
         <table className="w-full min-w-[52rem] text-left text-sm">
-          <thead className="border-y border-line bg-canvas">
-            <tr className="text-xs uppercase tracking-wide text-ink-muted">
+          <thead className="border-y border-line bg-sunken">
+            <tr className="text-caption text-ink-muted">
               <th scope="col" className="px-5 py-3 font-medium">When</th>
               <th scope="col" className="px-5 py-3 font-medium">Service</th>
               <th scope="col" className="px-5 py-3 text-right font-medium">Old</th>

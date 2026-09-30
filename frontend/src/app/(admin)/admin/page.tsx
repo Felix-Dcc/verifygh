@@ -6,11 +6,11 @@ import useSWR from "swr";
 
 import { PageHeader } from "@/components/app-shell";
 import { AreaChart, BarChart, MetricTile, RankedBars } from "@/components/admin/charts";
-import { AlertIcon, FlagIcon } from "@/components/icons";
 import {
   Alert,
   Card,
   CardHeader,
+  Section,
   SegmentedControl,
   Skeleton,
 } from "@/components/ui/primitives";
@@ -32,7 +32,7 @@ export default function AdminOverviewPage() {
     health?.verification_provider.is_mock || health?.payment_provider.is_mock;
 
   return (
-    <div className="space-y-5">
+    <div className="space-y-6">
       <PageHeader
         title="Overview"
         description="Revenue, orders, payments and everything that needs attention."
@@ -80,57 +80,67 @@ export default function AdminOverviewPage() {
         <TileSkeletons />
       ) : (
         <>
-          <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
-            <MetricTile
-              label="Revenue (all time)"
-              value={cedis(overview.revenue.total)}
-              sublabel={`${cedis(overview.revenue.today)} today`}
-            />
-            <MetricTile
-              label="Gross margin"
-              value={cedis(overview.revenue.gross_margin)}
-              sublabel={`${overview.revenue.margin_percent}% after provider cost`}
-              tone={Number.parseFloat(overview.revenue.gross_margin) >= 0 ? "positive" : "negative"}
-            />
-            <MetricTile
-              label="Provider cost"
-              value={cedis(overview.revenue.provider_cost)}
-              sublabel="Converted at the order's frozen rate"
-            />
-            <MetricTile
-              label="Refunded"
-              value={cedis(overview.refunds.total)}
-              sublabel={`${overview.refunds.count} refunds`}
-            />
-          </div>
+          <Section title="Money">
+            <div className="metric-group grid-cols-1 sm:grid-cols-2 lg:grid-cols-4">
+              <MetricTile
+                label="Revenue (all time)"
+                value={cedis(overview.revenue.total)}
+                sublabel={`${cedis(overview.revenue.today)} today`}
+              />
+              <MetricTile
+                label="Gross margin"
+                value={cedis(overview.revenue.gross_margin)}
+                sublabel={`${overview.revenue.margin_percent}% after provider cost`}
+                tone={Number.parseFloat(overview.revenue.gross_margin) >= 0 ? "positive" : "negative"}
+              />
+              <MetricTile
+                label="Provider cost"
+                value={cedis(overview.revenue.provider_cost)}
+                sublabel="Converted at the order's frozen rate"
+              />
+              <MetricTile
+                label="Refunded"
+                value={cedis(overview.refunds.total)}
+                sublabel={`${overview.refunds.count} refunds`}
+              />
+            </div>
+          </Section>
 
-          <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
-            <MetricTile
-              label="Total users"
-              value={overview.users.total}
-              sublabel={`${overview.users.new_today} new today, ${overview.users.active_30d} active in 30d`}
-            />
-            <MetricTile
-              label="Orders"
-              value={overview.orders.total}
-              sublabel={`${overview.orders.successful} successful, ${overview.orders.failed} failed`}
-            />
-            <MetricTile
-              label="Active orders"
-              value={overview.orders.active}
-              sublabel={`${overview.orders.code_received} awaiting completion`}
-            />
-            <MetricTile
-              label="MoMo collected"
-              value={cedis(overview.payments.momo_total)}
-              sublabel={`${overview.payments.count} payments, ${overview.payments.failed} failed`}
-            />
-          </div>
+          <Section title="Activity">
+            <div className="metric-group grid-cols-1 sm:grid-cols-2 lg:grid-cols-4">
+              <MetricTile
+                label="Users"
+                value={overview.users.total}
+                sublabel={`${overview.users.new_today} new today, ${overview.users.active_30d} active in 30 days${
+                  overview.users.suspended ? `, ${overview.users.suspended} suspended` : ""
+                }`}
+                href="/admin/users"
+              />
+              <MetricTile
+                label="Orders"
+                value={overview.orders.total}
+                sublabel={`${overview.orders.successful} successful, ${overview.orders.failed} failed`}
+                href="/admin/orders"
+              />
+              <MetricTile
+                label="Active orders"
+                value={overview.orders.active}
+                sublabel={`${overview.orders.code_received} awaiting completion`}
+                href="/admin/orders"
+              />
+              <MetricTile
+                label="MoMo collected"
+                value={cedis(overview.payments.momo_total)}
+                sublabel={`${overview.payments.count} payments, ${overview.payments.failed} failed`}
+                href="/admin/payments"
+              />
+            </div>
+          </Section>
         </>
       )}
 
-      <div className="flex items-center justify-between gap-3">
-        <h2 className="text-sm font-semibold text-ink">Trends</h2>
+      <div className="flex flex-wrap items-center justify-between gap-3">
+        <h2 className="text-heading text-ink">Trends</h2>
         <SegmentedControl
           options={[
             { value: "7" as Range, label: "7 days" },
@@ -143,7 +153,7 @@ export default function AdminOverviewPage() {
         />
       </div>
 
-      <div className="grid gap-4 lg:grid-cols-2">
+      <div className="grid grid-cols-1 gap-4 lg:grid-cols-2">
         <Card>
           <CardHeader title="Revenue over time" description={`Last ${range} days, in cedis.`} />
           <div className="p-4 pt-2 sm:p-5 sm:pt-2">
@@ -224,72 +234,24 @@ export default function AdminOverviewPage() {
         </Card>
       </div>
 
-      <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
-        <QuickLink
-          href="/admin/users"
-          label="Users"
-          value={overview?.users.total ?? "-"}
-          note={`${overview?.users.suspended ?? 0} suspended`}
-        />
-        <QuickLink
-          href="/admin/orders"
-          label="Orders"
-          value={overview?.orders.total ?? "-"}
-          note={`${overview?.orders.active ?? 0} active`}
-        />
-        <QuickLink
-          href="/admin/payments"
-          label="Payments"
-          value={overview?.payments.count ?? "-"}
-          note={`${overview?.payments.failed ?? 0} failed`}
-        />
-        <QuickLink
-          href="/admin/system"
-          label="Abuse signals"
-          value={overview?.flags.open ?? "-"}
-          note={`${overview?.flags.high ?? 0} high severity`}
-          icon={overview && overview.flags.high > 0 ? <AlertIcon className="h-4 w-4" /> : <FlagIcon className="h-4 w-4" />}
-        />
-      </div>
     </div>
-  );
-}
-
-function QuickLink({
-  href,
-  label,
-  value,
-  note,
-  icon,
-}: {
-  href: string;
-  label: string;
-  value: React.ReactNode;
-  note: string;
-  icon?: React.ReactNode;
-}) {
-  return (
-    <Link href={href} className="card p-4 transition-shadow hover:shadow-raised">
-      <div className="flex items-center justify-between">
-        <p className="text-xs text-ink-muted">{label}</p>
-        {icon ? <span className="text-ink-faint">{icon}</span> : null}
-      </div>
-      <p className="tabular mt-1 text-2xl font-semibold text-ink">{value}</p>
-      <p className="mt-0.5 text-xs text-ink-muted">{note}</p>
-    </Link>
   );
 }
 
 function TileSkeletons() {
   return (
-    <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
-      {Array.from({ length: 8 }).map((_, index) => (
-        <Card key={index} className="space-y-2 p-4">
-          <Skeleton className="h-3 w-20" />
-          <Skeleton className="h-7 w-28" />
-          <Skeleton className="h-3 w-24" />
-        </Card>
+    <>
+      {[0, 1].map((group) => (
+        <div key={group} className="metric-group grid-cols-1 sm:grid-cols-2 lg:grid-cols-4" aria-busy>
+          {Array.from({ length: 4 }).map((_, index) => (
+            <div key={index} className="space-y-2 bg-surface p-4">
+              <Skeleton className="h-3 w-20" />
+              <Skeleton className="h-6 w-28" />
+              <Skeleton className="h-3 w-24" />
+            </div>
+          ))}
+        </div>
       ))}
-    </div>
+    </>
   );
 }

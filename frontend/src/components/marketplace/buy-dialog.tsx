@@ -10,7 +10,14 @@ import { AvailabilityLabel, TemporarilyUnavailableBadge } from "@/components/mar
 import { CountryFlag } from "@/components/country-flag";
 import { ServiceLogo } from "@/components/service-logo";
 import { Dialog } from "@/components/ui/dialog";
-import { Alert, Button, DescriptionList, Skeleton, cn } from "@/components/ui/primitives";
+import {
+  Alert,
+  Button,
+  ButtonLink,
+  DescriptionList,
+  Skeleton,
+  cn,
+} from "@/components/ui/primitives";
 import { useToast } from "@/components/ui/toast";
 import { ApiError, api, newIdempotencyKey } from "@/lib/api";
 import { cedis } from "@/lib/format";
@@ -146,12 +153,9 @@ export function BuyDialog({
       dismissible={!submitting}
       footer={
         !user ? (
-          <Link
-            href={`/login?next=${encodeURIComponent(`/services?service=${serviceSlug}`)}`}
-            className="block"
-          >
-            <Button fullWidth>Sign in to buy</Button>
-          </Link>
+          <ButtonLink href={`/login?next=${encodeURIComponent(`/services?service=${serviceSlug}`)}`} fullWidth>
+            Sign in to buy
+          </ButtonLink>
         ) : (
           <DialogFooter
             insufficient={insufficient}
@@ -351,11 +355,7 @@ function DialogFooter({
         <Button variant="secondary" fullWidth className="sm:w-auto" onClick={onCancel}>
           Cancel
         </Button>
-        <Link href="/wallet/deposit" className="sm:w-auto">
-          <Button fullWidth className="sm:w-auto">
-            Add funds
-          </Button>
-        </Link>
+        <ButtonLink href="/wallet/deposit" fullWidth className="sm:w-auto">Add funds</ButtonLink>
       </div>
     );
   }
@@ -366,11 +366,7 @@ function DialogFooter({
         <Button variant="secondary" fullWidth className="sm:w-auto" onClick={onCancel}>
           Close
         </Button>
-        <Link href="/account" className="sm:w-auto">
-          <Button fullWidth className="sm:w-auto">
-            Confirm my email
-          </Button>
-        </Link>
+        <ButtonLink href="/account" fullWidth className="sm:w-auto">Confirm my email</ButtonLink>
       </div>
     );
   }

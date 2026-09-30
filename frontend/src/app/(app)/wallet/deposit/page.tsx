@@ -1,6 +1,5 @@
 "use client";
 
-import Link from "next/link";
 import { useRouter } from "next/navigation";
 import * as React from "react";
 import useSWR, { mutate as globalMutate } from "swr";
@@ -11,6 +10,7 @@ import { AlertIcon, CheckCircleIcon, ClockIcon, PhoneIcon } from "@/components/i
 import {
   Alert,
   Button,
+  ButtonLink,
   Card,
   DescriptionList,
   Field,
@@ -134,11 +134,9 @@ function DepositForm({
         <p className="mt-2 max-w-sm text-sm text-ink-muted">
           {options.deposits_disabled_reason}
         </p>
-        <Link href="/wallet" className="mt-6 w-full max-w-xs">
-          <Button variant="secondary" fullWidth size="lg">
-            Back to wallet
-          </Button>
-        </Link>
+        <ButtonLink href="/wallet" variant="secondary" fullWidth size="lg" className="mt-6 w-full max-w-xs">
+          Back to wallet
+        </ButtonLink>
       </Card>
     );
   }

@@ -1,11 +1,19 @@
 "use client";
 
-import Link from "next/link";
 import * as React from "react";
 
 import { AlertIcon, CheckCircleIcon } from "@/components/icons";
 import { Dialog } from "@/components/ui/dialog";
-import { Alert, Button, Card, Field, StatusBadge, Textarea, cn } from "@/components/ui/primitives";
+import {
+  Alert,
+  Button,
+  ButtonLink,
+  Card,
+  Field,
+  StatusBadge,
+  Textarea,
+  cn,
+} from "@/components/ui/primitives";
 import { ApiError, api } from "@/lib/api";
 import { formatDateTime } from "@/lib/format";
 import type { IssueReason, Order, OrderIssue } from "@/lib/types";
@@ -257,12 +265,9 @@ function IssueStatusCard({ issue }: { issue: OrderIssue }) {
       </div>
       <p className="mt-3 text-sm text-ink-soft">{issue.message}</p>
       {issue.replacement_order_reference ? (
-        <Link
-          href={`/orders/${issue.replacement_order_reference}`}
-          className="mt-3 inline-block"
-        >
-          <Button size="sm">Open replacement order</Button>
-        </Link>
+        <ButtonLink href={`/orders/${issue.replacement_order_reference}`} size="sm" className="mt-3">
+          Open replacement order
+        </ButtonLink>
       ) : null}
     </Card>
   );

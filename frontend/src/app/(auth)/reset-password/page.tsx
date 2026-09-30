@@ -1,11 +1,10 @@
 "use client";
 
-import Link from "next/link";
 import { useRouter, useSearchParams } from "next/navigation";
 import * as React from "react";
 
 import { errorMessage } from "@/components/auth-provider";
-import { Alert, Button, Card, Field, PasswordInput } from "@/components/ui/primitives";
+import { Alert, Button, ButtonLink, Card, Field, PasswordInput } from "@/components/ui/primitives";
 import { ApiError, api } from "@/lib/api";
 
 const MIN_PASSWORD_LENGTH = 10;
@@ -61,9 +60,9 @@ function ResetPasswordForm() {
         <p className="mt-2 text-sm text-ink-muted">
           The reset link is missing its token. Request a new one and use the most recent email.
         </p>
-        <Link href="/forgot-password" className="mt-5 block">
-          <Button fullWidth>Request a new link</Button>
-        </Link>
+        <ButtonLink href="/forgot-password" fullWidth className="mt-5">
+          Request a new link
+        </ButtonLink>
       </Card>
     );
   }

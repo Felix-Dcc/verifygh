@@ -68,7 +68,7 @@ export default function AdminReferralsPage() {
         description="Every invitation, what it cost, and why anything was held."
       />
 
-      <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-4">
+      <div className="metric-group grid-cols-1 sm:grid-cols-2 xl:grid-cols-4">
         <Stat label="Registrations" value={analytics?.registrations} />
         <Stat label="Rewarded" value={analytics?.rewarded} />
         <Stat
@@ -125,7 +125,7 @@ export default function AdminReferralsPage() {
         ) : (
           <div className="overflow-x-auto">
             <table className="w-full text-left text-sm">
-              <thead className="border-b border-line bg-surface-muted text-xs uppercase tracking-wide text-ink-muted">
+              <thead className="border-b border-line bg-sunken text-caption text-ink-muted">
                 <tr>
                   <th className="px-4 py-3 font-medium">Code</th>
                   <th className="px-4 py-3 font-medium">Referrer</th>
@@ -140,7 +140,7 @@ export default function AdminReferralsPage() {
                   <tr
                     key={referral.id}
                     onClick={() => setSelected(referral)}
-                    className="cursor-pointer transition hover:bg-surface-muted"
+                    className="cursor-pointer transition hover:bg-sunken/60"
                   >
                     <td className="tabular px-4 py-3 font-medium text-ink">{referral.code}</td>
                     <td className="px-4 py-3 text-ink-muted">{referral.referrer_email}</td>
@@ -149,7 +149,7 @@ export default function AdminReferralsPage() {
                       <div className="flex items-center gap-2">
                         <StatusBadge status={referral.status} />
                         {referral.risk_flags.length > 0 ? (
-                          <span className="rounded-md bg-gold-100 px-1.5 py-0.5 text-[11px] font-semibold text-gold-700">
+                          <span className="rounded-md bg-gold-100 px-1.5 py-0.5 text-2xs font-semibold text-gold-700">
                             {referral.risk_flags.length}
                           </span>
                         ) : null}
@@ -201,13 +201,13 @@ function Stat({
 }) {
   return (
     <Card className="p-4">
-      <p className="text-xs text-ink-muted">{label}</p>
+      <p className="text-caption text-ink-muted">{label}</p>
       {value === undefined ? (
-        <Skeleton className="mt-2 h-7 w-20" />
+        <Skeleton className="mt-2 h-6 w-20" />
       ) : (
-        <p className="tabular mt-1 text-2xl font-semibold text-ink">{value}</p>
+        <p className="tabular mt-1 text-title text-ink">{value}</p>
       )}
-      {hint ? <p className="mt-1 text-xs text-ink-muted">{hint}</p> : null}
+      {hint ? <p className="mt-0.5 text-caption text-ink-muted">{hint}</p> : null}
     </Card>
   );
 }
@@ -290,7 +290,7 @@ function ReferralDialog({
         </dl>
 
         {referral.staff_note ? (
-          <div className="rounded-xl bg-surface-muted p-3 text-sm text-ink-muted">
+          <div className="rounded-lg bg-sunken p-3 text-sm text-ink-muted">
             <span className="font-medium text-ink">Staff note: </span>
             {referral.staff_note}
           </div>

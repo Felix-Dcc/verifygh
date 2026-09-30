@@ -1,4 +1,3 @@
-import Link from "next/link";
 
 import {
   BoltIcon,
@@ -14,7 +13,7 @@ import { Faq } from "@/components/marketing/faq";
 import { FeaturedServices } from "@/components/marketing/featured-services";
 import { FlowDiagram } from "@/components/marketing/flow-diagram";
 import { SiteFooter, SiteHeader } from "@/components/marketing/site-chrome";
-import { Button } from "@/components/ui/primitives";
+import { ButtonLink } from "@/components/ui/primitives";
 
 export default function LandingPage() {
   return (
@@ -47,7 +46,7 @@ function Hero() {
         className="pointer-events-none absolute inset-x-0 top-0 h-[480px] bg-[radial-gradient(ellipse_at_top,_rgba(15,122,85,0.10),_transparent_60%)]"
         aria-hidden
       />
-      <div className="container-page relative grid gap-12 py-14 sm:py-20 lg:grid-cols-2 lg:items-center lg:gap-16">
+      <div className="container-page relative grid grid-cols-1 gap-12 py-14 sm:py-20 lg:grid-cols-2 lg:items-center lg:gap-16">
         <div>
           <span className="inline-flex items-center gap-2 rounded-full border border-brand-100 bg-brand-50 px-3 py-1.5 text-xs font-medium text-brand-700">
             <span className="h-1.5 w-1.5 rounded-full bg-brand-500" aria-hidden />
@@ -64,16 +63,12 @@ function Hero() {
           </p>
 
           <div className="mt-8 flex flex-col gap-3 sm:flex-row">
-            <Link href="/register" className="sm:w-auto">
-              <Button size="lg" fullWidth className="sm:w-auto">
-                Get Started
-              </Button>
-            </Link>
-            <Link href="/services" className="sm:w-auto">
-              <Button size="lg" variant="secondary" fullWidth className="sm:w-auto">
-                View Services
-              </Button>
-            </Link>
+            <ButtonLink href="/register" size="lg" fullWidth className="sm:w-auto">
+              Get Started
+            </ButtonLink>
+            <ButtonLink href="/services" size="lg" variant="secondary" fullWidth className="sm:w-auto">
+              View Services
+            </ButtonLink>
           </div>
 
           <dl className="mt-10 grid max-w-md grid-cols-3 gap-4 border-t border-line pt-6">
@@ -161,7 +156,7 @@ function HowItWorks() {
         </h2>
       </div>
 
-      <ol className="mt-10 grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
+      <ol className="mt-10 grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-4">
         {steps.map((step, index) => (
           <li key={step.title} className="card relative p-5">
             <span className="absolute right-4 top-4 text-3xl font-semibold text-line">
@@ -182,7 +177,7 @@ function HowItWorks() {
 function MomoExplainer() {
   return (
     <section className="border-y border-line bg-surface">
-      <div className="container-page grid gap-10 py-16 sm:py-20 lg:grid-cols-2 lg:items-center">
+      <div className="container-page grid grid-cols-1 gap-10 py-16 sm:py-20 lg:grid-cols-2 lg:items-center">
         <div>
           <p className="text-sm font-semibold uppercase tracking-wide text-brand-600">
             Pay with Mobile Money
@@ -217,37 +212,37 @@ function MomoExplainer() {
           </div>
           <div className="space-y-4 p-5">
             <div>
-              <p className="text-xs font-medium text-ink-soft">Mobile Money number</p>
-              <div className="mt-1.5 flex h-12 items-center rounded-xl border border-line-strong px-3.5 text-base text-ink">
-                024 123 4567
-                <span className="ml-auto rounded-full bg-gold-100 px-2.5 py-1 text-xs font-medium text-gold-700">
-                  MTN
-                </span>
+              <p className="text-label text-ink-soft">Amount to add</p>
+              <div className="mt-1.5 flex h-11 items-center rounded-lg border border-line-strong px-3.5 text-base text-ink">
+                <span className="text-ink-muted">GH₵</span>
+                <span className="tabular ml-2 font-semibold">50.00</span>
               </div>
             </div>
-            <div>
-              <p className="text-xs font-medium text-ink-soft">Amount</p>
-              <div className="mt-1.5 flex h-12 items-center rounded-xl border border-line-strong px-3.5 text-base text-ink">
-                <span className="text-ink-muted">&#8373;</span>
-                <span className="ml-1 tabular font-medium">50.00</span>
-              </div>
-            </div>
-            <div className="flex gap-2">
+            <div className="grid grid-cols-4 gap-2">
               {["10", "20", "50", "100"].map((amount) => (
                 <span
                   key={amount}
                   className={
                     amount === "50"
-                      ? "flex-1 rounded-lg bg-brand-50 py-2 text-center text-sm font-medium text-brand-700"
-                      : "flex-1 rounded-lg bg-line/40 py-2 text-center text-sm text-ink-muted"
+                      ? "tabular rounded-lg border border-brand-600 bg-brand-50 py-2 text-center text-sm font-medium text-brand-700 ring-1 ring-brand-600"
+                      : "tabular rounded-lg border border-line py-2 text-center text-sm text-ink-soft"
                   }
                 >
-                  &#8373;{amount}
+                  GH₵ {amount}
                 </span>
               ))}
             </div>
-            <div className="rounded-xl bg-brand-600 py-3 text-center text-sm font-medium text-white">
-              Send payment prompt
+            <div>
+              <p className="text-label text-ink-soft">Mobile Money number</p>
+              <div className="mt-1.5 flex h-11 items-center rounded-lg border border-line-strong px-3.5 text-base text-ink">
+                <span className="tabular">024 123 4567</span>
+                <span className="ml-auto rounded-md bg-sunken px-2 py-0.5 text-caption font-medium text-ink-soft">
+                  MTN
+                </span>
+              </div>
+            </div>
+            <div className="rounded-lg bg-brand-600 py-3 text-center text-sm font-medium text-white">
+              Pay GH₵ 50.00
             </div>
             <p className="text-center text-xs text-ink-faint">
               You will be asked to approve on your phone.
@@ -263,7 +258,7 @@ function WhyVerifyGH() {
   const reasons = [
     {
       title: "Built for cedis, not converted to them",
-      body: "Prices are quoted, charged and refunded in GHS. You never do the exchange-rate maths, and the rate is locked onto your order at the moment you buy.",
+      body: "Prices are quoted, charged and refunded in cedis. You never do the exchange-rate maths, and the rate is locked onto your order at the moment you buy.",
       icon: <WalletIcon className="h-5 w-5" />,
     },
     {
@@ -304,7 +299,7 @@ function WhyVerifyGH() {
         </h2>
       </div>
 
-      <div className="mt-10 grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
+      <div className="mt-10 grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-3">
         {reasons.map((reason) => (
           <div key={reason.title} className="card p-5">
             <div className="flex h-10 w-10 items-center justify-center rounded-xl bg-brand-50 text-brand-600">
@@ -322,7 +317,7 @@ function WhyVerifyGH() {
 function Pricing() {
   return (
     <section id="pricing" className="border-y border-line bg-surface">
-      <div className="container-page grid gap-10 py-16 sm:py-20 lg:grid-cols-2 lg:items-start">
+      <div className="container-page grid grid-cols-1 gap-10 py-16 sm:py-20 lg:grid-cols-2 lg:items-start">
         <div>
           <p className="text-sm font-semibold uppercase tracking-wide text-brand-600">Pricing</p>
           <h2 className="mt-2 text-2xl font-semibold tracking-tight text-ink sm:text-3xl">
@@ -338,16 +333,16 @@ function Pricing() {
             continuously and frozen onto your order the moment you buy, so a rate change mid-order
             can never change what you were charged.
           </p>
-          <Link href="/services" className="mt-6 inline-block">
-            <Button variant="secondary">See live prices</Button>
-          </Link>
+          <ButtonLink href="/services" variant="secondary" className="mt-6">
+            See live prices
+          </ButtonLink>
         </div>
 
         <div className="card p-5 sm:p-6">
           <p className="text-sm font-semibold text-ink">What makes up a price</p>
           <ul className="mt-4 space-y-3 text-sm">
             <PriceRow label="Provider cost" note="What our upstream provider charges us, in USD" />
-            <PriceRow label="Converted to cedis" note="At the current USD/GHS rate" />
+            <PriceRow label="Converted to cedis" note="At the current dollar-to-cedi rate" />
             <PriceRow label="Platform margin" note="How VerifyGH stays running" />
             <PriceRow label="Mobile Money fee" note="The collection fee we absorb for you" />
             <PriceRow label="Failure buffer" note="Funds the automatic refunds" />
@@ -413,7 +408,7 @@ function Security() {
         </h2>
       </div>
 
-      <div className="mt-10 grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
+      <div className="mt-10 grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-3">
         {controls.map((control) => (
           <div key={control.title} className="card p-5">
             <ShieldIcon className="h-5 w-5 text-brand-600" />
@@ -443,16 +438,12 @@ function FinalCta() {
             verification number.
           </p>
           <div className="mt-7 flex flex-col gap-3 sm:flex-row">
-            <Link href="/register">
-              <Button size="lg" variant="inverse" fullWidth className="sm:w-auto">
-                Create free account
-              </Button>
-            </Link>
-            <Link href="/services">
-              <Button size="lg" variant="ghostInverse" fullWidth className="sm:w-auto">
-                Browse services
-              </Button>
-            </Link>
+            <ButtonLink href="/register" size="lg" variant="inverse" fullWidth className="sm:w-auto">
+              Create free account
+            </ButtonLink>
+            <ButtonLink href="/services" size="lg" variant="ghostInverse" fullWidth className="sm:w-auto">
+              Browse services
+            </ButtonLink>
           </div>
           <p className="mt-6 text-xs leading-relaxed text-brand-200">
             By creating an account you agree to our Terms of Service and Acceptable Use Policy.

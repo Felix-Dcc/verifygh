@@ -6,9 +6,10 @@ import useSWR from "swr";
 import { MetricTile } from "@/components/admin/charts";
 import { Pagination } from "@/components/admin/pagination";
 import { PageHeader } from "@/components/app-shell";
-import { ServiceLogo } from "@/components/service-logo";
 import { useAuth } from "@/components/auth-provider";
+import { CountryFlag } from "@/components/country-flag";
 import { FlagIcon, SearchIcon } from "@/components/icons";
+import { ServiceLogo } from "@/components/service-logo";
 import { Dialog } from "@/components/ui/dialog";
 import {
   Alert,
@@ -120,8 +121,8 @@ export default function AdminNumberIssuesPage() {
         ) : (
           <div className="overflow-x-auto">
             <table className="w-full min-w-[64rem] text-left text-sm">
-              <thead className="border-b border-line bg-canvas">
-                <tr className="text-xs uppercase tracking-wide text-ink-muted">
+              <thead className="border-b border-line bg-sunken">
+                <tr className="text-caption text-ink-muted">
                   <th scope="col" className="px-5 py-3 font-medium">Order</th>
                   <th scope="col" className="px-5 py-3 font-medium">Customer</th>
                   <th scope="col" className="px-5 py-3 font-medium">Provider</th>
@@ -138,7 +139,7 @@ export default function AdminNumberIssuesPage() {
                   <tr
                     key={issue.id}
                     onClick={() => setSelected(issue.reference)}
-                    className="cursor-pointer transition-colors hover:bg-canvas"
+                    className="cursor-pointer transition-colors hover:bg-sunken/60"
                   >
                     <td className="tabular whitespace-nowrap px-5 py-3.5 font-medium text-ink">
                       {issue.order_reference}
@@ -153,7 +154,10 @@ export default function AdminNumberIssuesPage() {
                       <span className="inline-flex items-center gap-2.5">
                         <ServiceLogo name={issue.service_name} src={issue.service_icon} size="sm" />
                         {issue.service_name}
-                        <span className="text-xs text-ink-muted">{issue.country_code}</span>
+                        <span className="inline-flex items-center gap-1.5 text-caption text-ink-muted">
+                          <CountryFlag code={issue.country_code} size="sm" />
+                          {issue.country_code}
+                        </span>
                       </span>
                     </td>
                     <td className="tabular whitespace-nowrap px-5 py-3.5 text-ink-soft">
@@ -216,7 +220,7 @@ function Metrics({ metrics }: { metrics: NumberIssueMetrics }) {
   const rate = metrics.possible_reuse_rate_percent;
   return (
     <div className="space-y-3">
-      <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
+      <div className="metric-group grid-cols-1 sm:grid-cols-2 lg:grid-cols-4">
         <MetricTile
           label="Reported possible reuse (30d)"
           value={metrics.possible_reuse_reports}
@@ -242,7 +246,7 @@ function Metrics({ metrics }: { metrics: NumberIssueMetrics }) {
           sublabel={`${metrics.flagged_numbers} numbers flagged for a service`}
         />
       </div>
-      <div className="grid gap-3 lg:grid-cols-2">
+      <div className="grid grid-cols-1 gap-3 lg:grid-cols-2">
         <Breakdown title="By service" rows={metrics.by_service} />
         <Breakdown title="By provider" rows={metrics.by_provider} />
       </div>
@@ -465,7 +469,7 @@ function IssueDialog({
               {issue.details ? (
                 <div>
                   <p className="mb-1 text-sm font-semibold text-ink">Customer&apos;s words</p>
-                  <p className="rounded-xl bg-canvas px-3.5 py-2.5 text-sm text-ink-soft">{issue.details}</p>
+                  <p className="rounded-lg bg-sunken px-3.5 py-2.5 text-sm text-ink-soft">{issue.details}</p>
                 </div>
               ) : null}
 
@@ -526,7 +530,7 @@ function IssueDialog({
               </p>
 
               {available.length > 0 ? (
-                <div className="grid gap-2 sm:grid-cols-2">
+                <div className="grid grid-cols-1 gap-2 sm:grid-cols-2">
                   {available.map((option) => (
                     <Button
                       key={option}

@@ -1,6 +1,5 @@
 "use client";
 
-import Link from "next/link";
 import * as React from "react";
 import useSWR from "swr";
 
@@ -9,6 +8,7 @@ import { PlusIcon, WalletIcon } from "@/components/icons";
 import {
   Badge,
   Button,
+  ButtonLink,
   Card,
   EmptyState,
   SegmentedControl,
@@ -62,9 +62,9 @@ export default function TransactionsPage() {
         description="Every movement of money on your account, with a reference for each one."
         action={
           // The top bar carries "Add funds" from sm up; phones get it here.
-          <Link href="/wallet/deposit" className="sm:hidden">
-            <Button icon={<PlusIcon className="h-5 w-5" />}>Add funds</Button>
-          </Link>
+          <ButtonLink href="/wallet/deposit" icon={<PlusIcon className="h-5 w-5" />} className="sm:hidden">
+            Add funds
+          </ButtonLink>
         }
       />
 
@@ -98,9 +98,7 @@ export default function TransactionsPage() {
                   Show everything
                 </Button>
               ) : (
-                <Link href="/wallet/deposit">
-                  <Button>Add funds</Button>
-                </Link>
+                <ButtonLink href="/wallet/deposit">Add funds</ButtonLink>
               )
             }
           />

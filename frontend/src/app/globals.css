@@ -75,6 +75,16 @@
     min-width: 0;
   }
 
+  /* Four figures that belong together read as one panel with hairline
+     dividers, not four boxes. The 1px gap shows the line colour behind the
+     cells, so it works at any column count. */
+  .metric-group {
+    @apply grid gap-px overflow-hidden rounded-xl border border-line bg-line;
+  }
+  .metric-group > * {
+    @apply rounded-none border-0;
+  }
+
   .skeleton {
     @apply relative overflow-hidden rounded-md bg-line/60;
   }

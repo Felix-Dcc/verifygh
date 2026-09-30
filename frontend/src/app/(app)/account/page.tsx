@@ -303,7 +303,7 @@ function SettingsSection({
   children: React.ReactNode;
 }) {
   return (
-    <section className="grid gap-4 py-8 first:pt-0 md:grid-cols-3 md:gap-8">
+    <section className="grid grid-cols-1 gap-4 py-8 first:pt-0 md:grid-cols-3 md:gap-8">
       <div>
         <h2 className="text-heading text-ink">{title}</h2>
         {description ? <p className="mt-1 text-sm text-ink-muted">{description}</p> : null}

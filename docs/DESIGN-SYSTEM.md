@@ -69,13 +69,35 @@ aliases are pinned to 12px. Borders separate surfaces; shadows (`shadow-raised`,
 |---|---|
 | `AppShell`, `PageHeader` | `components/app-shell.tsx` |
 | `Button`, `Input`, `Select`, `Textarea`, `Checkbox`, `Field` | `ui/primitives.tsx` |
+| `ButtonLink` (a link styled as a button), `PasswordInput` (show/hide) | `ui/primitives.tsx` |
 | `Card`, `CardHeader`, `Section`, `DescriptionList`, `Amount` | `ui/primitives.tsx` |
 | `Badge`, `StatusBadge`, `Alert`, `EmptyState`, `Skeleton`, `SegmentedControl` | `ui/primitives.tsx` |
 | `Dialog`, `ConfirmDialog` | `ui/dialog.tsx` |
 | `Toast` | `ui/toast.tsx` |
+| `TransactionRow`, `TransactionIcon`, `TransactionAmount` | `components/wallet/transaction-row.tsx` |
+| `MetricTile` (+ the `.metric-group` class) | `components/admin/charts.tsx`, `globals.css` |
 | `ServiceLogo` | `components/service-logo.tsx` |
 | `CountryFlag` | `components/country-flag.tsx` |
 | Icons (one hand-drawn set, 1.7 stroke) | `components/icons.tsx` |
+
+## Rules that are easy to break
+
+* **An action that goes somewhere is a `ButtonLink`**, never `<Link><Button>`: a
+  button inside a link is two tab stops and invalid HTML.
+* **44px touch targets on phones.** Buttons, tabs, menu items and chips are 44px
+  tall below `sm`; the small button size tightens to 40px only from `sm` up.
+* **A grid that only sets columns from a breakpoint up also sets `grid-cols-1`.**
+  Without it the single mobile column sizes to its widest child and the page
+  scrolls sideways at 360px.
+* **`cn` is plain `clsx`**, not tailwind-merge: when two classes conflict, the
+  one later in the stylesheet wins, not the one later in the string. Override
+  with a responsive variant or remove the conflicting class.
+* **Service logos are decorative** (`alt=""`): the name is always written beside
+  them.
+* **Form controls go inside `Field`**, which links them to their hint or error
+  (`aria-describedby`).
+* **Gold is for rewards only** - promotional credit, referral bonuses (`Badge
+  tone="gold"`).
 
 ## Motion
 

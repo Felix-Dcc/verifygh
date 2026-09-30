@@ -1,12 +1,11 @@
 "use client";
 
-import Link from "next/link";
 import * as React from "react";
 
 import { useAuth } from "@/components/auth-provider";
 import { AlertIcon, CheckCircleIcon } from "@/components/icons";
 import { ResendVerification } from "@/components/resend-verification";
-import { Button, Card, Spinner } from "@/components/ui/primitives";
+import { ButtonLink, Card, Spinner } from "@/components/ui/primitives";
 import { ApiError, api } from "@/lib/api";
 
 /**
@@ -80,11 +79,9 @@ export function VerifyEmailFlow({ token }: { token: string }) {
         <p className="mt-2 text-sm text-ink-muted">
           Your email has been verified. You can now use VerifyGH.
         </p>
-        <Link href={user ? "/dashboard" : "/login"} className="mt-6 w-full">
-          <Button fullWidth size="lg">
-            {user ? "Continue to Dashboard" : "Sign in"}
-          </Button>
-        </Link>
+        <ButtonLink href={user ? "/dashboard" : "/login"} fullWidth size="lg" className="mt-6 w-full">
+          {user ? "Continue to Dashboard" : "Sign in"}
+        </ButtonLink>
       </Card>
     );
   }
@@ -120,11 +117,7 @@ export function VerifyEmailFlow({ token }: { token: string }) {
             <p className="mb-4 text-sm text-ink-muted">
               Sign in to send yourself a new verification email.
             </p>
-            <Link href="/login" className="block w-full">
-              <Button fullWidth size="lg">
-                Sign in
-              </Button>
-            </Link>
+            <ButtonLink href="/login" fullWidth size="lg" className="w-full">Sign in</ButtonLink>
           </>
         )}
       </div>

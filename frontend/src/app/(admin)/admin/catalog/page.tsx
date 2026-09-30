@@ -299,7 +299,7 @@ function ServiceEditor({
                   event.target.value = "";
                 }}
               />
-              <span className="inline-flex h-9 items-center rounded-xl border border-line bg-surface px-3.5 text-sm font-medium text-ink hover:bg-canvas">
+              <span className="inline-flex h-9 items-center rounded-xl border border-line bg-surface px-3.5 text-sm font-medium text-ink hover:bg-sunken/60">
                 {service.has_uploaded_logo || service.icon_url ? "Replace logo" : "Upload logo"}
               </span>
             </label>

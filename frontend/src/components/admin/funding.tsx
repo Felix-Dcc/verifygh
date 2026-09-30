@@ -202,7 +202,7 @@ export function ProviderAccountCard({
           </Alert>
         ) : null}
 
-        <div className="grid grid-cols-2 gap-3 lg:grid-cols-4">
+        <div className="metric-group grid-cols-2 lg:grid-cols-4">
           <MetricTile
             label="Spendable balance"
             value={money(account.spendable, c)}
@@ -238,7 +238,7 @@ export function ProviderAccountCard({
           />
         </div>
 
-        <dl className="grid gap-x-6 gap-y-2 text-sm sm:grid-cols-3">
+        <dl className="grid grid-cols-1 gap-x-6 gap-y-2 text-sm sm:grid-cols-3">
           <Level label="Critical at or below" value={providerMoney(account.critical_balance, c)} />
           <Level label="Minimum" value={providerMoney(account.minimum_balance, c)} />
           <Level label="Target" value={providerMoney(account.target_balance, c)} />
@@ -399,7 +399,7 @@ function TopUpDialog({
     >
       <div className="space-y-4">
         {error ? <Alert tone="danger">{error}</Alert> : null}
-        <div className="grid gap-4 sm:grid-cols-2">
+        <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
           <Field label={`Amount credited (${account.currency})`} htmlFor="topup-amount" required>
             <Input
               id="topup-amount"
@@ -523,7 +523,7 @@ function LevelsDialog({
     >
       <div className="space-y-4">
         {error ? <Alert tone="danger">{error}</Alert> : null}
-        <div className="grid gap-4 sm:grid-cols-3">
+        <div className="grid grid-cols-1 gap-4 sm:grid-cols-3">
           {field("critical_balance", "Critical", "Alert urgently, every few hours.")}
           {field("minimum_balance", "Minimum", "Alert once when it drops below.")}
           {field("target_balance", "Target", "What a top-up should restore.")}
@@ -558,8 +558,8 @@ export function CashFlowCard({ flow }: { flow: CashFlow }) {
         </Alert>
 
         <section className="space-y-2">
-          <h3 className="text-xs font-semibold uppercase tracking-wide text-ink-muted">Owed to customers</h3>
-          <div className="grid grid-cols-2 gap-3 lg:grid-cols-4">
+          <h3 className="text-label text-ink">Owed to customers</h3>
+          <div className="metric-group grid-cols-2 lg:grid-cols-4">
             <MetricTile label="Wallet cash" value={cedis(flow.customer_funds.wallet_cash)} sublabel="Deposits not yet spent" />
             <MetricTile label="Promotional credit" value={cedis(flow.customer_funds.wallet_promotional)} sublabel="Spendable, not withdrawable" />
             <MetricTile label="Orders in progress" value={cedis(flow.customer_funds.orders_in_progress)} sublabel="Charged, refundable until delivered" />
@@ -568,8 +568,8 @@ export function CashFlowCard({ flow }: { flow: CashFlow }) {
         </section>
 
         <section className="space-y-2">
-          <h3 className="text-xs font-semibold uppercase tracking-wide text-ink-muted">Our money at providers</h3>
-          <div className="grid grid-cols-2 gap-3 lg:grid-cols-4">
+          <h3 className="text-label text-ink">Our money at providers</h3>
+          <div className="metric-group grid-cols-2 lg:grid-cols-4">
             <MetricTile label="Provider balance" value={cedis(flow.provider_balance_ghs)} sublabel="At the VerifyGH Pricing FX Rate" />
             <MetricTile
               label="Reserve top-up needed"
@@ -603,8 +603,8 @@ export function CashFlowCard({ flow }: { flow: CashFlow }) {
         </section>
 
         <section className="space-y-2">
-          <h3 className="text-xs font-semibold uppercase tracking-wide text-ink-muted">What we earned (delivered orders)</h3>
-          <div className="grid grid-cols-2 gap-3 lg:grid-cols-4">
+          <h3 className="text-label text-ink">What we earned (delivered orders)</h3>
+          <div className="metric-group grid-cols-2 lg:grid-cols-4">
             <MetricTile label="Revenue, 30 days" value={cedis(flow.earnings_30d.revenue)} />
             <MetricTile label="Provider cost, 30 days" value={cedis(flow.earnings_30d.provider_cost)} />
             <MetricTile

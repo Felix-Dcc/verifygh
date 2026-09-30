@@ -73,7 +73,7 @@ export function PriceBreakdown({ quote, title }: { quote: PriceQuote; title?: st
   return (
     <div className="rounded-xl border border-line">
       {title ? (
-        <p className="border-b border-line px-3.5 py-2 text-xs font-semibold uppercase tracking-wide text-ink-muted">
+        <p className="border-b border-line px-3.5 py-2 text-caption font-semibold text-ink-muted">
           {title}
         </p>
       ) : null}
@@ -414,7 +414,7 @@ function PricingEditor({
       />
 
       {mode === "markup" ? (
-        <div className="grid gap-3 sm:grid-cols-3">
+        <div className="grid grid-cols-1 gap-3 sm:grid-cols-3">
           <Field label="Markup type" htmlFor="pe-type">
             <Select id="pe-type" value={markupType} onChange={(e) => setMarkupType(e.target.value as typeof markupType)}>
               <option value="PERCENTAGE">Percentage</option>
@@ -428,7 +428,7 @@ function PricingEditor({
             </Field>
           ) : null}
           {markupType !== "PERCENTAGE" ? (
-            <Field label="Fixed markup (₵)" htmlFor="pe-fixed">
+            <Field label="Fixed markup (GH₵)" htmlFor="pe-fixed">
               <Input id="pe-fixed" inputMode="decimal" value={markupFixed} onChange={(e) => setMarkupFixed(e.target.value)} className="tabular" />
             </Field>
           ) : null}
@@ -446,7 +446,7 @@ function PricingEditor({
       {mode === "override" ? (
         <div className="space-y-3">
           <Field
-            label="Final customer price (₵)"
+            label="Final customer price (GH₵)"
             htmlFor="pe-override"
             hint="Replaces the calculated price for this service and country. The calculated price stays visible."
           >
@@ -551,7 +551,7 @@ function Comparison({ detail }: { detail: PricingOfferingDetail }) {
       <p className="mb-1.5 text-sm font-semibold text-ink">Provider comparison</p>
       <div className="overflow-x-auto rounded-xl border border-line">
         <table className="w-full text-left text-sm">
-          <thead className="bg-canvas text-xs uppercase tracking-wide text-ink-muted">
+          <thead className="bg-sunken text-caption text-ink-muted">
             <tr>
               <th className="px-3 py-2 font-medium">Provider</th>
               <th className="px-3 py-2 text-right font-medium">Cost</th>

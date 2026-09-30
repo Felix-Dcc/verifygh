@@ -15,6 +15,7 @@ import { ConfirmDialog } from "@/components/ui/dialog";
 import {
   Alert,
   Button,
+  ButtonLink,
   Card,
   CardHeader,
   DescriptionList,
@@ -129,9 +130,7 @@ export default function OrderDetailPage() {
             <span className="tabular font-medium text-ink">{reference}</span>. Check the reference,
             or open it from your order history.
           </p>
-          <Link href="/orders" className="mt-4 inline-block">
-            <Button>Go to orders</Button>
-          </Link>
+          <ButtonLink href="/orders" className="mt-4">Go to orders</ButtonLink>
         </Card>
       </div>
     );
@@ -214,7 +213,7 @@ export default function OrderDetailPage() {
         ) : null}
       </div>
 
-      <div className="grid gap-6 lg:grid-cols-5">
+      <div className="grid grid-cols-1 gap-6 lg:grid-cols-5">
         <div className="space-y-4 lg:col-span-3">
           <Card className="overflow-hidden">
             <NumberSection
@@ -610,7 +609,7 @@ function OrderSkeleton() {
         <Skeleton className="h-4 w-24" />
         <Skeleton className="h-7 w-48" />
       </div>
-      <div className="grid gap-6 lg:grid-cols-5">
+      <div className="grid grid-cols-1 gap-6 lg:grid-cols-5">
         <div className="lg:col-span-3">
           <Card className="space-y-3 p-6">
             <Skeleton className="h-3 w-32" />

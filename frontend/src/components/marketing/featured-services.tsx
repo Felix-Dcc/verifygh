@@ -6,7 +6,7 @@ import useSWR from "swr";
 import { CountryFlag } from "@/components/country-flag";
 import { ServiceLogo } from "@/components/service-logo";
 import { ArrowRightIcon } from "@/components/icons";
-import { Badge, Button, Skeleton } from "@/components/ui/primitives";
+import { Badge, ButtonLink, Skeleton } from "@/components/ui/primitives";
 import { cedis } from "@/lib/format";
 import type { Service } from "@/lib/types";
 
@@ -39,14 +39,12 @@ export function FeaturedServices() {
             include every fee - what you see is what leaves your wallet.
           </p>
         </div>
-        <Link href="/services">
-          <Button variant="secondary" icon={<ArrowRightIcon className="h-4 w-4" />}>
-            View all services
-          </Button>
-        </Link>
+        <ButtonLink href="/services" variant="secondary" icon={<ArrowRightIcon className="h-4 w-4" />}>
+          View all services
+        </ButtonLink>
       </div>
 
-      <div className="mt-8 grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
+      <div className="mt-8 grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-4">
         {isLoading ? (
           Array.from({ length: 8 }).map((_, index) => (
             <div key={index} className="card p-4">

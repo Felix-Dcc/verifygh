@@ -34,6 +34,15 @@ export function signedCedis(amount: string | number, direction?: "CREDIT" | "DEB
   return `${negative ? MINUS : "+"}${cedis(Math.abs(value))}`;
 }
 
+/**
+ * Text the backend wrote before it formatted money like the app ("GHS 10.00"
+ * in a stored notification or order event), shown the current way. Display
+ * only - the stored text is left as it is.
+ */
+export function moneyText(text: string): string {
+  return text.replace(/GHS\s?(?=\d)/g, "GH₵ ");
+}
+
 const USD = new Intl.NumberFormat("en-US", {
   style: "currency",
   currency: "USD",

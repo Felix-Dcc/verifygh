@@ -4,7 +4,7 @@ import Link from "next/link";
 import * as React from "react";
 
 import { errorMessage } from "@/components/auth-provider";
-import { Alert, Button, Card, Field, Input } from "@/components/ui/primitives";
+import { Alert, Button, ButtonLink, Card, Field, Input } from "@/components/ui/primitives";
 import { api } from "@/lib/api";
 
 export default function ForgotPasswordPage() {
@@ -44,9 +44,7 @@ export default function ForgotPasswordPage() {
             <Button variant="secondary" fullWidth onClick={() => setSent(false)}>
               Try another email
             </Button>
-            <Link href="/login" className="w-full">
-              <Button fullWidth>Back to sign in</Button>
-            </Link>
+            <ButtonLink href="/login" fullWidth className="w-full">Back to sign in</ButtonLink>
           </div>
         </Card>
       </div>

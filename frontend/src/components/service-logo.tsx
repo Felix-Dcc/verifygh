@@ -88,10 +88,12 @@ export function ServiceLogo({
     >
       {/* A plain <img>: the files are tiny SVGs (or small validated PNGs),
           already cached, and need no resizing pipeline. */}
+      {/* Decorative: the service name is always written beside the logo, so
+          alt text would only make screen readers say it twice. */}
       {/* eslint-disable-next-line @next/next/no-img-element */}
       <img
         src={src}
-        alt={`${name} logo`}
+        alt=""
         width={PIXELS[size]}
         height={PIXELS[size]}
         loading="lazy"

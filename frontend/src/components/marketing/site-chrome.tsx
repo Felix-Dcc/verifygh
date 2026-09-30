@@ -7,7 +7,7 @@ import { AccountMenu } from "@/components/account-menu";
 import { useAuth } from "@/components/auth-provider";
 import { Logo } from "@/components/brand";
 import { CloseIcon, LogoutIcon, MenuIcon } from "@/components/icons";
-import { Button, cn } from "@/components/ui/primitives";
+import { ButtonLink, cn } from "@/components/ui/primitives";
 
 const LINKS = [
   { href: "/services", label: "Services" },
@@ -53,9 +53,7 @@ export function SiteHeader() {
             <div className="h-10 w-40" aria-hidden />
           ) : user ? (
             <>
-              <Link href="/dashboard">
-                <Button size="sm">Go to dashboard</Button>
-              </Link>
+              <ButtonLink href="/dashboard" size="sm">Go to dashboard</ButtonLink>
               {/* Signing out used to be reachable only from inside the app
                   shell, so a customer who landed here while signed in had no
                   way out of their session at all. */}
@@ -63,14 +61,8 @@ export function SiteHeader() {
             </>
           ) : (
             <>
-              <Link href="/login">
-                <Button variant="ghost" size="sm">
-                  Sign in
-                </Button>
-              </Link>
-              <Link href="/register">
-                <Button size="sm">Get started</Button>
-              </Link>
+              <ButtonLink href="/login" variant="ghost" size="sm">Sign in</ButtonLink>
+              <ButtonLink href="/register" size="sm">Get started</ButtonLink>
             </>
           )}
         </div>
@@ -106,19 +98,15 @@ export function SiteHeader() {
           <div className="mt-2 flex flex-col gap-2 border-t border-line pt-3 pb-4">
             {user ? (
               <>
-                <Link href="/dashboard" onClick={() => setOpen(false)}>
-                  <Button fullWidth>Go to dashboard</Button>
-                </Link>
-                <Link href="/wallet" onClick={() => setOpen(false)}>
-                  <Button variant="secondary" fullWidth>
-                    Wallet
-                  </Button>
-                </Link>
-                <Link href="/orders" onClick={() => setOpen(false)}>
-                  <Button variant="secondary" fullWidth>
-                    Orders
-                  </Button>
-                </Link>
+                <ButtonLink href="/dashboard" onClick={() => setOpen(false)} fullWidth>
+                  Go to dashboard
+                </ButtonLink>
+                <ButtonLink href="/wallet" onClick={() => setOpen(false)} variant="secondary" fullWidth>
+                  Wallet
+                </ButtonLink>
+                <ButtonLink href="/orders" onClick={() => setOpen(false)} variant="secondary" fullWidth>
+                  Orders
+                </ButtonLink>
                 {/* Reachable without leaving the phone layout, which is where
                     most of this traffic is. */}
                 <button
@@ -135,14 +123,12 @@ export function SiteHeader() {
               </>
             ) : (
               <>
-                <Link href="/register" onClick={() => setOpen(false)}>
-                  <Button fullWidth>Create free account</Button>
-                </Link>
-                <Link href="/login" onClick={() => setOpen(false)}>
-                  <Button variant="secondary" fullWidth>
-                    Sign in
-                  </Button>
-                </Link>
+                <ButtonLink href="/register" onClick={() => setOpen(false)} fullWidth>
+                  Create free account
+                </ButtonLink>
+                <ButtonLink href="/login" onClick={() => setOpen(false)} variant="secondary" fullWidth>
+                  Sign in
+                </ButtonLink>
               </>
             )}
           </div>
@@ -184,7 +170,7 @@ export function SiteFooter() {
   return (
     <footer className="border-t border-line bg-surface">
       <div className="container-page py-12">
-        <div className="grid gap-10 sm:grid-cols-2 lg:grid-cols-4">
+        <div className="grid grid-cols-1 gap-10 sm:grid-cols-2 lg:grid-cols-4">
           <div className="lg:col-span-1">
             <Logo />
             <p className="mt-3 max-w-xs text-sm text-ink-muted">

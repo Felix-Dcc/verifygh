@@ -28,7 +28,7 @@ import {
   UsersIcon,
   WalletIcon,
 } from "@/components/icons";
-import { Button, Skeleton, cn } from "@/components/ui/primitives";
+import { ButtonLink, Skeleton, cn } from "@/components/ui/primitives";
 import { cedis } from "@/lib/format";
 import type { Wallet } from "@/lib/types";
 
@@ -267,7 +267,7 @@ function TopBar({ variant }: { variant: "user" | "admin" }) {
     <header className="sticky top-0 z-30 border-b border-line bg-surface/95 backdrop-blur supports-[backdrop-filter]:bg-surface/85">
       <div className="flex h-14 items-center gap-3 px-4 sm:px-6 lg:px-10">
         <Link href={variant === "admin" ? "/admin" : "/dashboard"} className="rounded-md lg:hidden">
-          <span className="flex items-center gap-2">
+          <span className="flex min-h-11 items-center gap-2">
             <Logomark className="h-7 w-7 text-brand-600" />
             {variant === "admin" ? (
               <span className="text-sm font-semibold text-ink">Admin</span>
@@ -284,7 +284,7 @@ function TopBar({ variant }: { variant: "user" | "admin" }) {
             <>
               <Link
                 href="/wallet"
-                className="flex items-center gap-2 rounded-lg px-2 py-1.5 transition-colors hover:bg-sunken"
+                className="flex min-h-11 items-center gap-2 rounded-lg px-2 transition-colors hover:bg-sunken sm:min-h-9"
                 aria-label={wallet ? `Wallet balance ${cedis(wallet.balance)}` : "Wallet"}
               >
                 <span className="hidden text-caption text-ink-muted xl:inline">Balance</span>
@@ -294,15 +294,13 @@ function TopBar({ variant }: { variant: "user" | "admin" }) {
                   <span className="tabular text-sm font-semibold text-ink">{cedis(wallet?.balance)}</span>
                 )}
               </Link>
-              <Link href="/wallet/deposit" className="hidden sm:block">
-                <Button size="sm" className="h-9">
-                  Add funds
-                </Button>
-              </Link>
+              <ButtonLink href="/wallet/deposit" size="sm" className="hidden sm:inline-flex">
+                Add funds
+              </ButtonLink>
               <Link
                 href="/account/notifications"
                 aria-label={unread?.count ? `Notifications, ${unread.count} unread` : "Notifications"}
-                className="relative flex h-10 w-10 items-center justify-center rounded-lg text-ink-soft transition-colors hover:bg-sunken hover:text-ink"
+                className="relative flex h-11 w-11 items-center justify-center rounded-lg text-ink-soft transition-colors hover:bg-sunken hover:text-ink sm:h-10 sm:w-10"
               >
                 <BellIcon className="h-5 w-5" />
                 {unread && unread.count > 0 ? (
@@ -394,7 +392,7 @@ function UserMenu({ variant }: { variant: "user" | "admin" }) {
         aria-expanded={open}
         aria-label="Account menu"
         onClick={() => setOpen((value) => !value)}
-        className="flex h-10 items-center gap-2 rounded-lg px-1.5 transition-colors hover:bg-sunken"
+        className="flex h-11 items-center gap-2 rounded-lg px-1.5 transition-colors hover:bg-sunken sm:h-10"
       >
         <span className="flex h-8 w-8 items-center justify-center rounded-full bg-brand-50 text-caption font-semibold text-brand-700">
           {initials(user?.full_name, user?.email)}
@@ -416,7 +414,7 @@ function UserMenu({ variant }: { variant: "user" | "admin" }) {
                 key={item.href}
                 role="menuitem"
                 href={item.href}
-                className="block px-4 py-2 text-sm text-ink-soft transition-colors hover:bg-sunken hover:text-ink focus:bg-sunken focus:outline-none"
+                className="flex min-h-11 items-center px-4 text-sm text-ink-soft transition-colors hover:bg-sunken hover:text-ink focus:bg-sunken focus:outline-none sm:min-h-9"
               >
                 {item.label}
               </Link>
@@ -427,7 +425,7 @@ function UserMenu({ variant }: { variant: "user" | "admin" }) {
               type="button"
               role="menuitem"
               onClick={signOut}
-              className="flex w-full items-center gap-2 px-4 py-2 text-left text-sm text-ink-soft transition-colors hover:bg-sunken hover:text-ink focus:bg-sunken focus:outline-none"
+              className="flex min-h-11 w-full items-center gap-2 px-4 text-left text-sm text-ink-soft transition-colors hover:bg-sunken hover:text-ink focus:bg-sunken focus:outline-none sm:min-h-9"
             >
               <LogoutIcon className="h-4 w-4 text-ink-faint" />
               Sign out
@@ -597,7 +595,7 @@ export function PageHeader({
       {back ? (
         <Link
           href={back.href}
-          className="mb-3 inline-flex items-center gap-1 text-sm font-medium text-ink-muted transition-colors hover:text-ink"
+          className="-mt-3 mb-0.5 inline-flex min-h-11 items-center gap-1 text-sm font-medium text-ink-muted transition-colors hover:text-ink"
         >
           <svg viewBox="0 0 24 24" fill="none" className="h-4 w-4" aria-hidden>
             <path
