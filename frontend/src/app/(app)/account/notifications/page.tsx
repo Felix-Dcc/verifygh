@@ -50,6 +50,9 @@ const KINDS: Record<string, Kind> = {
   ACCOUNT_SUSPENDED: { icon: LockIcon, tone: "danger" },
   ADMIN_MESSAGE: { icon: MailIcon, tone: "neutral" },
   REFERRAL_BONUS: { icon: GiftIcon, tone: "gold" },
+  // Staff alerts (apps/notifications/staff.py).
+  STAFF_ORDER_FAILED: { icon: AlertIcon, tone: "danger" },
+  STAFF_ISSUE_REPORTED: { icon: FlagIcon, tone: "warn" },
 };
 
 const TONE_CLASSES: Record<Kind["tone"], string> = {
@@ -63,6 +66,8 @@ const TONE_CLASSES: Record<Kind["tone"], string> = {
 /** Where a notification leads, from the references the backend attached. */
 function destination(notification: Notification): string | null {
   const meta = notification.metadata ?? {};
+  // Staff alerts open the admin page that can act on them.
+  if (typeof meta.admin_link === "string" && meta.admin_link.startsWith("/admin/")) return meta.admin_link;
   if (typeof meta.order_reference === "string") return `/orders/${meta.order_reference}`;
   if (typeof meta.payment_reference === "string") return "/transactions";
   if (notification.event === "REFERRAL_BONUS") return "/refer";

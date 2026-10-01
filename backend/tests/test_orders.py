@@ -532,3 +532,37 @@ def test_an_automatic_refund_never_follows_a_delivered_code(
 
     assert get_or_create_wallet(user).balance == balance
     assert not Refund.objects.filter(order=order).exists()
+
+
+# ---------------------------------------------------------------------------
+# Staff are told
+# ---------------------------------------------------------------------------
+
+
+def test_a_failed_order_alerts_staff_in_app_every_time_and_by_email_once(
+    user, auth, catalog, funded_wallet, admin_user, support_user
+):
+    from django.core import mail
+
+    from apps.notifications.models import Channel, Notification
+
+    verification_mock.force_scenario("PROVIDER_ERR")
+    funded_wallet(user, "200.00")
+    client = auth(user)
+    first = Order.objects.get(reference=buy(client).data["reference"])
+    buy(client)
+
+    alerts = Notification.objects.filter(event="STAFF_ORDER_FAILED")
+    # Those who can refund; support (view only) and the customer are not paged.
+    assert set(alerts.values_list("user_id", flat=True)) == {admin_user.pk}
+    assert alerts.filter(channel=Channel.IN_APP).count() == 2
+    # Two failures together are one email, not two.
+    assert alerts.filter(channel=Channel.EMAIL).count() == 1
+    sent = [m for m in mail.outbox if "didn't go through" in m.subject]
+    assert len(sent) == 1 and sent[0].to == [admin_user.email]
+
+    alert = alerts.filter(channel=Channel.IN_APP).order_by("created_at").first()
+    assert first.reference in alert.title
+    assert "refunded" in alert.body
+    assert user.email not in alert.body  # masked, even for staff
+    assert alert.metadata["admin_link"] == f"/admin/orders?q={first.reference}"

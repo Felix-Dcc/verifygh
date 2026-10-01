@@ -635,12 +635,17 @@ def fulfil_order(order: Order) -> Order:
         except Exception:
             # Alerting must never stand between the customer and their refund.
             logger.exception("provider_failure_alert_failed")
-        if str(getattr(exc, "provider_code", "") or "").lower() == "unavailable":
+        provider_code = str(getattr(exc, "provider_code", "") or "")
+        staff_detail = (f"{order.provider.name} answered {provider_code}." if provider_code
+                        else f"The call to {order.provider.name} failed "
+                             f"({exc.__class__.__name__}).")
+        if provider_code.lower() == "unavailable":
             return fail_order(order, reason=(
                 f"No {order.service.name} number was available just then. Your money is back "
                 "in your wallet - try again in a few minutes."
-            ))
-        return fail_order(order, reason="The provider could not supply a number.")
+            ), staff_detail=staff_detail)
+        return fail_order(order, reason="The provider could not supply a number.",
+                          staff_detail=staff_detail)
 
     if result.state == ProviderOrderState.FAILED:
         return fail_order(
@@ -903,13 +908,47 @@ def expire_order(order: Order) -> Order:
     return issue_refund(order, reason=RefundReason.NO_CODE_RECEIVED, automatic=True)
 
 
-def fail_order(order: Order, *, reason: str, provider_order_id: str = "") -> Order:
+#: At most one "order did not go through" email per this many seconds; every
+#: failure still reaches the admin bell. A provider outage is one email.
+ORDER_FAILED_EMAIL_COOLDOWN = 10 * 60
+
+
+def fail_order(order: Order, *, reason: str, provider_order_id: str = "",
+               staff_detail: str = "") -> Order:
     extra = {"failure_reason": reason[:255], "completed_at": timezone.now()}
     if provider_order_id:
         extra["provider_order_id"] = provider_order_id
 
     order = transition(order, OrderStatus.FAILED, detail=reason, extra_fields=extra)
-    return issue_refund(order, reason=RefundReason.PROVIDER_FAILED, automatic=True)
+    order = issue_refund(order, reason=RefundReason.PROVIDER_FAILED, automatic=True)
+    _alert_staff_order_failed(order, staff_detail or reason)
+    return order
+
+
+def _alert_staff_order_failed(order: Order, detail: str) -> None:
+    """Tell the people who can refund that a customer's order did not go through."""
+    from apps.accounts.constants import AdminPermission
+    from apps.accounts.services import mask_email
+    from apps.notifications.staff import alert_staff
+
+    try:
+        refunded = (f"refunded {format_ghs(order.price)} automatically"
+                    if order.refund_status == RefundStatus.COMPLETED else "not refunded yet")
+        alert_staff(
+            permission=AdminPermission.ORDER_REFUND,
+            event="STAFF_ORDER_FAILED",
+            title=f"Order {order.reference} didn't go through",
+            body=(f"{order.service.name} ({order.country.code}) for "
+                  f"{mask_email(order.user.email)}. {detail} The customer was {refunded}. "
+                  "If several fail together, the rest are in Admin > Orders."),
+            link=f"/admin/orders?q={order.reference}",
+            reference=order.reference,
+            cooldown_key="staff-alert:order-failed:email",
+            cooldown_seconds=ORDER_FAILED_EMAIL_COOLDOWN,
+        )
+    except Exception:
+        # Telling staff must never stand between the customer and their refund.
+        logger.exception("staff_order_failed_alert_failed", extra={"order": order.reference})
 
 
 # ---------------------------------------------------------------------------

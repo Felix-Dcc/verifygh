@@ -512,3 +512,28 @@ def test_masking():
     assert numbers.mask("+15550104234", "+1") == "+1 *** *** 4234"
     assert numbers.mask("+233241234567", "+233") == "+233 *** *** 4567"
     assert numbers.fingerprint("+1 555 010 4234") == numbers.fingerprint("15550104234")
+
+
+def test_a_report_alerts_the_staff_who_resolve_reports(user, customer, delivered, admin_user,
+                                                       support_user):
+    from django.core import mail
+
+    from apps.notifications.models import Channel, Notification
+
+    with _capture(execute=True):
+        response = report(customer, delivered, {**LINKED, "details": "It asked for a password"})
+    assert response.status_code == 201, response.data
+    issue = VerificationIssue.objects.get(order=delivered)
+
+    alerts = Notification.objects.filter(event="STAFF_ISSUE_REPORTED")
+    assert set(alerts.values_list("user_id", flat=True)) == {admin_user.pk}
+    assert {a.channel for a in alerts} == {Channel.IN_APP, Channel.EMAIL}
+    alert = alerts.get(channel=Channel.IN_APP)
+    assert issue.reference in alert.title
+    assert delivered.reference in alert.body and "asked for a password" in alert.body
+    assert alert.metadata["admin_link"] == f"/admin/issues?q={issue.reference}"
+    assert any(issue.reference in m.subject for m in mail.outbox)
+    # Reporting the same order again opens nothing new, so pages no one again.
+    with _capture(execute=True):
+        report(customer, delivered)
+    assert Notification.objects.filter(event="STAFF_ISSUE_REPORTED").count() == 2

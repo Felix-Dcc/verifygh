@@ -395,7 +395,31 @@ def report_issue(order, *, user, reason: str, details: str = "",
         "number_issue_reported",
         extra={"issue": issue.reference, "order": order.reference, "reason": reason},
     )
+    _alert_staff_issue_reported(issue, order, user)
     return issue, True
+
+
+def _alert_staff_issue_reported(issue, order, user) -> None:
+    """Tell the people who resolve reports that a customer filed one."""
+    from apps.accounts.constants import AdminPermission
+    from apps.accounts.services import mask_email
+    from apps.notifications.staff import alert_staff
+
+    try:
+        said = f' They wrote: "{issue.details[:160]}"' if issue.details else ""
+        review = " Flagged for a closer look." if issue.needs_review else ""
+        alert_staff(
+            permission=AdminPermission.ISSUE_MANAGE,
+            event="STAFF_ISSUE_REPORTED",
+            title=f"New report {issue.reference}: {IssueReason(issue.reason).label}",
+            body=(f"{order.service.name} order {order.reference} by "
+                  f"{mask_email(user.email)}.{said}{review}"),
+            link=f"/admin/issues?q={issue.reference}",
+            reference=issue.reference,
+        )
+    except Exception:
+        # The customer's report is filed either way.
+        logger.exception("staff_issue_alert_failed", extra={"issue": issue.reference})
 
 
 # ---------------------------------------------------------------------------

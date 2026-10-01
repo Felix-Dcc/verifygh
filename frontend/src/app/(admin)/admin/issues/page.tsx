@@ -57,6 +57,11 @@ export default function AdminNumberIssuesPage() {
   const { can } = useAuth();
   const [status, setStatus] = React.useState("");
   const [search, setSearch] = React.useState("");
+  // Opened from a staff alert: start on that reference.
+  React.useEffect(() => {
+    const q = new URLSearchParams(window.location.search).get("q");
+    if (q) setSearch(q.slice(0, 80));
+  }, []);
   const [debounced, setDebounced] = React.useState("");
   const [page, setPage] = React.useState(1);
   const [selected, setSelected] = React.useState<string | null>(null);
