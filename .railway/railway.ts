@@ -165,6 +165,12 @@ function backendEnv(databaseUrl: VariableValue, redisUrl: VariableValue) {
     DEFAULT_FROM_EMAIL: `VerifyGH <no-reply@${ROOT_DOMAIN}>`,
     EMAIL_VERIFICATION_TTL_HOURS: "24",
 
+    // A Turnstile token is only good if it was solved on our own pages.
+    TURNSTILE_ALLOWED_HOSTNAMES: `${WEB_DOMAIN},${ROOT_DOMAIN}`,
+    // Sign in with Google: register exactly this address as an authorised
+    // redirect URI on the OAuth client (docs/GOOGLE_SIGN_IN.md).
+    GOOGLE_OAUTH_REDIRECT_URI: `https://${API_DOMAIN}/api/v1/auth/google/callback/`,
+
     // --- set these in the Railway dashboard -----------------------------
     SECRET_KEY: preserve(),
     JWT_SIGNING_KEY: preserve(),
@@ -187,6 +193,13 @@ function backendEnv(databaseUrl: VariableValue, redisUrl: VariableValue) {
     // Cloudflare's Transform Rule sets on X-VerifyGH-Origin.
     CLOUDFLARE_MODE: preserve(),
     CLOUDFLARE_ORIGIN_SECRET: preserve(),
+    // Cloudflare Turnstile's secret key. Set, sign-in and sign-up need a token
+    // Cloudflare confirms - so give verifygh-web its site key and redeploy it
+    // first, or nobody can sign in (docs/CLOUDFLARE.md, step 5).
+    TURNSTILE_SECRET_KEY: preserve(),
+    // Sign in with Google: both, or neither (docs/GOOGLE_SIGN_IN.md).
+    GOOGLE_OAUTH_CLIENT_ID: preserve(),
+    GOOGLE_OAUTH_CLIENT_SECRET: preserve(),
     EXCHANGE_RATE_API_KEY: preserve(),
     // Set this and verification emails start arriving. Without it the API
     // refuses to boot, rather than writing them to the container log where

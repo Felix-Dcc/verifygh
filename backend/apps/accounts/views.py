@@ -1,9 +1,13 @@
 from __future__ import annotations
 
 import logging
+import secrets
 
 from django.conf import settings
 from django.contrib.auth import authenticate
+from django.core import signing
+from django.http import HttpResponseRedirect
+from django.urls import reverse
 from django.utils import timezone
 from rest_framework import status
 from rest_framework.permissions import AllowAny, IsAuthenticated
@@ -12,7 +16,7 @@ from rest_framework.views import APIView
 from rest_framework_simplejwt.exceptions import TokenError
 from rest_framework_simplejwt.tokens import RefreshToken
 
-from apps.accounts import services
+from apps.accounts import google, services, turnstile
 from apps.accounts.authentication import (
     blacklist_refresh_token,
     revoke_access_token,
@@ -23,6 +27,7 @@ from apps.accounts.authentication import (
     set_auth_cookies,
     token_version_of,
 )
+from apps.accounts.constants import Role
 from apps.accounts.models import User
 from apps.accounts.serializers import (
     AcceptTermsSerializer,
@@ -71,6 +76,9 @@ class RegisterView(APIView):
     throttle_classes = [RegisterThrottle]
 
     def post(self, request):
+        # Before anything else: the form's own errors ("an account with this
+        # email already exists") are not for bots.
+        turnstile.require_human(request, request.data.get("turnstile_token"), action="register")
         serializer = RegisterSerializer(data=request.data)
         serializer.is_valid(raise_exception=True)
         data = serializer.validated_data
@@ -121,6 +129,9 @@ class LoginView(APIView):
     throttle_classes = [LoginIPThrottle, LoginThrottle]
 
     def post(self, request):
+        # Before any password is tried, so a bot's guesses neither reach the
+        # hasher nor lock the real owner out.
+        turnstile.require_human(request, request.data.get("turnstile_token"), action="login")
         serializer = LoginSerializer(data=request.data)
         serializer.is_valid(raise_exception=True)
         email = serializer.validated_data["email"].lower()
@@ -416,3 +427,179 @@ class AcceptTermsView(APIView):
             metadata={"version": user.accepted_terms_version},
         )
         return Response({"user": UserSerializer(user).data})
+
+
+class SignInOptionsView(APIView):
+    """Which ways of signing in this deployment offers, for the sign-in pages."""
+
+    permission_classes = [AllowAny]
+    authentication_classes: list = []
+
+    def get(self, request):
+        return Response({"google": google.is_configured()})
+
+
+# ---------------------------------------------------------------------------
+# Sign in with Google (apps/accounts/google.py)
+# ---------------------------------------------------------------------------
+
+#: Holds the state, nonce and PKCE verifier between the two legs. Signed, so it
+#: cannot be forged; HttpOnly, host-only and scoped to the callback path.
+GOOGLE_PENDING_COOKIE = "vgh_google"
+GOOGLE_PENDING_SALT = "verifygh.google-sign-in"
+GOOGLE_PENDING_SECONDS = 600
+
+
+def _frontend(path: str) -> str:
+    return str(settings.VERIFYGH["FRONTEND_URL"]).rstrip("/") + path
+
+
+def _safe_next(raw) -> str:
+    """A path on our own site to land on afterwards - never another origin."""
+    value = str(raw or "").strip()
+    if (
+        value.startswith("/")
+        and not value.startswith("//")
+        and len(value) <= 300
+        and not any(char in value for char in "\\\r\n\t")
+    ):
+        return value
+    return "/dashboard"
+
+
+def _callback_path() -> str:
+    return reverse("v1:accounts:google-callback")
+
+
+class _GoogleRedirectView(APIView):
+    """Both legs are browser navigations, so every outcome is a redirect.
+
+    A JSON error (a rate limit, say) would leave the customer on a page of raw
+    API output; instead they land back on the form with a short reason.
+    """
+
+    permission_classes = [AllowAny]
+    # Not authenticated from cookies: the state cookie is what ties the two legs
+    # together, and the CSRF gate has no part in a GET navigation.
+    authentication_classes: list = []
+    throttle_classes = [LoginIPThrottle]
+
+    def handle_exception(self, exc):
+        logger.info("google_sign_in_refused", extra={"error": type(exc).__name__})
+        return self.fail("busy" if getattr(exc, "status_code", 0) == 429 else "failed")
+
+    def fail(self, reason: str, *, intent: str = "signin") -> HttpResponseRedirect:
+        page = "/register" if intent == "signup" else "/login"
+        response = HttpResponseRedirect(_frontend(f"{page}?google={reason}"))
+        response.delete_cookie(GOOGLE_PENDING_COOKIE, path=_callback_path())
+        return response
+
+
+class GoogleStartView(_GoogleRedirectView):
+    """Send the browser to Google's account chooser."""
+
+    def get(self, request):
+        intent = "signup" if request.GET.get("intent") == "signup" else "signin"
+        if not google.is_configured():
+            return self.fail("unavailable", intent=intent)
+
+        state = secrets.token_urlsafe(32)
+        nonce = secrets.token_urlsafe(32)
+        verifier, challenge = google.new_pkce_pair()
+        referral = str(request.GET.get("ref") or "")[:16]
+        pending = {
+            "state": state,
+            "nonce": nonce,
+            "verifier": verifier,
+            "next": _safe_next(request.GET.get("next")),
+            "intent": intent,
+            # Only the sign-up form asks for the terms; it sends terms=1 once ticked.
+            "terms": intent == "signup" and request.GET.get("terms") == "1",
+            "ref": referral if referral.isalnum() else "",
+        }
+
+        response = HttpResponseRedirect(
+            google.authorization_url(state=state, nonce=nonce, code_challenge=challenge)
+        )
+        response.set_cookie(
+            GOOGLE_PENDING_COOKIE,
+            signing.dumps(pending, salt=GOOGLE_PENDING_SALT),
+            max_age=GOOGLE_PENDING_SECONDS,
+            httponly=True,
+            secure=settings.AUTH_COOKIE_SECURE,
+            # Lax, not Strict: the return from accounts.google.com is a
+            # cross-site navigation, and the cookie has to come with it.
+            samesite="Lax",
+            path=_callback_path(),
+        )
+        return response
+
+
+class GoogleCallbackView(_GoogleRedirectView):
+    """Google sends the browser back here with a code; sign in and go to the app."""
+
+    def get(self, request):
+        try:
+            pending = signing.loads(
+                request.COOKIES.get(GOOGLE_PENDING_COOKIE, ""),
+                salt=GOOGLE_PENDING_SALT,
+                max_age=GOOGLE_PENDING_SECONDS,
+            )
+        except signing.BadSignature:
+            # Missing, tampered with, or older than ten minutes.
+            return self.fail("expired")
+        intent = pending.get("intent", "signin")
+
+        # The state ties this callback to the browser that started it, so no one
+        # can sign a visitor in to an account of theirs (login CSRF).
+        if not secrets.compare_digest(str(request.GET.get("state") or ""), pending["state"]):
+            return self.fail("expired", intent=intent)
+        if request.GET.get("error"):
+            # Most often access_denied: they closed the chooser or said no.
+            return self.fail("cancelled", intent=intent)
+        code = str(request.GET.get("code") or "")
+        if not code or not google.is_configured():
+            return self.fail("failed", intent=intent)
+
+        try:
+            identity = google.exchange_code(
+                code, code_verifier=pending["verifier"], nonce=pending["nonce"]
+            )
+            user, created = services.sign_in_with_google(
+                subject=identity.subject,
+                email=identity.email,
+                name=identity.name,
+                accepted_terms=bool(pending.get("terms")),
+                referral_code=pending.get("ref", ""),
+                request=request,
+            )
+        except google.GoogleSignInError as exc:
+            return self.fail(exc.reason, intent=intent)
+        except services.GoogleAccountConflict:
+            logger.warning("google_sign_in_conflict")
+            return self.fail("conflict", intent=intent)
+
+        if user.is_suspended or not user.is_active:
+            services.record_login_attempt(
+                email=user.email, user=user, successful=False, request=request,
+                reason="suspended",
+            )
+            return self.fail("suspended", intent=intent)
+
+        # Google has proved who this is, so a password lockout - which exists
+        # to stop guessing - is cleared like any other successful sign-in.
+        user.register_successful_login(ip=get_client_ip(request) or None)
+        services.record_login_attempt(email=user.email, user=user, successful=True,
+                                      request=request)
+        services.track_device(user, request)
+        record_audit(
+            actor=user, action="AUTH_REGISTER" if created else "AUTH_LOGIN", target=user,
+            request=request, metadata={"method": "google"},
+        )
+
+        destination = pending["next"] if user.role == Role.USER else "/admin"
+        response = HttpResponseRedirect(_frontend(destination))
+        access, refresh = issue_tokens(user)
+        set_auth_cookies(response, access, refresh)
+        response.delete_cookie(GOOGLE_PENDING_COOKIE, path=_callback_path())
+        return response

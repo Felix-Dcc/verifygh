@@ -29,6 +29,10 @@ class RegisterSerializer(serializers.Serializer):
     referral_code = serializers.CharField(
         max_length=16, required=False, allow_blank=True, default=""
     )
+    #: Cloudflare Turnstile's one-time token (checked by the view, not here).
+    turnstile_token = serializers.CharField(
+        write_only=True, required=False, allow_blank=True, default=""
+    )
 
     def validate_email(self, value: str) -> str:
         value = value.strip().lower()
@@ -58,12 +62,19 @@ class RegisterSerializer(serializers.Serializer):
 class LoginSerializer(serializers.Serializer):
     email = serializers.EmailField()
     password = serializers.CharField(write_only=True, trim_whitespace=False)
+    #: Cloudflare Turnstile's one-time token (checked by the view, not here).
+    turnstile_token = serializers.CharField(
+        write_only=True, required=False, allow_blank=True, default=""
+    )
 
 
 class UserSerializer(serializers.ModelSerializer):
     phone_display = serializers.SerializerMethodField()
     has_accepted_current_terms = serializers.BooleanField(read_only=True)
     admin_permissions = serializers.ListField(read_only=True)
+    #: False for an account that only signs in with Google - it has no current
+    #: password to give, so the app offers a reset link instead.
+    has_password = serializers.SerializerMethodField()
 
     class Meta:
         model = User
@@ -81,12 +92,16 @@ class UserSerializer(serializers.ModelSerializer):
             "has_accepted_current_terms",
             "accepted_terms_version",
             "admin_permissions",
+            "has_password",
             "created_at",
         ]
         read_only_fields = fields
 
     def get_phone_display(self, obj: User) -> str:
         return format_local(obj.phone) if obj.phone else ""
+
+    def get_has_password(self, obj: User) -> bool:
+        return obj.has_usable_password()
 
 
 class UpdateProfileSerializer(serializers.ModelSerializer):

@@ -27,4 +27,7 @@ urlpatterns = [
     path("email/verify/confirm/", views.ConfirmEmailVerificationView.as_view(),
          name="email-confirm"),
     path("terms/accept/", views.AcceptTermsView.as_view(), name="terms-accept"),
+    path("sign-in-options/", views.SignInOptionsView.as_view(), name="sign-in-options"),
+    path("google/start/", views.GoogleStartView.as_view(), name="google-start"),
+    path("google/callback/", views.GoogleCallbackView.as_view(), name="google-callback"),
 ]

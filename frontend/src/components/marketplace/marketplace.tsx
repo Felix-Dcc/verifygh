@@ -184,7 +184,8 @@ export function Marketplace() {
             facts={[
               { label: "On sale", value: home ? `${home.total} services` : null },
               {
-                label: "Numbers from",
+                // Short, so label and value share one line even at 320px.
+                label: "Country",
                 value: countryName ? (
                   <span className="flex items-center gap-2">
                     <CountryFlag code={activeCountry} size="sm" />
@@ -516,7 +517,7 @@ function MarketFacts({ facts }: { facts: { label: string; value: React.ReactNode
         {facts.map((fact) => (
           <div key={fact.label} className="flex items-center justify-between gap-3 px-4 py-3">
             <dt className="text-caption text-white/60">{fact.label}</dt>
-            <dd className="tabular min-w-0 text-right text-sm font-semibold text-white">
+            <dd className="tabular whitespace-nowrap text-right text-sm font-semibold text-white">
               {fact.value ?? <Skeleton className="h-4 w-20" />}
             </dd>
           </div>

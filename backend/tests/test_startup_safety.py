@@ -53,6 +53,9 @@ SAFE = {
 SCRUB = set(SAFE) | {"DEBUG", "MOCK_PAYMENT_SECRET", "REQUIRE_POSTGRES", "DB_POOL_MODE",
                     "TEXTVERIFIED_BASE_URL", "TEXTVERIFIED_WEBHOOK_SECRET", "ONLINESIM_BASE_URL",
                     "CLOUDFLARE_MODE", "CLOUDFLARE_ORIGIN_SECRET",
+                    "TURNSTILE_SECRET_KEY", "TURNSTILE_ALLOWED_HOSTNAMES",
+                    "GOOGLE_OAUTH_CLIENT_ID", "GOOGLE_OAUTH_CLIENT_SECRET",
+                    "GOOGLE_OAUTH_REDIRECT_URI",
                     "EMAIL_HOST", "EMAIL_HOST_USER", "EMAIL_HOST_PASSWORD",
                     "REQUIRE_EMAIL_VERIFICATION_FOR_PURCHASE",
                     "DB_CONN_MAX_AGE", "DB_SSLROOTCERT", "HUBTEL_CLIENT_ID",
@@ -116,6 +119,17 @@ UNSAFE = [
      {"CLOUDFLARE_MODE": "report", "CLOUDFLARE_ORIGIN_SECRET": "short"},
      "CLOUDFLARE_ORIGIN_SECRET"),
     ("proxy count unset", {"TRUSTED_PROXY_COUNT": None}, "TRUSTED_PROXY_COUNT"),
+    # Half a Google client signs nobody in; a plain-HTTP callback carries the
+    # authorisation code in the clear.
+    ("google client without its secret",
+     {"GOOGLE_OAUTH_CLIENT_ID": "1234.apps.googleusercontent.com"}, "GOOGLE_OAUTH_CLIENT_SECRET"),
+    ("google secret without its client",
+     {"GOOGLE_OAUTH_CLIENT_SECRET": "placeholder"}, "GOOGLE_OAUTH_CLIENT_ID"),
+    ("google callback over http",
+     {"GOOGLE_OAUTH_CLIENT_ID": "1234.apps.googleusercontent.com",
+      "GOOGLE_OAUTH_CLIENT_SECRET": "placeholder",
+      "GOOGLE_OAUTH_REDIRECT_URI": "http://api.verifygh.example/api/v1/auth/google/callback/"},
+     "GOOGLE_OAUTH_REDIRECT_URI"),
     # Email verification gates every purchase. A backend that delivers nothing
     # does not switch that gate off, it makes it impossible to pass - while
     # every send is reported as successful. Nothing looks broken, and no
@@ -160,6 +174,15 @@ def test_production_refuses_to_boot(label, changes, message):
 
 def test_the_cloudflare_origin_lock_boots_with_a_strong_secret():
     result = boot(CLOUDFLARE_MODE="enforce", CLOUDFLARE_ORIGIN_SECRET="c" * 48)
+    assert result.returncode == 0, result.stderr[-2000:]
+
+
+def test_sign_in_with_google_boots_with_a_full_https_client():
+    result = boot(
+        GOOGLE_OAUTH_CLIENT_ID="1234.apps.googleusercontent.com",
+        GOOGLE_OAUTH_CLIENT_SECRET="placeholder",
+        GOOGLE_OAUTH_REDIRECT_URI="https://api.verifygh.example/api/v1/auth/google/callback/",
+    )
     assert result.returncode == 0, result.stderr[-2000:]
 
 

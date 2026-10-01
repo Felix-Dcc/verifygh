@@ -65,8 +65,17 @@ uses a nonce with `'strict-dynamic'`, which Turnstile supports) and allow
 browsers). That is added **only when `NEXT_PUBLIC_TURNSTILE_SITE_KEY` is set**;
 without it nothing is relaxed.
 
-Adding the widget to forms, and verifying tokens on the server, is the next
-step and is not part of this change.
+The widget is on the sign-in and sign-up forms
+(`frontend/src/components/auth/turnstile.tsx`). The API checks every token with
+Cloudflare before it looks at a password or creates an account
+(`backend/apps/accounts/turnstile.py`):
+
+* Single use: the form fetches a fresh token after every attempt.
+* The action must match: a token solved on sign-up is refused at sign-in.
+* With `TURNSTILE_ALLOWED_HOSTNAMES` set, a token solved on another site is refused.
+* It fails closed: if Cloudflare cannot be reached, sign-in answers 503 and lets
+  nobody through.
+* A refused check is not a failed password. It never counts towards the lockout.
 
 ## 2. Rollout
 
@@ -139,10 +148,17 @@ To undo at any point: `CLOUDFLARE_MODE=off`.
 
 ### Step 5 - Turnstile
 
-Create a Turnstile widget for `getverifygh.com` / `www.getverifygh.com`. Put the
-**site key** in `NEXT_PUBLIC_TURNSTILE_SITE_KEY` on verifygh-web (public by
-design) and the **secret key** in Railway only - never in chat or git. The
-server-side verification and which forms require it come with the next change.
+1. In Cloudflare: **Turnstile → Add widget**. Hostnames `getverifygh.com` and
+   `www.getverifygh.com`, widget mode **Managed**.
+2. On **verifygh-web**: set `NEXT_PUBLIC_TURNSTILE_SITE_KEY` to the **site key**
+   (public by design), then **redeploy**. `NEXT_PUBLIC_` values are compiled in
+   at build time. Check that the widget now shows on /login.
+3. On **verifygh** (the API) only: set `TURNSTILE_SECRET_KEY` to the **secret
+   key**. Set it in Railway, never in chat or git. Optionally set
+   `TURNSTILE_ALLOWED_HOSTNAMES=www.getverifygh.com,getverifygh.com`.
+
+Do step 2 before step 3. With the secret set and no widget on the page, every
+sign-in is refused. To switch the check off again, clear `TURNSTILE_SECRET_KEY`.
 
 ## 3. What Cloudflare adds on top of what exists
 

@@ -110,7 +110,9 @@ aliases are pinned to 12px. Borders separate surfaces; shadows (`shadow-raised`,
 | `AppHero` (the navy panel at the top of Home, Buy a number, Orders, Wallet and Account), `HeroStat`, `HeroAmount` | `components/app-hero.tsx` |
 | `LiveOrderCard`, `useNow` (a running order with its live countdown) | `components/orders/live-order-card.tsx` |
 | `Button`, `Input`, `Select`, `Textarea`, `Checkbox`, `Field` | `ui/primitives.tsx` |
-| `ButtonLink` (a link styled as a button), `PasswordInput` (show/hide) | `ui/primitives.tsx` |
+| `ButtonLink` (a link styled as a button), `PasswordInput` (eye toggle), `Field` `action` (a link on the label's line, e.g. "Forgot password?") | `ui/primitives.tsx` |
+| Auth pages: split layout from lg (the navy `app-hero` panel left, the form right; the form alone on phones), `dawn` submit, then "or" and the Google button | `app/(auth)/layout.tsx` |
+| `Turnstile` (Cloudflare's check; compact below 300px), `GoogleButton`, `GoogleMark`, `OrDivider`, `useGoogleSignIn` | `components/auth/` |
 | `Card`, `CardHeader`, `Section`, `DescriptionList`, `Amount` | `ui/primitives.tsx` |
 | `Badge`, `StatusBadge`, `Alert`, `EmptyState`, `LoadError`, `Skeleton`, `SegmentedControl` | `ui/primitives.tsx` |
 | `Dialog`, `ConfirmDialog` | `ui/dialog.tsx` |

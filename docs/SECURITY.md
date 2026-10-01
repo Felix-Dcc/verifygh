@@ -127,6 +127,8 @@ edge. Signature verification is the real control; the IP allowlist is defence in
 | Reset tokens | Only a SHA-256 hash is stored, single-use, 2-hour expiry, and issuing a new one invalidates the old |
 | Password change / reset | Revokes every session (see below); the tab that changed it gets a fresh pair |
 | Sign-out | Never requires a valid session — requiring one to end one is how users get stuck |
+| Human check | Cloudflare Turnstile on sign-in and sign-up once `TURNSTILE_SECRET_KEY` is set. The token is checked with Cloudflare before any password is tried or account created. It is single use, must match the form's action and, optionally, our hostnames. The check fails closed, and a refusal never counts towards the lockout. |
+| Sign in with Google | OpenID Connect authorisation-code flow run by the API, with PKCE, `state` and `nonce` in a signed, HttpOnly, callback-scoped cookie. The ID token comes straight from Google's token endpoint over TLS (OIDC Core 3.1.3.7). Issuer, audience, expiry, nonce and `email_verified` are all checked. Accounts are matched by Google's `sub`, then by verified email. Linking to an account whose email was never verified retires its password and ends its sessions, against account pre-hijacking. No Google script runs on our pages. See [GOOGLE_SIGN_IN.md](GOOGLE_SIGN_IN.md). |
 
 ### Session revocation
 

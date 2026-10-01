@@ -46,6 +46,10 @@ class User(AbstractBaseUser, PermissionsMixin, BaseModel):
     accepted_terms_version = models.CharField(max_length=32, blank=True, default="")
     accepted_terms_at = models.DateTimeField(null=True, blank=True)
 
+    # The Google account this one signs in with (its stable `sub`), once linked.
+    # Matched before the email address, which a Google account can change.
+    google_subject = models.CharField(max_length=255, blank=True, default="")
+
     totp_secret = models.CharField(max_length=64, blank=True, default="")
     is_two_factor_enabled = models.BooleanField(default=False)
 
@@ -74,6 +78,11 @@ class User(AbstractBaseUser, PermissionsMixin, BaseModel):
                 fields=["phone"],
                 condition=~models.Q(phone=""),
                 name="user_phone_unique_when_set",
+            ),
+            models.UniqueConstraint(
+                fields=["google_subject"],
+                condition=~models.Q(google_subject=""),
+                name="user_google_subject_unique_when_set",
             ),
         ]
         indexes = [

@@ -18,6 +18,8 @@ export type User = {
   has_accepted_current_terms: boolean;
   accepted_terms_version: string;
   admin_permissions: string[];
+  /** False when the account only signs in with Google. */
+  has_password: boolean;
   created_at: string;
 };
 

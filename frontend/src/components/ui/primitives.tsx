@@ -3,6 +3,7 @@
 import Link from "next/link";
 import * as React from "react";
 
+import { EyeIcon, EyeOffIcon } from "@/components/icons";
 import { cn } from "@/lib/cn";
 
 export { cn };
@@ -203,6 +204,7 @@ export function Field({
   hint,
   error,
   required,
+  action,
   children,
   className,
 }: {
@@ -211,6 +213,8 @@ export function Field({
   hint?: React.ReactNode;
   error?: string;
   required?: boolean;
+  /** On the label's line, at the right - "Forgot password?", say. */
+  action?: React.ReactNode;
   children: React.ReactNode;
   className?: string;
 }) {
@@ -224,16 +228,27 @@ export function Field({
         })
       : children;
 
+  const labelElement = (
+    <label htmlFor={htmlFor} className="block text-label text-ink-soft">
+      {label}
+      {required ? (
+        <span className="ml-0.5 text-danger-700" aria-hidden>
+          *
+        </span>
+      ) : null}
+    </label>
+  );
+
   return (
     <div className={cn("space-y-1.5", className)}>
-      <label htmlFor={htmlFor} className="block text-label text-ink-soft">
-        {label}
-        {required ? (
-          <span className="ml-0.5 text-danger-700" aria-hidden>
-            *
-          </span>
-        ) : null}
-      </label>
+      {action ? (
+        <div className="flex items-baseline justify-between gap-3">
+          {labelElement}
+          {action}
+        </div>
+      ) : (
+        labelElement
+      )}
       {control}
       {error ? (
         <p id={`${htmlFor}-error`} role="alert" className="text-sm text-danger-700">
@@ -311,9 +326,10 @@ export const PasswordInput = React.forwardRef<HTMLInputElement, Omit<InputProps,
             onClick={() => setVisible((value) => !value)}
             aria-pressed={visible}
             aria-label={visible ? "Hide password" : "Show password"}
-            className="min-w-14 rounded-r-lg px-2 text-caption font-medium text-ink-muted transition-colors hover:bg-sunken hover:text-ink"
+            title={visible ? "Hide password" : "Show password"}
+            className="flex min-w-12 items-center justify-center rounded-r-lg px-3 text-ink-muted transition-colors hover:bg-sunken hover:text-ink"
           >
-            {visible ? "Hide" : "Show"}
+            {visible ? <EyeOffIcon className="h-5 w-5" /> : <EyeIcon className="h-5 w-5" />}
           </button>
         }
       />

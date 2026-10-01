@@ -213,6 +213,16 @@ elif CLOUDFLARE_MODE != "off" and len(CLOUDFLARE_ORIGIN_SECRET) < 32:  # noqa: F
         "Cloudflare Transform Rule."
     )
 
+# Sign in with Google: half a client cannot sign anyone in, and a plain-HTTP
+# callback would carry the authorisation code in the clear.
+if bool(GOOGLE_OAUTH_CLIENT_ID) != bool(GOOGLE_OAUTH_CLIENT_SECRET):  # noqa: F405
+    _problems.append(
+        "Sign in with Google needs both GOOGLE_OAUTH_CLIENT_ID and GOOGLE_OAUTH_CLIENT_SECRET "
+        "(or neither)."
+    )
+elif GOOGLE_OAUTH_CLIENT_ID and not GOOGLE_OAUTH_REDIRECT_URI.startswith("https://"):  # noqa: F405
+    _problems.append("GOOGLE_OAUTH_REDIRECT_URI must be an https:// address in production.")
+
 # A real provider without its credentials fails here, at boot, rather than at
 # the first customer's purchase - and never falls back to anything else.
 _VERIFICATION_CREDENTIALS = {

@@ -14,7 +14,8 @@ type AuthContextValue = {
   /** True once we know for certain whether there is a session. */
   ready: boolean;
   refresh: () => Promise<void>;
-  signIn: (email: string, password: string) => Promise<User>;
+  /** `turnstileToken`: Cloudflare's one-time token, when the check is on. */
+  signIn: (email: string, password: string, turnstileToken?: string) => Promise<User>;
   signUp: (input: SignUpInput) => Promise<User>;
   signOut: () => Promise<void>;
   isStaff: boolean;
@@ -29,6 +30,8 @@ export type SignUpInput = {
   accepted_terms: boolean;
   /** From /register?ref=CODE. The backend resolves it; we only pass it on. */
   referral_code?: string;
+  /** Cloudflare's one-time token, when the check is on. */
+  turnstile_token?: string;
 };
 
 const AuthContext = React.createContext<AuthContextValue | null>(null);
@@ -81,8 +84,12 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   }, [mutate]);
 
   const signIn = React.useCallback(
-    async (email: string, password: string) => {
-      const response = await api.post<{ user: User }>("/auth/login/", { email, password });
+    async (email: string, password: string, turnstileToken?: string) => {
+      const response = await api.post<{ user: User }>("/auth/login/", {
+        email,
+        password,
+        ...(turnstileToken ? { turnstile_token: turnstileToken } : {}),
+      });
       await mutate({ user: response.user }, { revalidate: false });
       return response.user;
     },

@@ -24,6 +24,14 @@ CACHES = {
 
 EMAIL_BACKEND = "django.core.mail.backends.locmem.EmailBackend"
 
+# Off unless a test turns them on: a developer's .env must not make every
+# sign-in in the suite call Cloudflare or Google.
+TURNSTILE_SECRET_KEY = ""
+TURNSTILE_ALLOWED_HOSTNAMES: list[str] = []
+GOOGLE_OAUTH_CLIENT_ID = ""
+GOOGLE_OAUTH_CLIENT_SECRET = ""
+GOOGLE_OAUTH_REDIRECT_URI = "http://testserver/api/v1/auth/google/callback/"
+
 # The concurrency tests run real threads against real connections. SQLite's
 # default in-memory test database cannot serialise those, so use a file with a
 # busy timeout. On PostgreSQL none of this applies - row locks do the work.

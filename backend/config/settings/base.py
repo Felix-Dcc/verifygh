@@ -240,6 +240,25 @@ CLOUDFLARE_MODE = (env("CLOUDFLARE_MODE", "off") or "off").strip().lower()
 # Railway and Cloudflare only, never committed, never sent to the browser.
 CLOUDFLARE_ORIGIN_SECRET = env("CLOUDFLARE_ORIGIN_SECRET", "") or ""
 
+# -- Cloudflare Turnstile (apps/accounts/turnstile.py) -------------------------
+# The secret half of the widget; the site key is the frontend's
+# NEXT_PUBLIC_TURNSTILE_SITE_KEY. Set, sign-in and registration need a token
+# Cloudflare confirms. Unset, there is no check (local development). A secret:
+# Railway only, never committed, never sent to the browser.
+TURNSTILE_SECRET_KEY = env("TURNSTILE_SECRET_KEY", "") or ""
+# The hostnames a token may have been solved on. Empty: not checked.
+TURNSTILE_ALLOWED_HOSTNAMES = env_list("TURNSTILE_ALLOWED_HOSTNAMES")
+
+# -- Sign in with Google (apps/accounts/google.py) -----------------------------
+# A "Web application" OAuth client from Google Cloud Console. Both set: the
+# "Continue with Google" button appears. The redirect URI must match one
+# registered on that client exactly. The client secret never leaves the server.
+GOOGLE_OAUTH_CLIENT_ID = env("GOOGLE_OAUTH_CLIENT_ID", "") or ""
+GOOGLE_OAUTH_CLIENT_SECRET = env("GOOGLE_OAUTH_CLIENT_SECRET", "") or ""
+GOOGLE_OAUTH_REDIRECT_URI = (
+    env("GOOGLE_OAUTH_REDIRECT_URI", "") or "http://localhost:8000/api/v1/auth/google/callback/"
+)
+
 REST_FRAMEWORK = {
     # DRF's default (None) uses the *entire* client-supplied X-Forwarded-For as
     # the throttle key, so rotating a fake header defeats every rate limit.

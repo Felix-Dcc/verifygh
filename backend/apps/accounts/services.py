@@ -84,6 +84,87 @@ def register_user(*, email: str, password: str, full_name: str = "", phone: str 
     return user
 
 
+class GoogleAccountConflict(Exception):
+    """The address's VerifyGH account is already linked to a different Google account."""
+
+
+@transaction.atomic
+def sign_in_with_google(*, subject: str, email: str, name: str = "",
+                        accepted_terms: bool = False, referral_code: str = "",
+                        request=None) -> tuple[User, bool]:
+    """The account a verified Google identity signs in to: (user, created).
+
+    In order: the account already linked to this Google account; else the
+    account with this email address, which is linked now; else a new account.
+    Google has confirmed the address belongs to whoever is signing in (the
+    caller checks `email_verified`), so a new account starts verified.
+
+    Linking to an account whose address was never verified also retires its
+    password and ends its sessions. Whoever set that password never proved they
+    own the address - it could be someone who registered it first to wait for
+    the real owner (account pre-hijacking). The owner can set a new password
+    with a reset link.
+    """
+    linked = User.objects.select_for_update().filter(google_subject=subject).first()
+    if linked is not None:
+        return linked, False
+
+    existing = User.objects.select_for_update().filter(email__iexact=email).first()
+    if existing is not None:
+        if existing.google_subject and existing.google_subject != subject:
+            raise GoogleAccountConflict()
+        existing.google_subject = subject
+        fields = ["google_subject", "updated_at"]
+        retired_password = False
+        if not existing.is_email_verified:
+            existing.is_email_verified = True
+            existing.email_verified_at = timezone.now()
+            fields += ["is_email_verified", "email_verified_at"]
+            if existing.has_usable_password():
+                existing.set_unusable_password()
+                fields.append("password")
+                retired_password = True
+        existing.save(update_fields=fields)
+        if retired_password:
+            existing.revoke_all_sessions()
+        if "is_email_verified" in fields:
+            # Newly verified: the usual last gate before a referral qualifies.
+            from apps.referrals.services import process_for_user
+
+            process_for_user(existing)
+        logger.info(
+            "google_account_linked",
+            extra={"user_id": str(existing.pk), "password_retired": retired_password},
+        )
+        return existing, False
+
+    ip = get_client_ip(request) if request else None
+    terms = (
+        {"accepted_terms_version": settings.VERIFYGH["CURRENT_TERMS_VERSION"],
+         "accepted_terms_at": timezone.now()}
+        if accepted_terms else {}
+    )
+    user = User.objects.create_user(
+        email=email,
+        password=None,
+        full_name=name.strip()[:150],
+        signup_ip=ip or None,
+        is_email_verified=True,
+        email_verified_at=timezone.now(),
+        google_subject=subject,
+        **terms,
+    )
+
+    from apps.referrals.services import attach_referral, process_for_user
+
+    attach_referral(new_user=user, raw_code=referral_code, request=request)
+    # Verified from the start, so a referral is checked now rather than on a
+    # verification email that is never sent.
+    process_for_user(user)
+    logger.info("user_registered", extra={"user_id": str(user.id), "method": "google"})
+    return user, True
+
+
 def dispatch_verification_email(user: User, ip: str | None = None) -> None:
     """Queue the verification email, falling back to sending it inline.
 

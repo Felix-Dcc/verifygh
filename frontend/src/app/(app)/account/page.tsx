@@ -21,6 +21,7 @@ import { ConfirmDialog } from "@/components/ui/dialog";
 import {
   Alert,
   Button,
+  ButtonLink,
   Card,
   Field,
   Input,
@@ -244,8 +245,30 @@ export default function AccountPage() {
             id="security"
             icon={<LockIcon className="h-4 w-4" />}
             title="Security"
-            description="Changing your password signs out every other session."
+            description={
+              user?.has_password === false
+                ? "You sign in with Google."
+                : "Changing your password signs out every other session."
+            }
           >
+            {user?.has_password === false ? (
+              // No current password to give: the reset link sets the first one,
+              // and Google keeps working alongside it.
+              <div className="flex flex-col gap-4 p-5 sm:flex-row sm:items-center sm:justify-between sm:p-6">
+                <p className="text-sm text-ink-muted">
+                  This account has no password yet. Set one if you also want to sign in with your
+                  email address - we will email you a link.
+                </p>
+                <ButtonLink
+                  href="/forgot-password"
+                  variant="secondary"
+                  className="shrink-0"
+                  icon={<LockIcon className="h-4 w-4" />}
+                >
+                  Set a password
+                </ButtonLink>
+              </div>
+            ) : (
             <form onSubmit={changePassword} className="space-y-4 p-5 sm:p-6">
               <Field
                 label="Current password"
@@ -291,6 +314,7 @@ export default function AccountPage() {
                 </Button>
               </div>
             </form>
+            )}
           </SettingsCard>
 
           <SettingsCard
