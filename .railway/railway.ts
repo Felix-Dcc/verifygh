@@ -197,6 +197,9 @@ function backendEnv(databaseUrl: VariableValue, redisUrl: VariableValue) {
     // Cloudflare confirms - so give verifygh-web its site key and redeploy it
     // first, or nobody can sign in (docs/CLOUDFLARE.md, step 5).
     TURNSTILE_SECRET_KEY: preserve(),
+    // Brandfetch client ID for Admin > Logos (docs/SERVICE_LOGOS.md). It is in
+    // every logo URL, so not a secret - but it is ours, so it lives here.
+    BRANDFETCH_CLIENT_ID: preserve(),
     // Sign in with Google: both, or neither (docs/GOOGLE_SIGN_IN.md).
     GOOGLE_OAUTH_CLIENT_ID: preserve(),
     GOOGLE_OAUTH_CLIENT_SECRET: preserve(),

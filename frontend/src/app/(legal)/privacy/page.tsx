@@ -106,6 +106,19 @@ export default function PrivacyPage() {
           under contract.
         </li>
         <li>
+          <strong>Cloudflare,</strong> which runs the security check on our sign-in and sign-up
+          forms. It sees technical signals from your browser, not your account details.
+        </li>
+        <li>
+          <strong>Google,</strong> only if you choose to continue with Google. Google tells us your
+          name and verified email address; we never see your Google password.
+        </li>
+        <li>
+          <strong>Brandfetch,</strong> which delivers some services&apos; logos straight to your
+          browser. Like any site that serves an image, it sees your IP address and browser - nothing
+          about your account or your orders.
+        </li>
+        <li>
           <strong>Authorities,</strong> where we are legally required to, or where there is a
           serious risk of harm.
         </li>

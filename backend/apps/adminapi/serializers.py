@@ -210,14 +210,15 @@ class AdminServiceSerializer(serializers.ModelSerializer):
         model = Service
         fields = [
             "id", "slug", "name", "category", "description", "accent_color", "icon_url",
-            "has_uploaded_logo", "bundled_icon_url",
+            "has_uploaded_logo", "bundled_icon_url", "logo_domain", "logo_reviewed_at",
             "aliases", "is_popular", "popular_rank",
             "is_enabled", "is_maintenance", "maintenance_note", "supports_sms",
             "supports_voice", "display_order", "offering_count", "available_count",
             "marketplace_offerings",
         ]
         read_only_fields = ["id", "slug", "offering_count", "available_count",
-                            "marketplace_offerings", "has_uploaded_logo", "bundled_icon_url"]
+                            "marketplace_offerings", "has_uploaded_logo", "bundled_icon_url",
+                            "logo_domain", "logo_reviewed_at"]
 
 
 class AdminCountrySerializer(serializers.ModelSerializer):

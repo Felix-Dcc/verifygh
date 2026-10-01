@@ -753,6 +753,99 @@ class AdminServiceViewSet(AdminBase, mixins.ListModelMixin, mixins.UpdateModelMi
         service = self.get_queryset().get(pk=service.pk)
         return Response(AdminServiceSerializer(service).data)
 
+    # -- Official brand logos (apps/catalog/brand_logos.py) -----------------
+
+    LOGO_QUEUE_PAGE = 20
+
+    @action(detail=False, methods=["get"], url_path="logo-queue")
+    def logo_queue(self, request):
+        """Services on sale that still show the generic tile and no one has decided."""
+        from apps.catalog import brand_logos
+
+        rows = self.get_queryset().filter(
+            icon_url="", logo_data__isnull=True, logo_reviewed_at__isnull=True,
+            marketplace_offerings__gt=0,
+        )
+        search = str(request.query_params.get("search") or "").strip()[:80]
+        if search:
+            rows = rows.filter(Q(name__icontains=search) | Q(slug__icontains=search))
+        total = rows.count()
+        try:
+            page = max(int(request.query_params.get("page") or 1), 1)
+        except ValueError:
+            page = 1
+        size = self.LOGO_QUEUE_PAGE
+        chunk = rows.order_by("-is_popular", "popular_rank", "name")[(page - 1) * size:page * size]
+        return Response({
+            "configured": brand_logos.is_configured(),
+            "count": total,
+            "page": page,
+            "pages": max((total + size - 1) // size, 1),
+            "results": [{"slug": s.slug, "name": s.name, "category": s.category,
+                         "is_popular": s.is_popular} for s in chunk],
+        })
+
+    @action(detail=True, methods=["get"], url_path="logo-candidates")
+    def logo_candidates(self, request, slug=None):
+        """Brands Brandfetch knows by this service's name (or `q`), searched live."""
+        from apps.catalog import brand_logos
+
+        service = Service.objects.defer("logo_data").filter(slug=slug).first()
+        if service is None:
+            raise NotFound("We could not find that service.")
+        query = str(request.query_params.get("q") or service.name).strip()[:80]
+        return Response({"query": query,
+                         "results": [c.as_dict() for c in brand_logos.search(query)]})
+
+    @action(detail=True, methods=["post", "delete"], url_path="brand-logo")
+    def brand_logo(self, request, slug=None):
+        """Decide a service's logo from the queue.
+
+        POST {"domain": "venmo.com"}: use that brand's official logo.
+        POST {"none": true}: no official logo found - leave the generic tile.
+        DELETE: undo either, and put the service back in the queue.
+        """
+        from apps.catalog import brand_logos
+        from apps.catalog.presentation import bundled_icon_url
+
+        service = Service.objects.defer("logo_data").filter(slug=slug).first()
+        if service is None:
+            raise NotFound("We could not find that service.")
+        if Service.objects.filter(pk=service.pk, logo_data__isnull=False).exists():
+            raise Conflict("This service has an uploaded logo. Remove the upload first.")
+        before = {"icon_url": service.icon_url, "logo_domain": service.logo_domain}
+        now = timezone.now()
+
+        if request.method == "DELETE":
+            fields = {"logo_domain": "", "logo_reviewed_at": None}
+            if brand_logos.is_brand_logo_url(service.icon_url):
+                fields["icon_url"] = bundled_icon_url(service.slug, service.name)
+            action_name, default_reason = "SERVICE_LOGO_REOPEN", "Logo decision undone"
+        elif request.data.get("none") is True:
+            fields = {"logo_domain": "", "logo_reviewed_at": now}
+            if brand_logos.is_brand_logo_url(service.icon_url):
+                fields["icon_url"] = ""
+            action_name, default_reason = "SERVICE_LOGO_NONE", "No official logo found"
+        else:
+            domain = brand_logos.clean_domain(str(request.data.get("domain") or ""))
+            fields = {"logo_domain": domain, "icon_url": brand_logos.logo_url(domain),
+                      "logo_reviewed_at": now}
+            action_name, default_reason = "SERVICE_LOGO_BRAND", f"Matched to {domain}"
+
+        with transaction.atomic():
+            Service.objects.filter(pk=service.pk).update(**fields)
+            record_admin_action(
+                admin=request.user, action=action_name, target=service,
+                reason=str(request.data.get("reason", "") or default_reason)[:500],
+                before=before,
+                after={"icon_url": fields.get("icon_url", service.icon_url),
+                       "logo_domain": fields["logo_domain"]},
+                request=request,
+            )
+        _invalidate_marketplace()
+        service = self.get_queryset().get(pk=service.pk)
+        return Response(AdminServiceSerializer(service).data)
+
 
 class AdminCountryViewSet(AdminBase, mixins.ListModelMixin, mixins.UpdateModelMixin,
                           viewsets.GenericViewSet):

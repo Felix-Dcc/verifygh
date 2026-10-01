@@ -56,8 +56,11 @@ function buildCsp(nonce: string): string {
       ...(isDev ? ["'unsafe-eval'"] : []),
     ],
     "style-src": ["'self'", "'unsafe-inline'"],
-    // The API origin serves logos staff upload (/api/v1/service-logos/...).
-    "img-src": ["'self'", "data:", "blob:", api].filter(Boolean),
+    // The API origin serves logos staff upload (/api/v1/service-logos/...);
+    // Brandfetch's CDN serves the official logos staff matched in Admin >
+    // Logos, which its terms require be loaded straight from it. Images only:
+    // nothing from it can run.
+    "img-src": ["'self'", "data:", "blob:", api, "https://cdn.brandfetch.io"].filter(Boolean),
     "font-src": ["'self'", "data:"],
     "connect-src": ["'self'", api, ...(isDev ? ["ws:", "wss:"] : [])].filter(Boolean),
     "form-action": ["'self'"],

@@ -60,11 +60,18 @@ class Service(BaseModel):
         db_index=True,
     )
     #: The service's logo: a bundled asset ("/service-icons/tiktok.svg", served
-    #: by the web app - see apps/catalog/service_icons.json) or the URL of a logo
-    #: staff uploaded (served by the API from `logo_data`). Empty means the
-    #: frontend shows its generic fallback. This field is the one place the
-    #: frontend learns which logo a service uses.
+    #: by the web app - see apps/catalog/service_icons.json), the URL of a logo
+    #: staff uploaded (served by the API from `logo_data`), or the brand's logo
+    #: on Brandfetch's CDN once staff matched the brand (apps/catalog/
+    #: brand_logos.py). Empty means the frontend shows its generic fallback.
+    #: This field is the one place the frontend learns which logo a service uses.
     icon_url = models.CharField(max_length=300, blank=True, default="")
+    #: The website of the brand staff matched this service to ("venmo.com") -
+    #: what its Brandfetch logo is looked up by. Empty: not matched.
+    logo_domain = models.CharField(max_length=253, blank=True, default="")
+    #: When staff last decided this service's logo in the logo queue (matched a
+    #: brand, or found none). Set: the service has left the queue.
+    logo_reviewed_at = models.DateTimeField(null=True, blank=True)
     #: An uploaded logo, when staff replaced the bundled one. Small (capped at
     #: upload), raw bytes rather than base64, validated before it is stored.
     logo_data = models.BinaryField(null=True, blank=True, editable=False)

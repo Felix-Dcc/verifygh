@@ -99,13 +99,17 @@ def validate_logo(data: bytes) -> str:
 
 
 def validate_icon_url(value: str) -> str:
-    """What staff may set directly: nothing, a bundled logo, or an uploaded one.
+    """What staff may set directly: nothing, a bundled logo, an uploaded one, or
+    a Brandfetch logo exactly as apps.catalog.brand_logos builds it.
 
     Arbitrary third-party URLs are refused on purpose: hotlinked logos break,
-    change under us, and would need the site's image policy opened up.
+    change under us, and would need the site's image policy opened up for any
+    host. Brandfetch is the one image origin the site allows.
     """
+    from apps.catalog.brand_logos import is_brand_logo_url
+
     value = (value or "").strip()
-    if not value or BUNDLED_PATH.match(value) or UPLOADED_PATH in value:
+    if not value or BUNDLED_PATH.match(value) or UPLOADED_PATH in value or is_brand_logo_url(value):
         return value
     raise ValidationFailed(
         "Use a bundled logo (/service-icons/<name>.svg) or upload one - external image "

@@ -29,6 +29,7 @@ EMAIL_BACKEND = "django.core.mail.backends.locmem.EmailBackend"
 TURNSTILE_SECRET_KEY = ""
 TURNSTILE_ALLOWED_HOSTNAMES: list[str] = []
 GOOGLE_OAUTH_CLIENT_ID = ""
+BRANDFETCH_CLIENT_ID = ""
 GOOGLE_OAUTH_CLIENT_SECRET = ""
 GOOGLE_OAUTH_REDIRECT_URI = "http://testserver/api/v1/auth/google/callback/"
 

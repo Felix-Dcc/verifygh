@@ -249,6 +249,11 @@ TURNSTILE_SECRET_KEY = env("TURNSTILE_SECRET_KEY", "") or ""
 # The hostnames a token may have been solved on. Empty: not checked.
 TURNSTILE_ALLOWED_HOSTNAMES = env_list("TURNSTILE_ALLOWED_HOSTNAMES")
 
+# -- Official brand logos (apps/catalog/brand_logos.py) -----------------------
+# Brandfetch's client ID, from its developer portal. Unset: Admin > Logos says
+# so and searches nothing. It appears in every logo URL, so it is not secret.
+BRANDFETCH_CLIENT_ID = env("BRANDFETCH_CLIENT_ID", "") or ""
+
 # -- Sign in with Google (apps/accounts/google.py) -----------------------------
 # A "Web application" OAuth client from Google Cloud Console. Both set: the
 # "Continue with Google" button appears. The redirect URI must match one

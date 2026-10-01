@@ -24,6 +24,7 @@ import {
   SearchIcon,
   SettingsIcon,
   ShieldIcon,
+  StarIcon,
   TagIcon,
   UserIcon,
   UsersIcon,
@@ -97,6 +98,7 @@ const ADMIN_NAV: NavGroup[] = [
     label: "Catalogue & pricing",
     items: [
       { href: "/admin/catalog", label: "Catalog", icon: GridIcon },
+      { href: "/admin/logos", label: "Logos", icon: StarIcon },
       { href: "/admin/pricing", label: "Pricing", icon: TagIcon },
       { href: "/admin/providers", label: "Providers", icon: ShieldIcon },
       { href: "/admin/funding", label: "Provider funding", icon: BoltIcon },
