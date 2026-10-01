@@ -291,7 +291,7 @@ def sync_catalog(adapter_key: str | None = None, *, time_budget: float | None = 
                     "aliases": aliases,
                     "category": category,
                     "accent_color": accent,
-                    "icon_url": bundled_icon_url(slug),
+                    "icon_url": bundled_icon_url(slug, name),
                     "is_popular": rank is not None,
                     "popular_rank": rank or 100,
                     "supports_sms": dto.supports_sms,

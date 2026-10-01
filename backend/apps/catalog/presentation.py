@@ -15,6 +15,7 @@ inert.
 from __future__ import annotations
 
 import json
+import re
 from pathlib import Path
 
 from apps.catalog.models import ServiceCategory as C
@@ -52,9 +53,23 @@ _ICON_FILE = Path(__file__).with_name("service_icons.json")
 _icons: dict[str, str] | None = None
 
 
-def bundled_icon_url(slug: str) -> str:
-    """The bundled logo for a service, or "" when none is bundled."""
+def logo_key(text: str) -> str:
+    """Brand key: "Wells Fargo" -> "wellsfargo", "AT&T" -> "atandt"."""
+    text = (text or "").lower().replace("&", "and").replace("+", "plus")
+    return re.sub(r"[^a-z0-9]", "", text)
+
+
+def bundled_icon_url(slug: str, name: str = "") -> str:
+    """The bundled logo for a service, or "" when none is bundled.
+
+    By our slug first (each checked by hand), then by the service's name or id
+    as a brand key - which is how a service the sync has not added yet picks
+    up its mark the day it arrives. Exact keys only: never a nearest match.
+    """
     global _icons
     if _icons is None:
         _icons = json.loads(_ICON_FILE.read_text(encoding="utf-8"))["icons"]
-    return f"/service-icons/{slug}.svg" if slug in _icons else ""
+    for key in (slug, logo_key(slug), logo_key(name)):
+        if key and key in _icons:
+            return f"/service-icons/{key}.svg"
+    return ""

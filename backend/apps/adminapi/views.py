@@ -736,7 +736,7 @@ class AdminServiceViewSet(AdminBase, mixins.ListModelMixin, mixins.UpdateModelMi
                 "logo_data": None,
                 "logo_content_type": "",
                 "logo_updated_at": timezone.now(),
-                "icon_url": bundled_icon_url(service.slug),
+                "icon_url": bundled_icon_url(service.slug, service.name),
             }
             action_name, default_reason = "SERVICE_LOGO_REMOVE", "Service logo removed"
 

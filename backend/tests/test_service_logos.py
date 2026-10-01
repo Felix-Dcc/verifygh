@@ -70,7 +70,12 @@ def test_every_mapped_service_has_a_generated_logo_and_a_recorded_source():
     for slug in MAPPING:
         svg = (ICON_DIR / f"{slug}.svg").read_text(encoding="utf-8")
         assert svg.startswith("<svg") and "<script" not in svg, slug
-        assert f"{sources[slug]['title']}" in svg
+        # The title as the generator writes it, XML-escaped (AT&T, McDonald's).
+        title = sources[slug]["title"]
+        for char, entity in (("&", "&amp;"), ("<", "&lt;"), (">", "&gt;"), ('"', "&quot;"),
+                             ("'", "&apos;")):
+            title = title.replace(char, entity)
+        assert title in svg, slug
         assert sources[slug]["source"].startswith("http"), slug
 
 
@@ -82,10 +87,28 @@ def test_no_generated_file_is_left_without_a_mapping():
 def test_sync_gives_known_services_their_logo(catalog):
     assert Service.objects.get(slug="tiktok").icon_url == "/service-icons/tiktok.svg"
     assert Service.objects.get(slug="x").icon_url == "/service-icons/x.svg"
+    assert Service.objects.get(slug="paypal").icon_url == "/service-icons/paypal.svg"
     # Not bundled (the brand withdrew its mark from Simple Icons): no logo, so
     # the frontend's fallback shows - never a guessed image.
-    assert Service.objects.get(slug="paypal").icon_url == ""
+    assert Service.objects.get(slug="amazon").icon_url == ""
     assert bundled_icon_url("linkedin") == ""
+
+
+def test_a_service_not_synced_yet_gets_its_mark_by_exact_name():
+    # By the brand's name or id, the day the sync adds it.
+    assert bundled_icon_url("wellsfargo2", "Wells Fargo") == "/service-icons/wellsfargo.svg"
+    assert bundled_icon_url("att", "AT&T") == "/service-icons/atandt.svg"
+    assert bundled_icon_url("spotify") == "/service-icons/spotify.svg"
+    # Our own slugs keep their punctuation.
+    assert bundled_icon_url("booking.com") == "/service-icons/booking.com.svg"
+
+
+@pytest.mark.parametrize("name", ["Inspire", "Oxygen", "Neon", "Fizz", "Astra", "Circle",
+                                  "Delta", "Spotify Clone", "Wells"])
+def test_shared_or_partial_names_get_no_logo(name):
+    # Exact keys only, and generic names that belong to several companies are
+    # left out on purpose: a missing logo is better than someone else's.
+    assert bundled_icon_url(name.lower().replace(" ", ""), name) == ""
 
 
 def test_the_marketplace_and_orders_carry_the_logo(api, catalog, user, funded_wallet,

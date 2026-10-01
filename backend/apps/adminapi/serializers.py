@@ -199,7 +199,7 @@ class AdminServiceSerializer(serializers.ModelSerializer):
     def get_bundled_icon_url(self, obj) -> str:
         from apps.catalog.presentation import bundled_icon_url
 
-        return bundled_icon_url(obj.slug)
+        return bundled_icon_url(obj.slug, obj.name)
 
     def validate_icon_url(self, value: str) -> str:
         from apps.catalog.logos import validate_icon_url
