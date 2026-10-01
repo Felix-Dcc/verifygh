@@ -193,7 +193,11 @@ def sync_balance(provider) -> ProviderAccount:
         account = ProviderAccount.objects.select_for_update().get(pk=account.pk)
         previous = account.status
         previous_spendable = account.spendable
-        account.available = Decimal(reading.available).quantize(FOUR_PLACES)
+        reading_available = Decimal(reading.available).quantize(FOUR_PLACES)
+        if account.available is not None and reading_available != account.available:
+            account.previous_available = account.available
+            account.available_changed_at = now
+        account.available = reading_available
         account.frozen = Decimal(reading.frozen).quantize(FOUR_PLACES)
         account.currency = (reading.currency or account.currency).upper()[:3]
         account.last_synced_at = now
@@ -600,6 +604,49 @@ def _confirm_top_ups(account: ProviderAccount) -> None:
                 confirmed_at=account.last_synced_at, confirmed_balance=account.available)
 
 
+#: A top-up recorded within this long after the balance rose by (about) its
+#: amount is taken to be that rise.
+TOP_UP_ALREADY_ARRIVED_WINDOW = timedelta(hours=48)
+
+
+def _balance_before_top_up(account: ProviderAccount, amount: Decimal) -> Decimal | None:
+    """The balance the top-up is measured against.
+
+    Usually the balance now. But staff normally record a top-up after paying,
+    and the 2-minute sync has often seen the money land already: measured
+    against today's balance it could never "arrive". When the last change was
+    a rise of at least the amount (95%, for a fee) in the last 48 hours, that
+    rise is this top-up, and the balance before it is the one to compare with.
+    """
+    current, before = account.available, account.previous_available
+    if (current is None or before is None or account.available_changed_at is None
+            or timezone.now() - account.available_changed_at > TOP_UP_ALREADY_ARRIVED_WINDOW):
+        return current
+    if current - before >= amount * Decimal("0.95"):
+        return before
+    return current
+
+
+def confirm_top_up(top_up: ProviderTopUp, *, actor, reason: str = "", request=None
+                   ) -> ProviderTopUp:
+    """Staff saw the money in the provider's own balance: mark it arrived."""
+    if top_up.confirmed_at is not None:
+        return top_up
+    account = top_up.account
+    with transaction.atomic():
+        ProviderTopUp.objects.filter(pk=top_up.pk, confirmed_at__isnull=True).update(
+            confirmed_at=timezone.now(), confirmed_balance=account.available)
+        record_admin_action(
+            admin=actor, action="PROVIDER_TOP_UP_CONFIRMED", target=top_up,
+            reason=(reason or "Seen in the provider balance")[:500],
+            after={"amount": str(top_up.amount), "currency": top_up.currency,
+                   "balance": str(account.available)},
+            request=request,
+        )
+    top_up.refresh_from_db()
+    return top_up
+
+
 def check_unconfirmed_top_ups(account: ProviderAccount) -> list[ProviderAlert]:
     cutoff = timezone.now() - timedelta(hours=int(_cfg("PROVIDER_TOP_UP_CONFIRM_HOURS")))
     alerts = []
@@ -721,7 +768,8 @@ def record_top_up(account: ProviderAccount, *, data: dict, actor,
         top_up = ProviderTopUp.objects.create(
             account=account, amount=amount, currency=currency, method=method,
             external_reference=reference, paid_ghs=paid_ghs, note=note,
-            balance_before=account.available, frozen_before=account.frozen, recorded_by=actor,
+            balance_before=_balance_before_top_up(account, amount),
+            frozen_before=account.frozen, recorded_by=actor,
         )
         record_admin_action(
             admin=actor, action="PROVIDER_TOP_UP_RECORDED", target=top_up,

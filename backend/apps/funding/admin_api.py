@@ -107,3 +107,18 @@ class FundingTopUpView(AdminBase, APIView):
         top_up = services.record_top_up(_account(adapter_key), data=request.data,
                                         actor=request.user, request=request)
         return Response(_top_up(top_up), status=201)
+
+
+class FundingTopUpConfirmView(AdminBase, APIView):
+    """Mark a recorded top-up as arrived, when staff can see it in the provider's balance."""
+
+    required_permission = AdminPermission.PROVIDER_MANAGE
+
+    def post(self, request, adapter_key: str, top_up_id: str):
+        top_up = ProviderTopUp.objects.select_related("account", "recorded_by").filter(
+            pk=top_up_id, account=_account(adapter_key)).first()
+        if top_up is None:
+            raise NotFound("No such top-up.")
+        top_up = services.confirm_top_up(top_up, actor=request.user,
+                                         reason=request.data.get("reason", ""), request=request)
+        return Response(_top_up(top_up))

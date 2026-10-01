@@ -132,6 +132,8 @@ api_v1 = [
          name="admin-funding-sync"),
     path("admin/funding/<str:adapter_key>/top-ups/", funding_admin.FundingTopUpView.as_view(),
          name="admin-funding-top-ups"),
+    path("admin/funding/<str:adapter_key>/top-ups/<uuid:top_up_id>/confirm/",
+         funding_admin.FundingTopUpConfirmView.as_view(), name="admin-funding-top-up-confirm"),
     path("admin/overview/", admin_views.AdminOverviewView.as_view(), name="admin-overview"),
     path("admin/charts/", admin_views.AdminChartsView.as_view(), name="admin-charts"),
     path("admin/health/", admin_views.AdminSystemHealthView.as_view(), name="admin-health"),

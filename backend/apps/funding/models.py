@@ -54,6 +54,12 @@ class ProviderAccount(BaseModel):
     #: purpose: this is our money, and only the ledger service writes wallets.
     available = models.DecimalField(max_digits=14, decimal_places=4, null=True, blank=True)
     frozen = models.DecimalField(max_digits=14, decimal_places=4, null=True, blank=True)
+    #: The balance before its last change, and when it changed. A top-up is
+    #: usually recorded *after* the money has landed - by then `available`
+    #: already includes it - and this is how that is recognised.
+    previous_available = models.DecimalField(max_digits=14, decimal_places=4,
+                                             null=True, blank=True)
+    available_changed_at = models.DateTimeField(null=True, blank=True)
     credit_limit = models.DecimalField(max_digits=14, decimal_places=4,
                                        default=Decimal("0.0000"))
 

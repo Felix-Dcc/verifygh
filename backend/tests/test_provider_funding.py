@@ -496,6 +496,57 @@ def test_a_top_up_that_never_arrives_is_flagged(admin_user, mock_provider):
     assert ProviderAlert.objects.filter(kind=AlertKind.TOP_UP_NOT_REFLECTED).count() == 1
 
 
+def test_a_top_up_recorded_after_the_money_landed_is_still_recognised(admin_user,
+                                                                     mock_provider):
+    """The usual order: pay on the provider's site, the sync sees it, then record it."""
+    set_balance("12", mock_provider)
+    set_balance("50.75", mock_provider)  # the top-up landed; the sync already saw it
+
+    top_up = committed(funding.record_top_up, funding.account_for(mock_provider),
+                       actor=admin_user, data={"amount": "40", "method": "CARD"})
+
+    # Measured against the balance before it landed - so it has arrived.
+    assert top_up.balance_before == Decimal("12.0000")
+    assert top_up.confirmed_at is not None
+
+
+def test_an_old_or_smaller_rise_is_not_taken_for_the_top_up(admin_user, mock_provider):
+    set_balance("12", mock_provider)
+    set_balance("20", mock_provider)  # rose by 8: not a 40 top-up
+    small = committed(funding.record_top_up, funding.account_for(mock_provider),
+                      actor=admin_user, data={"amount": "40", "method": "CARD"})
+    assert small.balance_before == Decimal("20.0000") and small.confirmed_at is None
+
+    ProviderAccount.objects.filter(provider=mock_provider).update(
+        available_changed_at=timezone.now() - timedelta(hours=49))
+    old = committed(funding.record_top_up, funding.account_for(mock_provider),
+                    actor=admin_user, data={"amount": "5", "method": "CARD"})
+    assert old.balance_before == Decimal("20.0000") and old.confirmed_at is None
+
+
+def test_staff_can_mark_a_top_up_arrived_and_it_is_audited(api, auth, admin_user, plain_admin,
+                                                           mock_provider):
+    set_balance("50", mock_provider)
+    top_up = committed(funding.record_top_up, funding.account_for(mock_provider),
+                       actor=admin_user, data={"amount": "10", "method": "CARD"})
+    assert top_up.confirmed_at is None
+    url = f"{FUNDING}mock/top-ups/{top_up.id}/confirm/"
+
+    assert auth(plain_admin).post(url, {}, format="json").status_code == 403
+    api.credentials()
+    response = auth(admin_user, ADMIN_PASSWORD).post(url, {"reason": "Seen on the site"},
+                                                     format="json")
+    assert response.status_code == 200, response.data
+    top_up.refresh_from_db()
+    assert top_up.confirmed_at is not None
+    assert AdminAction.objects.filter(action="PROVIDER_TOP_UP_CONFIRMED").count() == 1
+    # A confirmed top-up raises no "not reflected" alert later.
+    ProviderTopUp.objects.filter(pk=top_up.pk).update(
+        created_at=timezone.now() - timedelta(hours=25))
+    committed(funding.sync_all)
+    assert not ProviderAlert.objects.filter(kind=AlertKind.TOP_UP_NOT_REFLECTED).exists()
+
+
 def test_reserve_levels_are_validated_and_audited(api, auth, admin_user, mock_provider):
     set_balance("6", mock_provider)
     client = auth(admin_user, ADMIN_PASSWORD)

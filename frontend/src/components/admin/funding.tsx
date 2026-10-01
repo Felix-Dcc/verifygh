@@ -5,7 +5,7 @@ import useSWR from "swr";
 
 import { MetricTile } from "@/components/admin/charts";
 import { providerMoney } from "@/components/admin/pricing-offering";
-import { Dialog } from "@/components/ui/dialog";
+import { ConfirmDialog, Dialog } from "@/components/ui/dialog";
 import {
   Alert,
   Badge,
@@ -268,7 +268,7 @@ export function ProviderAccountCard({
           </div>
         ) : null}
 
-        <TopUpHistory adapterKey={account.adapter_key} />
+        <TopUpHistory adapterKey={account.adapter_key} canManage={canManage} />
       </div>
 
       <TopUpDialog
@@ -297,8 +297,29 @@ function Level({ label, value, warn }: { label: string; value: React.ReactNode; 
   );
 }
 
-function TopUpHistory({ adapterKey }: { adapterKey: string }) {
-  const { data } = useSWR<{ results: TopUp[] }>(`/admin/funding/${adapterKey}/top-ups/`);
+function TopUpHistory({ adapterKey, canManage }: { adapterKey: string; canManage: boolean }) {
+  const toast = useToast();
+  const { data, mutate } = useSWR<{ results: TopUp[] }>(`/admin/funding/${adapterKey}/top-ups/`);
+  const [confirming, setConfirming] = React.useState<TopUp | null>(null);
+  const [busy, setBusy] = React.useState(false);
+
+  async function markArrived() {
+    if (!confirming) return;
+    setBusy(true);
+    try {
+      await api.post(`/admin/funding/${adapterKey}/top-ups/${confirming.id}/confirm/`, {
+        reason: "Seen in the provider balance",
+      });
+      toast.success("Top-up marked as arrived");
+      setConfirming(null);
+      void mutate();
+    } catch (caught) {
+      toast.error("Could not update the top-up", caught instanceof ApiError ? caught.message : "Please try again.");
+    } finally {
+      setBusy(false);
+    }
+  }
+
   if (!data) return <Skeleton className="h-16" />;
   if (!data.results.length) {
     return <p className="text-sm text-ink-muted">No top-ups recorded yet.</p>;
@@ -331,13 +352,33 @@ function TopUpHistory({ adapterKey }: { adapterKey: string }) {
                 {row.confirmed_at ? (
                   <Badge tone="success">Arrived</Badge>
                 ) : (
-                  <Badge tone="warn">Not seen yet</Badge>
+                  <span className="flex flex-wrap items-center gap-2">
+                    <Badge tone="warn">Not seen yet</Badge>
+                    {canManage ? (
+                      <button type="button" className="link text-caption" onClick={() => setConfirming(row)}>
+                        Mark as arrived
+                      </button>
+                    ) : null}
+                  </span>
                 )}
               </td>
             </tr>
           ))}
         </tbody>
       </table>
+      <ConfirmDialog
+        open={confirming !== null}
+        onClose={() => setConfirming(null)}
+        onConfirm={markArrived}
+        loading={busy}
+        title="Mark this top-up as arrived?"
+        description={
+          confirming
+            ? `Only if you can see the ${providerMoney(confirming.amount, confirming.currency)} in the provider's own balance. This is recorded in the audit log.`
+            : undefined
+        }
+        confirmLabel="Mark as arrived"
+      />
     </div>
   );
 }
