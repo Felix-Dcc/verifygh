@@ -388,49 +388,30 @@ CACHES = {
 # Email
 # --------------------------------------------------------------------------
 
-# Transactional email goes through Resend, over the SMTP interface Resend
-# documents for Django at https://resend.com/django. SMTP rather than their
-# HTTP SDK deliberately: Django's own backend already handles multipart
-# alternatives, connection reuse and timeouts, so there is no extra dependency
-# to keep patched and `EmailMultiAlternatives` works unchanged.
+# Transactional email goes through Brevo's transactional email API, from a
+# Django email backend (apps/notifications/brevo.py). HTTPS, not SMTP: Railway
+# blocks the standard SMTP ports, and the API says *why* when Brevo refuses a
+# message. Every email still goes through notify() -> EmailChannel ->
+# EmailMultiAlternatives, so nothing above the backend knows the provider.
 #
-# These three are Resend's published connection details, not secrets. The API
-# key is the SMTP password and only ever comes from the environment.
-RESEND_SMTP_HOST = "smtp.resend.com"
-# 2587, not the conventional 587.
-#
-# Railway - like most PaaS providers, to stop their address ranges being used
-# for spam - blocks outbound connections on the standard SMTP ports. From a
-# Railway container, 587 and 465 both time out while 2587 and 2465 connect, and
-# a blocked port looks exactly like a mail server that is slow to answer. Resend
-# publishes 2587 (STARTTLS) and 2465 (implicit TLS) for precisely this case.
-#
-# 2587 is not a workaround: it is the same server, same protocol, same
-# credentials, and it works on hosts that allow 587 as well - so there is no
-# environment where the conventional port would be the better default.
-RESEND_SMTP_PORT = env_int("RESEND_SMTP_PORT", 2587)
-RESEND_SMTP_USERNAME = "resend"
-
-RESEND_API_KEY = env("RESEND_API_KEY", "")
+# The API key (xkeysib-...) only ever comes from the environment.
+BREVO_API_KEY = env("BREVO_API_KEY", "")
 
 _email_backend = env("EMAIL_BACKEND", "")
 
-if RESEND_API_KEY and not _email_backend:
+if BREVO_API_KEY and not _email_backend:
     # Setting one variable is enough to send real mail. An explicit
     # EMAIL_BACKEND still wins, so dev and the test suite can opt out.
-    EMAIL_BACKEND = "django.core.mail.backends.smtp.EmailBackend"
-    EMAIL_HOST = RESEND_SMTP_HOST
-    EMAIL_PORT = RESEND_SMTP_PORT
-    EMAIL_HOST_USER = RESEND_SMTP_USERNAME
-    EMAIL_HOST_PASSWORD = RESEND_API_KEY
-    EMAIL_USE_TLS = True
+    EMAIL_BACKEND = "apps.notifications.brevo.BrevoEmailBackend"
 else:
     EMAIL_BACKEND = _email_backend or "django.core.mail.backends.console.EmailBackend"
-    EMAIL_HOST = env("EMAIL_HOST", "")
-    EMAIL_PORT = env_int("EMAIL_PORT", 587)
-    EMAIL_HOST_USER = env("EMAIL_HOST_USER", "")
-    EMAIL_HOST_PASSWORD = env("EMAIL_HOST_PASSWORD", "")
-    EMAIL_USE_TLS = env_bool("EMAIL_USE_TLS", True)
+
+# Only for an SMTP provider chosen explicitly with EMAIL_BACKEND.
+EMAIL_HOST = env("EMAIL_HOST", "")
+EMAIL_PORT = env_int("EMAIL_PORT", 587)
+EMAIL_HOST_USER = env("EMAIL_HOST_USER", "")
+EMAIL_HOST_PASSWORD = env("EMAIL_HOST_PASSWORD", "")
+EMAIL_USE_TLS = env_bool("EMAIL_USE_TLS", True)
 
 # A mail server that accepts the connection and then stops talking would
 # otherwise hold a web worker open indefinitely.
@@ -447,9 +428,16 @@ NON_DELIVERING_EMAIL_BACKENDS = (
     "django.core.mail.backends.locmem.EmailBackend",
 )
 
-# Reserved TLDs (.example, .invalid, .test) are rejected outright by real mail
-# and payment providers, so the default has to be a plausible address.
-DEFAULT_FROM_EMAIL = env("DEFAULT_FROM_EMAIL", "VerifyGH <no-reply@verifygh.com>")
+# Who emails come from. BREVO_SENDER_EMAIL must be a sender verified in Brevo,
+# on a domain authenticated there (docs/EMAIL.md). Without it, DEFAULT_FROM_EMAIL
+# is used as before. Reserved TLDs (.example, .invalid, .test) are rejected
+# outright by real mail providers, so the default has to be a plausible address.
+BREVO_SENDER_EMAIL = env("BREVO_SENDER_EMAIL", "") or ""
+BREVO_SENDER_NAME = (env("BREVO_SENDER_NAME", "") or "VerifyGH").replace('"', "")[:70]
+DEFAULT_FROM_EMAIL = (
+    f'"{BREVO_SENDER_NAME}" <{BREVO_SENDER_EMAIL}>' if BREVO_SENDER_EMAIL
+    else env("DEFAULT_FROM_EMAIL", "") or "VerifyGH <no-reply@verifygh.com>"
+)
 SERVER_EMAIL = env("SERVER_EMAIL", DEFAULT_FROM_EMAIL)
 
 # --------------------------------------------------------------------------
@@ -458,6 +446,8 @@ SERVER_EMAIL = env("SERVER_EMAIL", DEFAULT_FROM_EMAIL)
 
 VERIFYGH = {
     "BRAND_NAME": "VerifyGH",
+    #: Where customers write to; shown in every email's footer.
+    "SUPPORT_EMAIL": env("SUPPORT_EMAIL", "support@getverifygh.com"),
     "CURRENCY": "GHS",
     "FRONTEND_URL": env("FRONTEND_URL", "http://localhost:3000"),
     # Provider selection — swapping a provider is a config change, not a rewrite.

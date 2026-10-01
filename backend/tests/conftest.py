@@ -162,3 +162,42 @@ def pytest_sessionstart(session):
     engine = settings.DATABASES["default"]["ENGINE"]
     if "postgresql" not in engine:
         pytest.exit(f"REQUIRE_POSTGRES=1 but the database engine is {engine!r}.", returncode=3)
+
+
+@pytest.fixture
+def brevo(settings, monkeypatch):
+    """Send email through the real Brevo backend, against a fake Brevo API.
+
+    Nothing leaves the machine: `requests.Session.post` is replaced, every call
+    is recorded in `brevo.calls`, and `brevo.replies` queues what the fake
+    answers - a (status, body) pair or an exception - 201 when empty.
+    """
+    from types import SimpleNamespace
+
+    import requests
+
+    settings.EMAIL_BACKEND = "apps.notifications.brevo.BrevoEmailBackend"
+    settings.BREVO_API_KEY = "xkeysib-test-key-not-real"
+    settings.DEFAULT_FROM_EMAIL = '"VerifyGH" <support@getverifygh.com>'
+    state = SimpleNamespace(calls=[], replies=[])
+
+    class FakeResponse:
+        def __init__(self, status_code, body):
+            self.status_code = status_code
+            self._body = body
+
+        def json(self):
+            if isinstance(self._body, Exception):
+                raise self._body
+            return self._body
+
+    def fake_post(self, url, json=None, headers=None, timeout=None, **kwargs):
+        state.calls.append({"url": url, "json": json, "headers": headers or {},
+                            "timeout": timeout})
+        reply = state.replies.pop(0) if state.replies else (201, {"messageId": "<t@brevo>"})
+        if isinstance(reply, Exception):
+            raise reply
+        return FakeResponse(*reply)
+
+    monkeypatch.setattr(requests.Session, "post", fake_post)
+    return state

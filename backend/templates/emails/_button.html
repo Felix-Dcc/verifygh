@@ -1,0 +1,18 @@
+{% comment %}A call-to-action button, with the link repeated as text beneath it for
+clients that strip links. Include with: url, label.{% endcomment %}
+<tr>
+  <td align="left" style="padding:26px 32px 0 32px;">
+    <a href="{{ url }}"
+       style="display:inline-block; background-color:#0b6446; background-image:linear-gradient(90deg,#0b63b6,#137a4e); color:#ffffff; font-size:15px; font-weight:600; line-height:20px; text-decoration:none; padding:13px 28px; border-radius:999px;">
+      {{ label }}
+    </a>
+  </td>
+</tr>
+<tr>
+  <td style="padding:20px 32px 0 32px; font-size:13px; line-height:20px; color:#6b7280;">
+    <p style="margin:0 0 6px 0;">If the button does not work, copy this link into your browser:</p>
+    <p style="margin:0; word-break:break-all;">
+      <a href="{{ url }}" style="color:#0b6446; text-decoration:underline;">{{ url }}</a>
+    </p>
+  </td>
+</tr>

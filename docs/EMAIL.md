@@ -30,118 +30,144 @@ always saw `PENDING`.
 
 ## How it works now
 
-Resend, over the SMTP interface Resend documents for Django at
-<https://resend.com/django>.
-
-SMTP rather than Resend's HTTP SDK, deliberately: Django's own backend already
-handles multipart alternatives, connection reuse and timeouts, so there is no
-extra dependency to keep patched and `EmailMultiAlternatives` works unchanged.
-
-**Setting `RESEND_API_KEY` is the entire configuration.** `config/settings/base.py`
-then fills in Resend's published connection details itself:
-
-| Setting | Value |
-|---|---|
-| `EMAIL_BACKEND` | `django.core.mail.backends.smtp.EmailBackend` |
-| `EMAIL_HOST` | `smtp.resend.com` |
-| `EMAIL_PORT` | `2587` (see below) |
-| `EMAIL_HOST_USER` | `resend` |
-| `EMAIL_HOST_PASSWORD` | `RESEND_API_KEY` |
-| `EMAIL_USE_TLS` | `True` |
-
-An explicit `EMAIL_BACKEND` still wins, so development keeps the console
-backend and the test suite keeps the in-memory one.
-
-### Why port 2587 and not 587
-
-Railway blocks outbound connections on the standard SMTP ports, as most PaaS
-providers do to stop their address ranges being used for spam. Measured from
-inside a running container:
+Every email goes one way, through one place:
 
 ```
-BLOCKED smtp.resend.com 587   TimeoutError
-OPEN    smtp.resend.com 2587
-BLOCKED smtp.resend.com 465   TimeoutError
-OPEN    smtp.resend.com 2465
-OPEN    api.resend.com  443
+notify(user, event=..., channels=("EMAIL", ...))   apps/notifications/services.py
+  -> EmailChannel                                   apps/notifications/channels.py
+       renders the .txt template (or the message text) and an HTML part
+       (its own .html template, or the shared layout emails/notification.html)
+  -> EmailMultiAlternatives -> EMAIL_BACKEND
+  -> BrevoEmailBackend                              apps/notifications/brevo.py
+       POST https://api.brevo.com/v3/smtp/email  (header: api-key)
 ```
 
-Resend publishes 2587 (STARTTLS) and 2465 (implicit TLS) for exactly this
-case. Same server, same protocol, same credentials.
+No other code knows the provider: changing it again means replacing the last
+step only. The emails that go out this way:
 
-This is worth knowing because of how it fails: a blocked port is
-indistinguishable from a slow mail server. The send does not error, it *hangs*
-until the timeout, so without `EMAIL_TIMEOUT` it would tie up a worker for as
-long as the OS allows. The symptom in the log is `email_send_failed
-error="TimeoutError"`, and the cause is a firewall, not Resend.
+| Event | Email | Template |
+|---|---|---|
+| `ACCOUNT_CREATED` | Verify your email address | `emails/verify_email.txt` / `.html` |
+| `SECURITY_ALERT` | Reset your password | `emails/password_reset.txt` / `.html` |
+| `SECURITY_ALERT` | Your password was changed | shared layout |
+| `PAYMENT_SUCCESSFUL` / `PAYMENT_FAILED` | Deposit received / failed | shared layout |
+| `ORDER_COMPLETED` | Order completed | shared layout |
+| `REFUND_ISSUED` | Refund issued | shared layout |
+| `ACCOUNT_SUSPENDED` | Account suspended | shared layout |
+| `STAFF_*`, `PROVIDER_*` | Staff alerts (failed orders, reports, provider funding) | shared layout |
 
-If you ever move off Railway to a host that blocks the 2xxx ports instead, set
-`RESEND_SMTP_PORT=587`, or switch to Resend's HTTP API on 443, which no host
-blocks.
+Referral bonuses, number-issue updates, assigned numbers, codes and expiries are
+in-app only.
+
+**Brevo's transactional email API, not SMTP.** HTTPS on 443 works from any
+host: Railway blocks the standard SMTP ports, and a blocked port looks exactly
+like a slow mail server. And when Brevo refuses a message, the API says why.
+
+**Setting `BREVO_API_KEY` switches it on.** `config/settings/base.py` then uses
+`apps.notifications.brevo.BrevoEmailBackend`. An explicit `EMAIL_BACKEND` still
+wins, so development keeps the console backend and the test suite the in-memory
+one. The tests that exercise Brevo replace its API with a fake (the `brevo`
+fixture in `tests/conftest.py`), so no test sends a real email.
+
+### When Brevo refuses
+
+An email failing never fails what triggered it. Registration, a payment, a
+refund or a purchase completes, and the notification is recorded as `FAILED`
+with the reason. The verification email task tries again, and customers can
+ask for another link.
+
+The reason is written for staff, in the log (`brevo_email_refused`) and on the
+notification row. Customers never see Brevo's words, and the API key and
+recipient addresses are never logged.
+
+| Brevo answers | Recorded as | Retried |
+|---|---|---|
+| 401 `unauthorized` | the key is wrong or revoked, or Brevo is blocking this server's IP address | no |
+| 400 about the sender | the sender or its domain is not verified in Brevo | no |
+| 400 `invalid_parameter` | Brevo refused the email, with its reason | no |
+| 402 / `not_enough_credits` | the account has no email credits left | no |
+| 429 | rate-limited | yes |
+| 5xx, timeout, network | Brevo unavailable | yes |
+| no `BREVO_API_KEY` | not configured; nothing is called | - |
+
+A recipient that is not an email address is refused before Brevo is called.
 
 ### Production will not boot without a real mailer
 
 `config/settings/prod.py` refuses to start if:
 
-* `EMAIL_BACKEND` is the console, file, dummy or in-memory backend;
-* `RESEND_API_KEY` is set but is not shaped like a Resend key (`re_...`);
-* SMTP is selected with no host or no password;
-* `DEFAULT_FROM_EMAIL` is not a full address, or sits on a reserved domain;
+* `EMAIL_BACKEND` is the console, file, dummy or in-memory backend - in practice,
+  `BREVO_API_KEY` is not set (and if only the old `RESEND_API_KEY` is, it says
+  that is no longer used);
+* `BREVO_API_KEY` is not shaped like a Brevo API key (`xkeysib-...`). The SMTP
+  key Brevo also shows you (`xsmtpsib-...`) does not work with the API;
+* Brevo is in use with no `BREVO_SENDER_EMAIL`;
+* the sender is not a full address, or sits on a reserved domain;
+* SMTP is selected by hand with no host or no password;
 * `REQUIRE_EMAIL_VERIFICATION_FOR_PURCHASE` is false.
 
 `tests/test_startup_safety.py` boots each of these in a fresh interpreter and
-asserts the refusal. An email that goes to stdout is indistinguishable, from the
-application's point of view, from one that was delivered - so the only reliable
-place to catch it is at boot.
+asserts the refusal.
 
 ## Environment variables
 
+On **verifygh** (the API) and **verifygh-worker** - the worker sends most email:
+
 ```
-RESEND_API_KEY=          # secret. Dashboard only, never in git
-DEFAULT_FROM_EMAIL=VerifyGH <no-reply@verifygh.com>
-FRONTEND_URL=https://verifygh.com
+BREVO_API_KEY=                 # secret: xkeysib-... Railway only, never in git or chat
+BREVO_SENDER_EMAIL=support@getverifygh.com
+BREVO_SENDER_NAME=VerifyGH
+FRONTEND_URL=https://www.getverifygh.com
 EMAIL_VERIFICATION_TTL_HOURS=24
+SUPPORT_EMAIL=support@getverifygh.com   # optional; shown in every email's footer
 ```
 
-The API key is a **server-side secret**. It is never sent to the browser, never
-logged, and `.env.example` carries an empty placeholder only. Anything
-`NEXT_PUBLIC_*` ends up in the JavaScript bundle, so the key must never be
-given a name like that.
+`BREVO_SENDER_EMAIL` and `BREVO_SENDER_NAME` make the From address
+(`"VerifyGH" <support@getverifygh.com>`); without them `DEFAULT_FROM_EMAIL` is
+used. `RESEND_API_KEY` is no longer read - delete it from Railway once Brevo
+works.
 
-## Verifying the sending domain in Resend
+The API key is a **server-side secret**. It is never sent to the browser and
+never logged, and `.env.example` carries an empty placeholder only.
 
-Until a domain is verified, Resend will only deliver to the account owner's own
-address. That is enough to prove the pipeline works and not enough to sign up a
-single customer.
+## Setting up Brevo
 
-In Resend: **Domains -> Add Domain**, enter the sending domain, and Resend
-generates the DNS records. It recommends sending from a subdomain
-(`mail.verifygh.com`) rather than the root domain.
+Brevo will not deliver from `getverifygh.com` until the domain is authenticated
+and the sender verified there. Until then, sends are refused and recorded as
+failures - so do these before relying on it:
 
-Resend generates three kinds of record:
+1. **API key.** Brevo > *SMTP & API* > *API keys* > *Generate a new API key*.
+   Copy the `xkeysib-...` key straight into Railway as `BREVO_API_KEY`, on
+   verifygh and verifygh-worker. Never paste it anywhere else.
+2. **Authenticate the domain.** Brevo > *Senders, Domains & Dedicated IPs* >
+   *Domains* > *Add a domain* > `getverifygh.com`. Brevo shows the DNS records to
+   create - typically a Brevo verification code (TXT), DKIM records and a DMARC
+   record. **Copy each one exactly as Brevo shows it**: the values are unique to
+   this account, and none are written here because a guessed DKIM key is just a
+   domain that fails authentication.
+3. **Create them in Cloudflare** (the domain's DNS is there): *DNS > Records >
+   Add record*, the type, name and value Brevo gives. Set every one to
+   **DNS only** (grey cloud), never proxied. Enter only the host part of a name
+   (e.g. `brevo1._domainkey`), not the full name with the domain appended.
+   There must be only **one** SPF (`v=spf1`) TXT record per name - if Brevo asks
+   for an SPF include and one already exists on that name, add the include to it
+   rather than creating a second record. Then press *Authenticate* in Brevo.
+   It can take minutes, occasionally up to 48 hours.
+4. **Verify the sender.** Brevo > *Senders* > *Add a sender*:
+   `VerifyGH <support@getverifygh.com>`. Brevo emails that address a code, so the
+   mailbox has to receive mail (Cloudflare Email Routing to your inbox works).
+5. **Authorised IPs.** Brevo can block API calls from IP addresses it has not
+   seen - its own help says it switches an API key to blocking after 30 days.
+   Railway's outgoing addresses change between deploys, so under Brevo >
+   *Security* > *Authorised IPs* turn the blocking **off** for API keys (or
+   every email eventually fails with a 401).
+6. **Send yourself one.** Register with an address you own, or use "Forgot
+   password". The email arrives from `support@getverifygh.com`, and the log shows
+   `brevo_email_accepted`. If it shows `brevo_email_refused`, the reason says
+   which step above is unfinished.
 
-| Kind | What it does |
-|---|---|
-| `MX` | lets recipients return bounce and complaint feedback |
-| `TXT` (SPF) | names who may send for the domain |
-| `TXT` (DKIM, at `resend._domainkey`) | the public key recipients check the signature against |
-
-**The values come from the Resend dashboard and are different for every
-domain** - they are not written down here, because a guessed DKIM key is just a
-domain that fails authentication. Copy each one from Resend exactly.
-
-Two things that routinely go wrong at a DNS provider:
-
-* paste only the host part (`resend._domainkey`, or `send`), not the full name
-  with the domain appended - most providers add the domain themselves, and a
-  pasted full name becomes `resend._domainkey.verifygh.com.verifygh.com`;
-* if the domain is behind a CDN, set these records to **DNS only**, not proxied.
-
-Verification usually completes within about 15 minutes, occasionally up to 72
-hours. Then set `DEFAULT_FROM_EMAIL` to an address on the verified domain.
-
-Consider a DMARC record once DKIM and SPF pass; Resend documents this
-separately.
+The old Resend records in Cloudflare (`resend._domainkey`, and the `send` MX and
+SPF records) can be deleted once Brevo is sending; they do nothing for Brevo.
 
 ## The flow
 
@@ -150,7 +176,7 @@ register  ->  account, is_email_verified = false
           ->  SecurityToken.issue(EMAIL_VERIFICATION)   # 32 random bytes
           ->  only the SHA-256 hash is stored
           ->  Celery: send_verification_email
-          ->  Resend  ->  inbox
+          ->  Brevo   ->  inbox
 user clicks  https://verifygh.com/verify-email/<token>
           ->  POST /api/v1/auth/email/verify/confirm/
           ->  token consumed (conditional UPDATE: single use)

@@ -503,3 +503,19 @@ def test_a_verified_but_unparseable_webhook_is_kept_for_a_human(api, user, monke
     assert stored.processed is False  # counted by /admin/health as needing attention
     assert "unknown event shape" in stored.processing_error
     assert "VGH-PAY-WHATEVER" in stored.payload["raw"]
+
+
+def test_a_deposit_confirmation_email_goes_through_brevo(user, auth, api, brevo,
+                                                         django_capture_on_commit_callbacks):
+    client = auth(user)
+    reference = start_deposit(client, "75.00").data["reference"]
+    raw_body, headers = build_webhook(reference=reference, amount="75.00")
+
+    with django_capture_on_commit_callbacks(execute=True):
+        assert post_webhook(api, raw_body, headers).status_code == 200
+
+    sent = [c["json"] for c in brevo.calls if c["json"]["to"] == [{"email": user.email}]]
+    assert sent, brevo.calls
+    assert "credited" in sent[-1]["textContent"] and "75.00" in sent[-1]["textContent"]
+    # The money moved whatever the email did.
+    assert get_or_create_wallet(user).balance == Decimal("75.00")

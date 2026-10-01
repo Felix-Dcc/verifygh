@@ -38,11 +38,14 @@ class InAppChannel(NotificationChannel):
 
 
 class EmailChannel(NotificationChannel):
-    """Sends through whatever EMAIL_BACKEND is configured - Resend in production.
+    """Sends through whatever EMAIL_BACKEND is configured - Brevo in production
+    (apps/notifications/brevo.py).
 
     Every message goes out as multipart: a plain-text body, plus an HTML
-    alternative when a matching `.html` template exists. Text is the source of
-    truth, so a message is never empty in a client that refuses HTML.
+    alternative - the matching `.html` template when there is one, otherwise
+    the shared branded layout around the message (emails/notification.html).
+    Text is the source of truth, so a message is never empty in a client that
+    refuses HTML.
     """
 
     key = "EMAIL"
@@ -57,7 +60,8 @@ class EmailChannel(NotificationChannel):
             "title": title,
             "body": body,
             "brand": settings.VERIFYGH["BRAND_NAME"],
-            "frontend_url": settings.VERIFYGH["FRONTEND_URL"],
+            "frontend_url": str(settings.VERIFYGH["FRONTEND_URL"]).rstrip("/"),
+            "support_email": settings.VERIFYGH.get("SUPPORT_EMAIL", ""),
             **(context or {}),
         }
 
@@ -74,8 +78,15 @@ class EmailChannel(NotificationChannel):
             try:
                 html_body = render_to_string(html_template, context)
             except TemplateDoesNotExist:
-                # Plain text only. Not an error - most messages do not need it.
                 pass
+        if not html_body:
+            # No layout of its own: the message's text, in the branded layout.
+            try:
+                html_body = render_to_string("emails/notification.html",
+                                             {**context, "body": text_body})
+            except Exception:
+                # Plain text alone is still a complete email.
+                logger.warning("email_layout_failed", extra={"template": template or "-"})
 
         try:
             message = EmailMultiAlternatives(

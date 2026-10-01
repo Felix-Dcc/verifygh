@@ -42,10 +42,12 @@ SAFE = {
     "ALLOW_MOCK_VERIFICATION_IN_PRODUCTION": "",
     "ALLOW_PAYSTACK_TEST_KEYS": "",
     "ALLOW_UNENCRYPTED_DATABASE": "",
-    # Not a real key: `re_` followed by placeholder characters, which is only
-    # the shape the guard checks for.
-    "RESEND_API_KEY": "re_" + "0" * 30,
-    "DEFAULT_FROM_EMAIL": "VerifyGH <no-reply@verifygh.com>",
+    # Not a real key: Brevo's `xkeysib-` prefix and placeholder characters,
+    # which is only the shape the guard checks for.
+    "BREVO_API_KEY": "xkeysib-" + "0" * 64,
+    "BREVO_SENDER_EMAIL": "support@verifygh.com",
+    "BREVO_SENDER_NAME": "VerifyGH",
+    "DEFAULT_FROM_EMAIL": "",
     "EMAIL_BACKEND": "",
 }
 
@@ -57,6 +59,7 @@ SCRUB = set(SAFE) | {"DEBUG", "MOCK_PAYMENT_SECRET", "REQUIRE_POSTGRES", "DB_POO
                     "GOOGLE_OAUTH_CLIENT_ID", "GOOGLE_OAUTH_CLIENT_SECRET",
                     "GOOGLE_OAUTH_REDIRECT_URI",
                     "EMAIL_HOST", "EMAIL_HOST_USER", "EMAIL_HOST_PASSWORD",
+                    "RESEND_API_KEY", "SUPPORT_EMAIL",
                     "REQUIRE_EMAIL_VERIFICATION_FOR_PURCHASE",
                     "DB_CONN_MAX_AGE", "DB_SSLROOTCERT", "HUBTEL_CLIENT_ID",
                     "HUBTEL_CLIENT_SECRET", "HUBTEL_MERCHANT_ACCOUNT", "HUBTEL_BASE_URL"}
@@ -134,7 +137,10 @@ UNSAFE = [
     # does not switch that gate off, it makes it impossible to pass - while
     # every send is reported as successful. Nothing looks broken, and no
     # account can ever be verified.
-    ("no email provider", {"RESEND_API_KEY": None}, "delivers nothing"),
+    ("no email provider", {"BREVO_API_KEY": None}, "delivers nothing"),
+    # A leftover Resend key does not send anything any more, and says so.
+    ("only the old resend key", {"BREVO_API_KEY": None, "RESEND_API_KEY": "re_" + "0" * 30},
+     "RESEND_API_KEY is no longer used"),
     ("console email backend",
      {"EMAIL_BACKEND": "django.core.mail.backends.console.EmailBackend"}, "delivers nothing"),
     ("file email backend",
@@ -143,17 +149,22 @@ UNSAFE = [
      {"EMAIL_BACKEND": "django.core.mail.backends.dummy.EmailBackend"}, "delivers nothing"),
     ("in-memory email backend",
      {"EMAIL_BACKEND": "django.core.mail.backends.locmem.EmailBackend"}, "delivers nothing"),
-    ("resend key of the wrong shape",
-     {"RESEND_API_KEY": "pk_live_not_a_resend_key"}, "does not look like a Resend API key"),
+    # Brevo's SMTP key looks like its API key and does not work with the API.
+    ("brevo smtp key instead of an api key",
+     {"BREVO_API_KEY": "xsmtpsib-" + "0" * 64}, "does not look like a Brevo API key"),
+    ("brevo without a sender", {"BREVO_SENDER_EMAIL": None}, "BREVO_SENDER_EMAIL is required"),
     # SMTP selected by hand, with nothing to authenticate with.
     ("smtp without credentials",
-     {"EMAIL_BACKEND": "django.core.mail.backends.smtp.EmailBackend", "RESEND_API_KEY": None},
+     {"EMAIL_BACKEND": "django.core.mail.backends.smtp.EmailBackend", "BREVO_API_KEY": None},
      "EMAIL_HOST is required"),
     # Reserved TLDs never resolve; real providers reject them outright. This is
     # the class of mistake that made Paystack refuse our charges.
     ("sender on a reserved domain",
-     {"DEFAULT_FROM_EMAIL": "VerifyGH <no-reply@verifygh.example>"}, "reserved domain"),
-    ("sender that is not an address", {"DEFAULT_FROM_EMAIL": "VerifyGH"}, "full email address"),
+     {"BREVO_SENDER_EMAIL": "support@verifygh.example"}, "reserved domain"),
+    ("sender that is not an address",
+     {"EMAIL_BACKEND": "django.core.mail.backends.smtp.EmailBackend", "BREVO_SENDER_EMAIL": None,
+      "EMAIL_HOST": "smtp.example.org", "EMAIL_HOST_PASSWORD": "placeholder",
+      "DEFAULT_FROM_EMAIL": "VerifyGH"}, "full email address"),
     # Turning the gate off would let an unverified account spend money, which is
     # the one thing email verification exists to prevent.
     ("purchase gate disabled",

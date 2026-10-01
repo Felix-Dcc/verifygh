@@ -516,7 +516,7 @@ def test_a_mail_provider_failure_does_not_verify_the_account_or_fail_registratio
     from django.core.mail import EmailMultiAlternatives
 
     def explode(self, *args, **kwargs):
-        raise OSError("smtp.resend.com: connection refused")
+        raise OSError("mail provider: connection refused")
 
     monkeypatch.setattr(EmailMultiAlternatives, "send", explode)
 
@@ -579,7 +579,7 @@ def test_the_authenticated_resend_reports_a_provider_failure(api, auth, unverifi
     assert response.data["error"]["code"] == "EMAIL_DELIVERY_FAILED"
     # No provider name, no host, no exception text.
     message = response.data["error"]["message"]
-    assert "resend" not in message.lower()
+    assert "brevo" not in message.lower()
     assert "smtp" not in message.lower()
 
 

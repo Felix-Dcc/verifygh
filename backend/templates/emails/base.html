@@ -1,0 +1,97 @@
+{% comment %}
+The layout every VerifyGH email shares. Child templates fill `preheader`,
+`heading`, `content`, and optionally `action` (a button) and `fine_print`.
+
+Written for mail clients, not browsers: table layout, inline styles, no
+external stylesheet and no web fonts. Gmail strips <style> blocks in some views
+and Outlook renders with Word's engine, so anything clever degrades into
+something worse than plain text. The one image is the logo, with alt text for
+clients that block images; the accent bar is a solid colour where a gradient
+is not supported. The button is a padded anchor - the only kind that survives.
+{% endcomment %}<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="color-scheme" content="light">
+<title>{{ brand }}</title>
+</head>
+<body style="margin:0; padding:0; background-color:#f2f5f9; font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,Helvetica,Arial,sans-serif; -webkit-text-size-adjust:100%;">
+
+<div style="display:none; font-size:1px; color:#f2f5f9; max-height:0; overflow:hidden;">
+  {% block preheader %}{{ title }}{% endblock %}
+</div>
+
+<table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0" style="background-color:#f2f5f9;">
+  <tr>
+    <td align="center" style="padding:28px 12px;">
+
+      <table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0" style="max-width:540px; background-color:#ffffff; border-radius:14px; border:1px solid #e3e8ef; overflow:hidden;">
+
+        <tr>
+          <td style="height:4px; line-height:4px; font-size:0; background-color:#0b63b6; background-image:linear-gradient(90deg,#0b63b6,#28c7f7,#20b26b);">&nbsp;</td>
+        </tr>
+
+        <tr>
+          <td style="padding:26px 32px 0 32px;">
+            <table role="presentation" cellpadding="0" cellspacing="0" border="0">
+              <tr>
+                <td style="vertical-align:middle;">
+                  <img src="{{ frontend_url }}/icons/icon-192.png" width="36" height="36" alt="{{ brand }}"
+                       style="display:block; border:0; border-radius:9px;">
+                </td>
+                <td style="vertical-align:middle; padding-left:10px; font-size:18px; font-weight:700; color:#0b1b33; letter-spacing:-0.2px;">
+                  Verify<span style="color:#0b6446;">GH</span>
+                </td>
+              </tr>
+            </table>
+          </td>
+        </tr>
+
+        <tr>
+          <td style="padding:24px 32px 0 32px;">
+            <h1 style="margin:0; font-size:21px; line-height:29px; font-weight:700; color:#0b1b33;">
+              {% block heading %}{{ title }}{% endblock %}
+            </h1>
+          </td>
+        </tr>
+
+        <tr>
+          <td style="padding:14px 32px 0 32px; font-size:15px; line-height:24px; color:#374151;">
+            {% block content %}{% endblock %}
+          </td>
+        </tr>
+
+        {% block action %}{% endblock %}
+
+        {% block fine_print_wrapper %}
+        <tr>
+          <td style="padding:24px 32px 0 32px;">
+            <div style="border-top:1px solid #e3e8ef;"></div>
+          </td>
+        </tr>
+        <tr>
+          <td style="padding:18px 32px 30px 32px; font-size:13px; line-height:20px; color:#6b7280;">
+            {% block fine_print %}
+            <p style="margin:0;">Questions? Write to
+              <a href="mailto:{{ support_email }}" style="color:#0b6446; text-decoration:underline;">{{ support_email }}</a>.</p>
+            {% endblock %}
+          </td>
+        </tr>
+        {% endblock %}
+
+      </table>
+
+      <div style="max-width:540px; padding:18px 8px 0 8px; font-size:12px; line-height:18px; color:#94a3b8; text-align:center;">
+        {{ brand }} &mdash; SMS verification for Ghana, paid with Mobile Money.<br>
+        <a href="{{ frontend_url }}" style="color:#94a3b8; text-decoration:underline;">{{ frontend_url|cut:"https://"|cut:"http://" }}</a>
+        &nbsp;&middot;&nbsp;
+        <a href="mailto:{{ support_email }}" style="color:#94a3b8; text-decoration:underline;">{{ support_email }}</a>
+      </div>
+
+    </td>
+  </tr>
+</table>
+
+</body>
+</html>

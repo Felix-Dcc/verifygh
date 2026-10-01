@@ -75,7 +75,7 @@ Admin console: <http://localhost:3000/admin> as `admin@verifygh.local`.
 | [API.md](docs/API.md) | Every endpoint, the error envelope, auth and idempotency |
 | [SECURITY.md](docs/SECURITY.md) | Threat model, controls, financial integrity, disclosure |
 | [PAYMENT_INTEGRATION.md](docs/PAYMENT_INTEGRATION.md) | Wiring a real MoMo aggregator, webhooks, going live |
-| [EMAIL.md](docs/EMAIL.md) | Transactional email through Resend, verification tokens, the purchase gate |
+| [EMAIL.md](docs/EMAIL.md) | Transactional email through Brevo, verification tokens, the purchase gate |
 | [PROVIDER_INTEGRATION.md](docs/PROVIDER_INTEGRATION.md) | Wiring an authorised verification provider |
 | [DEPLOYMENT.md](docs/DEPLOYMENT.md) | Production topology, environment, migrations, monitoring |
 

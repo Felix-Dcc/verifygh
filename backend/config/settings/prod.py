@@ -119,22 +119,30 @@ if EMAIL_BACKEND in NON_DELIVERING_EMAIL_BACKENDS:
     _problems.append(
         f"EMAIL_BACKEND={EMAIL_BACKEND} delivers nothing: verification emails would be "
         "written to the container log instead of sent, and no account could ever be "
-        "verified. Set RESEND_API_KEY (see docs/EMAIL.md)."
+        "verified. Set BREVO_API_KEY (see docs/EMAIL.md)."
+        + (" RESEND_API_KEY is no longer used." if env("RESEND_API_KEY", "") else "")
     )
 
-_resend_key = env("RESEND_API_KEY", "")
-if _resend_key and not _resend_key.startswith("re_"):
-    # Resend's keys are prefixed re_. A value that is not one is almost always
-    # a public key, a placeholder, or a key for a different service.
-    _problems.append("RESEND_API_KEY does not look like a Resend API key (expected re_...).")
+if BREVO_API_KEY and not BREVO_API_KEY.startswith("xkeysib-"):  # noqa: F405
+    # Brevo's API keys are prefixed xkeysib-. Its SMTP key (xsmtpsib-) looks
+    # similar and does not work with the API; anything else is a placeholder.
+    _problems.append(
+        "BREVO_API_KEY does not look like a Brevo API key (expected xkeysib-...). The SMTP "
+        "key (xsmtpsib-...) does not work with the API - create an API key in Brevo."
+    )
+if EMAIL_BACKEND.endswith("BrevoEmailBackend") and not BREVO_SENDER_EMAIL:  # noqa: F405
+    _problems.append(
+        "BREVO_SENDER_EMAIL is required: a sender verified in Brevo, on a domain "
+        "authenticated there (docs/EMAIL.md)."
+    )
 
 if EMAIL_BACKEND.endswith("smtp.EmailBackend"):
     if not EMAIL_HOST:
         _problems.append("EMAIL_HOST is required when using the SMTP email backend.")
     if not EMAIL_HOST_PASSWORD:
         _problems.append(
-            "No SMTP password is set: set RESEND_API_KEY, or EMAIL_HOST_PASSWORD for "
-            "another provider."
+            "No SMTP password is set: set EMAIL_HOST_PASSWORD, or use Brevo's API with "
+            "BREVO_API_KEY."
         )
 
 # The From address has to be one a real mail server will accept and a real
@@ -148,7 +156,7 @@ elif _sender.rsplit("@", 1)[-1].rstrip(">").strip().lower().endswith(
 ):
     _problems.append(
         f"DEFAULT_FROM_EMAIL uses a reserved domain that cannot send or receive mail "
-        f"({_sender!r}). Use an address on a domain verified in Resend."
+        f"({_sender!r}). Use an address on a domain authenticated in Brevo."
     )
 
 # Turning the purchase gate off in production would let an unverified account

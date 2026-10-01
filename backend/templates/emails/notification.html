@@ -1,0 +1,13 @@
+{% extends "emails/base.html" %}
+{% comment %}
+Every email without a template of its own - deposit received, refund issued,
+order completed, password changed, staff alerts - in the shared layout. The
+body is the notification's own text, escaped, its line breaks kept.
+{% endcomment %}
+
+{% block content %}
+<p style="margin:0 0 14px 0;">Hi {{ full_name }},</p>
+<div style="margin:0;">{{ body|linebreaksbr }}</div>
+{% endblock %}
+
+{% block action %}{% if action_url %}{% include "emails/_button.html" with url=action_url label=action_label|default:"Open VerifyGH" %}{% endif %}{% endblock %}

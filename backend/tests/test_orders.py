@@ -566,3 +566,20 @@ def test_a_failed_order_alerts_staff_in_app_every_time_and_by_email_once(
     assert "refunded" in alert.body
     assert user.email not in alert.body  # masked, even for staff
     assert alert.metadata["admin_link"] == f"/admin/orders?q={first.reference}"
+
+
+def test_a_purchase_confirmation_email_goes_through_brevo(user, auth, catalog, funded_wallet,
+                                                         brevo):
+    verification_mock.force_scenario("HAPPY")
+    funded_wallet(user, "200.00")
+    client = auth(user)
+    order = Order.objects.get(reference=buy(client).data["reference"])
+    drive(order, seconds=30)
+
+    with _capture_on_commit(execute=True):
+        complete = client.post(f"/api/v1/orders/{order.reference}/complete/", {}, format="json")
+    assert complete.status_code == 200
+
+    completed = [c["json"] for c in brevo.calls if "completed" in c["json"]["subject"].lower()]
+    assert completed and completed[-1]["to"] == [{"email": user.email}]
+    assert order.service.name in completed[-1]["textContent"]

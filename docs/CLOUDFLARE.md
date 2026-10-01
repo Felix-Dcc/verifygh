@@ -101,7 +101,9 @@ Also copy anything else the registrar lists - the Resend "relay" CNAME noted in
 `.railway/railway.ts`, any Railway verification TXT records. Email records are
 never proxied.
 
-In Resend, confirm the domain still shows **Verified** after the switch.
+Email now goes through Brevo: its domain-authentication records (from the Brevo
+dashboard, see docs/EMAIL.md) are created here, **DNS only**. The Resend records
+above can be removed once Brevo is sending.
 
 ### Step 2 - Cloudflare settings before any traffic arrives
 

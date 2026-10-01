@@ -154,15 +154,12 @@ function backendEnv(databaseUrl: VariableValue, redisUrl: VariableValue) {
     CORS_ALLOWED_ORIGINS: `${LEGACY_WEB_ORIGIN},${WEB_ORIGIN},${APEX_ORIGIN}`,
     CSRF_TRUSTED_ORIGINS: `${LEGACY_WEB_ORIGIN},${WEB_ORIGIN},${APEX_ORIGIN}`,
 
-    // Transactional email. RESEND_API_KEY is a secret and lives in the
-    // dashboard; with it set, the app configures Resend's documented SMTP
-    // endpoint itself.
-    //
-    // getverifygh.com is verified in Resend - DKIM, SPF, the bounce MX and the
-    // relay CNAME all pass - so mail reaches anyone, not just the account
-    // owner. Sending from an unverified domain is rejected outright, so this
-    // and the Resend domain have to move together.
-    DEFAULT_FROM_EMAIL: `VerifyGH <no-reply@${ROOT_DOMAIN}>`,
+    // Transactional email through Brevo's API (docs/EMAIL.md). BREVO_API_KEY
+    // is a secret and lives in the dashboard. The sender must be verified in
+    // Brevo, on getverifygh.com authenticated there - Brevo refuses mail from
+    // an unauthenticated domain, so the domain and this address move together.
+    BREVO_SENDER_EMAIL: `support@${ROOT_DOMAIN}`,
+    BREVO_SENDER_NAME: "VerifyGH",
     EMAIL_VERIFICATION_TTL_HOURS: "24",
 
     // A Turnstile token is only good if it was solved on our own pages.
@@ -204,11 +201,11 @@ function backendEnv(databaseUrl: VariableValue, redisUrl: VariableValue) {
     GOOGLE_OAUTH_CLIENT_ID: preserve(),
     GOOGLE_OAUTH_CLIENT_SECRET: preserve(),
     EXCHANGE_RATE_API_KEY: preserve(),
-    // Set this and verification emails start arriving. Without it the API
-    // refuses to boot, rather than writing them to the container log where
-    // nobody will ever read them.
-    RESEND_API_KEY: preserve(),
-    // Only for a non-Resend provider.
+    // Brevo's API key (xkeysib-...). Without it the API refuses to boot,
+    // rather than writing emails to the container log where nobody will ever
+    // read them.
+    BREVO_API_KEY: preserve(),
+    // Only for an SMTP provider chosen with EMAIL_BACKEND.
     EMAIL_HOST: preserve(),
     EMAIL_HOST_USER: preserve(),
     EMAIL_HOST_PASSWORD: preserve(),
