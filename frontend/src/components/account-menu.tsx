@@ -4,6 +4,7 @@ import Link from "next/link";
 import * as React from "react";
 
 import { useAuth } from "@/components/auth-provider";
+import { useReferralsEnabled } from "@/components/referral-invite";
 import { ThemeSwitcher } from "@/components/theme";
 import {
   GiftIcon,
@@ -39,6 +40,8 @@ function initials(name: string, email: string): string {
  */
 export function AccountMenu() {
   const { user, signOut } = useAuth();
+  const referrals = useReferralsEnabled();
+  const links = LINKS.filter((link) => referrals || link.href !== "/refer");
   const [open, setOpen] = React.useState(false);
   const wrapper = React.useRef<HTMLDivElement>(null);
 
@@ -109,7 +112,7 @@ export function AccountMenu() {
           </div>
 
           <div className="py-1">
-            {LINKS.map((link) => (
+            {links.map((link) => (
               <Link
                 key={link.href}
                 href={link.href}

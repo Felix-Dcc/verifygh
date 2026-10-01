@@ -136,3 +136,52 @@ def test_no_endpoint_lets_a_client_award_itself_credit(user, auth, api):
     from apps.wallet.services import get_or_create_wallet
 
     assert get_or_create_wallet(user).promo_balance == Decimal("0.00")
+
+
+# ---------------------------------------------------------------------------
+# Pausing the programme
+# ---------------------------------------------------------------------------
+
+STATUS = "/api/v1/referrals/status/"
+ADMIN_PROGRAM = "/api/v1/admin/referral-program/"
+
+
+def test_the_status_is_public_and_follows_the_programme(api):
+    from apps.referrals.models import ReferralProgram
+
+    assert api.get(STATUS).data == {"enabled": True}
+    program = ReferralProgram.load()
+    program.is_enabled = False
+    program.save(update_fields=["is_enabled"])
+    assert api.get(STATUS).data == {"enabled": False}
+
+
+def test_a_paused_programme_accepts_no_code_and_says_so(api, user):
+    from apps.referrals.models import ReferralProgram
+
+    code = code_for(user).code
+    program = ReferralProgram.load()
+    program.is_enabled = False
+    program.save(update_fields=["is_enabled"])
+
+    body = api.post(VALIDATE, {"code": code}, format="json").data
+    assert body["valid"] is False and body["enabled"] is False
+
+
+def test_a_super_admin_pauses_it_with_a_reason_and_it_is_audited(admin_user, auth, api):
+    from apps.audit.models import AdminAction
+
+    client = auth(admin_user, "Correct-Horse-Battery-3")
+    response = client.patch(ADMIN_PROGRAM, {"is_enabled": False, "reason": "Paused for now"},
+                            format="json")
+    assert response.status_code == 200, response.data
+    assert response.data["is_enabled"] is False
+    assert api.get(STATUS).data == {"enabled": False}
+    assert AdminAction.objects.filter(action="REFERRAL_PROGRAM_UPDATE").exists()
+
+
+def test_support_staff_cannot_pause_it(support_user, auth):
+    client = auth(support_user, "Correct-Horse-Battery-4")
+    response = client.patch(ADMIN_PROGRAM, {"is_enabled": False, "reason": "Not allowed"},
+                            format="json")
+    assert response.status_code == 403

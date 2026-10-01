@@ -1,8 +1,22 @@
 "use client";
 
 import * as React from "react";
+import useSWR from "swr";
 
 import { api } from "@/lib/api";
+
+/**
+ * Whether the referral programme is running. Staff pause it from Admin >
+ * Referrals; while it is paused the app shows no way into it. `false` until
+ * known, so a paused programme never flashes into view.
+ */
+export function useReferralsEnabled(): boolean {
+  const { data } = useSWR<{ enabled: boolean }>("/referrals/status/", {
+    revalidateOnFocus: false,
+    shouldRetryOnError: false,
+  });
+  return data?.enabled === true;
+}
 
 const STORAGE_KEY = "vgh_ref";
 
@@ -44,9 +58,14 @@ export function useReferralInvite(): InviteState {
     let cancelled = false;
     setState({ code, status: "checking", bonus: "" });
     api
-      .post<{ valid: boolean; bonus_amount: string }>("/referrals/validate/", { code })
+      .post<{ valid: boolean; enabled?: boolean; bonus_amount: string }>("/referrals/validate/", { code })
       .then((result) => {
         if (cancelled) return;
+        if (result.enabled === false) {
+          // Paused: no banner, and no code sent - there is nothing to claim.
+          setState({ code: "", status: "idle", bonus: "" });
+          return;
+        }
         setState({
           code,
           status: result.valid ? "valid" : "invalid",

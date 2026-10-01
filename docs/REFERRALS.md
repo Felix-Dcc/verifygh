@@ -204,9 +204,18 @@ Together they also hold on SQLite, which has no row locks.
 5. Decide the budget. The cap is per referrer per month
    (`max_monthly_successful_referrals`); the programme has no global ceiling,
    so watch **Credit issued** on the referrals dashboard in the first weeks.
-6. To pause at any time, set `is_enabled` to false in the console. New
-   attributions stop immediately; credit already granted is untouched, and
-   codes keep working when you reopen.
+6. To pause at any time, use **Pause programme** on Admin → Referrals. It needs
+   the pricing permission, and the reason you give goes into the audit log.
+   While the programme is paused:
+   * new sign-ups are not linked to referrers, and no bonus is paid;
+   * customers see no "Refer friends" link anywhere;
+   * /refer shows only a "paused" notice and their past invitations;
+   * an invite link opens a plain sign-up page.
+
+   Credit already granted is untouched, and codes work again when you press
+   **Resume programme**. `REFERRAL_PROGRAM_ENABLED` only seeds the setting the
+   first time; after that the console switch is what counts. The app reads it
+   from `GET /api/v1/referrals/status/`.
 
 ### Before the first campaign
 

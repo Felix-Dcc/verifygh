@@ -466,7 +466,7 @@ VERIFYGH = {
     "WEBHOOK_PROVIDERS": env_list("WEBHOOK_PROVIDERS", ""),
     "EXCHANGE_RATE_PROVIDER": env("EXCHANGE_RATE_PROVIDER", "manual"),
     # Wallet / deposit limits (GHS)
-    "MIN_DEPOSIT": env("MIN_DEPOSIT", "5.00"),
+    "MIN_DEPOSIT": env("MIN_DEPOSIT", "10.00"),
     "MAX_DEPOSIT": env("MAX_DEPOSIT", "2000.00"),
     "MAX_WALLET_BALANCE": env("MAX_WALLET_BALANCE", "10000.00"),
     # Anti-abuse controls

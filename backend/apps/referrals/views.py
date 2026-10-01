@@ -27,6 +27,16 @@ class ReferralValidateThrottle(ResilientThrottleMixin, AnonRateThrottle):
     scope = "referral_validate"
 
 
+class ReferralStatusView(APIView):
+    """Whether the programme is running - so the app can hide it while paused."""
+
+    permission_classes = [AllowAny]
+    authentication_classes: list = []
+
+    def get(self, request):
+        return Response({"enabled": ReferralProgram.load().is_enabled})
+
+
 class MyReferralView(APIView):
     """The user's own code, link and the current bonus."""
 
@@ -89,6 +99,7 @@ class ValidateReferralCodeView(APIView):
         return Response(
             {
                 "valid": entry is not None,
+                "enabled": program.is_enabled,
                 "bonus_amount": str(program.signup_bonus),
                 "currency": program.currency,
             }

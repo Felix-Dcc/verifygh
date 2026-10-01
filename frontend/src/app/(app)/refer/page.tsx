@@ -91,11 +91,12 @@ export default function ReferPage() {
 
       {data && !data.enabled ? (
         <Alert tone="warn" title="The referral programme is paused">
-          Your code still works once it reopens. Nothing you have already earned is affected.
+          Invitations are not being accepted right now. Nothing you have already earned is
+          affected.
         </Alert>
       ) : null}
 
-      {error && !data ? (
+      {data && !data.enabled ? null : error && !data ? (
         <Card>
           <LoadError what="your referral code" onRetry={() => mutate()} />
         </Card>

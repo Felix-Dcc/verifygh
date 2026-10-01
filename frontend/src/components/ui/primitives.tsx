@@ -456,6 +456,8 @@ export function Badge({
 /** Maps every order / payment / transaction status onto a consistent colour,
  *  so "green means good" holds everywhere in the product. */
 const STATUS_TONES: Record<string, Tone> = {
+  ACTIVE: "success",
+  PAUSED: "warn",
   COMPLETED: "success",
   SUCCESS: "success",
   CODE_RECEIVED: "success",

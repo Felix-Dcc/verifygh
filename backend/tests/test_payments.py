@@ -68,6 +68,15 @@ def test_deposit_below_the_minimum_is_rejected(user, auth):
     assert response.data["error"]["code"] == "VALIDATION_ERROR"
 
 
+def test_the_minimum_deposit_is_ten_cedis(user, auth, api, settings):
+    # The shipped default, unless MIN_DEPOSIT says otherwise.
+    assert Decimal(str(settings.VERIFYGH["MIN_DEPOSIT"])) == Decimal("10.00")
+    client = auth(user)
+    assert start_deposit(client, amount="9.99").status_code == 400
+    assert start_deposit(client, amount="10.00").status_code == 201
+    assert api.get("/api/v1/payments/options/").data["min_deposit"] == "10.00"
+
+
 def test_invalid_ghanaian_number_is_rejected(user, auth):
     client = auth(user)
     response = start_deposit(client, phone="12345")

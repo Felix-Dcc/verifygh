@@ -7,6 +7,7 @@ import useSWR from "swr";
 
 import { useAuth } from "@/components/auth-provider";
 import { Logo, Logomark } from "@/components/brand";
+import { useReferralsEnabled } from "@/components/referral-invite";
 import {
   BellIcon,
   BoltIcon,
@@ -132,7 +133,18 @@ export function AppShell({
   children: React.ReactNode;
   variant?: "user" | "admin";
 }) {
-  const groups = variant === "admin" ? ADMIN_NAV : USER_NAV;
+  const referrals = useReferralsEnabled();
+  const groups = React.useMemo(
+    () =>
+      variant === "admin"
+        ? ADMIN_NAV
+        : // Referrals appear only while the programme is running.
+          USER_NAV.map((group) => ({
+            ...group,
+            items: group.items.filter((item) => referrals || item.href !== "/refer"),
+          })),
+    [variant, referrals],
+  );
 
   return (
     <div className="min-h-dvh bg-canvas">
@@ -391,13 +403,14 @@ function UserMenu({ variant }: { variant: "user" | "admin" }) {
     };
   }, [open]);
 
+  const referrals = useReferralsEnabled();
   const items =
     variant === "admin"
       ? [{ href: "/dashboard", label: "Customer view" }]
       : [
           { href: "/account", label: "Settings" },
           { href: "/account/notifications", label: "Notifications" },
-          { href: "/refer", label: "Refer friends" },
+          ...(referrals ? [{ href: "/refer", label: "Refer friends" }] : []),
           ...(isStaff ? [{ href: "/admin", label: "Admin console" }] : []),
         ];
 

@@ -59,7 +59,7 @@ Validation errors carry `details.fields`:
 
 ```json
 { "error": { "code": "VALIDATION_ERROR", "message": "...",
-             "details": { "fields": { "amount": ["The minimum deposit is GHS 5.00."] } } } }
+             "details": { "fields": { "amount": ["The minimum deposit is GHS 10.00."] } } } }
 ```
 
 ### Codes

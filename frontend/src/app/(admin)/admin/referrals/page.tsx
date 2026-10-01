@@ -1,7 +1,7 @@
 "use client";
 
 import * as React from "react";
-import useSWR from "swr";
+import useSWR, { mutate as globalMutate } from "swr";
 
 import { Pagination } from "@/components/admin/pagination";
 import { PageHeader } from "@/components/app-shell";
@@ -68,6 +68,8 @@ export default function AdminReferralsPage() {
         title="Referrals"
         description="Every invitation, what it cost, and why anything was held."
       />
+
+      <ProgrammeSwitch />
 
       <div className="metric-group grid-cols-1 sm:grid-cols-2 xl:grid-cols-4">
         <Stat label="Registrations" value={analytics?.registrations} />
@@ -370,5 +372,116 @@ function Detail({ label, value }: { label: string; value: string }) {
       <dt className="text-caption text-ink-muted">{label}</dt>
       <dd className="mt-0.5 font-medium text-ink">{value}</dd>
     </div>
+  );
+}
+
+type Programme = { is_enabled: boolean; signup_bonus: string; currency: string };
+
+/**
+ * The whole programme on or off. Paused: new sign-ups are not attributed, no
+ * bonus is paid, and customers see no way into referrals - history and credit
+ * already issued are untouched. Changing it is a money decision, so it needs
+ * the pricing permission, and the reason goes to the audit log.
+ */
+function ProgrammeSwitch() {
+  const toast = useToast();
+  const { can } = useAuth();
+  const { data, mutate } = useSWR<Programme>("/admin/referral-program/");
+  const [open, setOpen] = React.useState(false);
+  const [reason, setReason] = React.useState("");
+  const [busy, setBusy] = React.useState(false);
+  const [error, setError] = React.useState("");
+
+  if (!data) return <Skeleton className="h-[4.5rem] w-full rounded-2xl" />;
+
+  const running = data.is_enabled;
+  const canChange = can("PRICING_MANAGE");
+
+  async function change() {
+    setBusy(true);
+    setError("");
+    try {
+      const updated = await api.patch<Programme>("/admin/referral-program/", {
+        is_enabled: !running,
+        reason,
+      });
+      await mutate(updated, { revalidate: false });
+      // The customer app reads this to show or hide referrals.
+      void globalMutate("/referrals/status/");
+      toast.success(updated.is_enabled ? "Referral programme resumed" : "Referral programme paused");
+      setOpen(false);
+      setReason("");
+    } catch (caught) {
+      setError(caught instanceof ApiError ? caught.message : "Something went wrong.");
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  return (
+    <>
+      <Card className="flex flex-col gap-3 p-4 sm:flex-row sm:items-center sm:justify-between sm:p-5">
+        <div>
+          <p className="flex items-center gap-2 text-sm font-semibold text-ink">
+            Programme
+            <StatusBadge status={running ? "ACTIVE" : "PAUSED"} />
+          </p>
+          <p className="mt-0.5 text-sm text-ink-muted">
+            {running
+              ? `Running. New members invited with a code get ${cedis(data.signup_bonus)} once they qualify.`
+              : "Paused. Sign-ups are not linked to referrers, no bonus is paid, and customers do not see referrals."}
+          </p>
+        </div>
+        {canChange ? (
+          <Button
+            variant={running ? "secondary" : "primary"}
+            size="sm"
+            className="shrink-0"
+            onClick={() => setOpen(true)}
+          >
+            {running ? "Pause programme" : "Resume programme"}
+          </Button>
+        ) : null}
+      </Card>
+
+      <Dialog
+        open={open}
+        onClose={() => setOpen(false)}
+        title={running ? "Pause the referral programme?" : "Resume the referral programme?"}
+        description={
+          running
+            ? "New sign-ups stop being linked to referrers and no new bonuses are paid. Credit already issued, and every referral so far, stay as they are."
+            : "Invite codes start working again, and qualifying referrals earn the bonus."
+        }
+        dismissible={!busy}
+      >
+        <div className="space-y-4">
+          {error ? <Alert tone="danger" title="Could not change the programme">{error}</Alert> : null}
+          <Field label="Reason" htmlFor="programme-reason" required hint="Recorded in the audit log.">
+            <Textarea
+              id="programme-reason"
+              rows={2}
+              value={reason}
+              onChange={(event) => setReason(event.target.value)}
+              placeholder={running ? "Why pause it?" : "Why resume it?"}
+            />
+          </Field>
+          <div className="flex justify-end gap-2">
+            <Button variant="secondary" size="sm" onClick={() => setOpen(false)} disabled={busy}>
+              Cancel
+            </Button>
+            <Button
+              variant={running ? "danger" : "primary"}
+              size="sm"
+              loading={busy}
+              disabled={reason.trim().length < 5}
+              onClick={change}
+            >
+              {running ? "Pause programme" : "Resume programme"}
+            </Button>
+          </div>
+        </div>
+      </Dialog>
+    </>
   );
 }
