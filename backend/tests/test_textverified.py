@@ -63,6 +63,14 @@ def transport(monkeypatch):
     return {"calls": calls, "routes": routes}
 
 
+@pytest.fixture(autouse=True)
+def _no_retry_pause(monkeypatch):
+    """The pause before retrying an "Unavailable" purchase is real time; not here."""
+    from apps.verification import textverified
+
+    monkeypatch.setattr(textverified, "UNAVAILABLE_RETRY_SECONDS", 0)
+
+
 def auth_route(transport, token="tok-123"):
     transport["routes"][("POST", "/api/pub/v2/auth")] = FakeResponse(
         200, {"token": token, "expiresIn": 3600,
@@ -283,6 +291,76 @@ def test_a_pricing_failure_surfaces_as_a_clean_error(configured, transport):
     assert "price has changed" in message
     # The provider's own wording never reaches the customer.
     assert "maxPrice" not in message
+
+
+def test_a_momentary_shortage_is_retried_once_under_a_new_key(configured, transport):
+    """Unavailable reserved nothing; the same number can often be bought seconds later."""
+    order_routes(transport)
+    replies = iter([
+        FakeResponse(400, {"errorCode": "Unavailable", "errorDescription": "No stock"}),
+        FakeResponse(201, {"method": "GET", "href": "/api/pub/v2/verifications/ver_1"}),
+    ])
+    transport["routes"][("POST", "/api/pub/v2/verifications")] = lambda body, params: next(replies)
+
+    order = configured.create_order("instagram", "US", "order:abc")
+
+    assert order.provider_order_id == "ver_1"
+    creates = [c for c in transport["calls"] if c["url"].endswith("/v2/verifications")]
+    # The first key would replay the 400; the retry has its own.
+    assert [c["headers"]["Idempotency-Key"] for c in creates] == ["order:abc", "order:abc:retry"]
+    assert creates[0]["json"] == creates[1]["json"]
+
+
+def test_a_shortage_that_lasts_is_not_retried_again(configured, transport):
+    order_routes(transport)
+    transport["routes"][("POST", "/api/pub/v2/verifications")] = FakeResponse(
+        400, {"errorCode": "Unavailable"}
+    )
+
+    with pytest.raises(ProviderError) as excinfo:
+        configured.create_order("instagram", "US", "order:abc")
+
+    assert excinfo.value.provider_code == "Unavailable"
+    creates = [c for c in transport["calls"] if c["url"].endswith("/v2/verifications")]
+    assert len(creates) == 2
+
+
+def test_other_refusals_are_not_retried(configured, transport):
+    order_routes(transport)
+    transport["routes"][("POST", "/api/pub/v2/verifications")] = FakeResponse(
+        400, {"errorCode": "PricingFailure"}
+    )
+
+    with pytest.raises(ProviderError):
+        configured.create_order("instagram", "US", "order:abc")
+
+    creates = [c for c in transport["calls"] if c["url"].endswith("/v2/verifications")]
+    assert len(creates) == 1
+
+
+def test_the_providers_reason_is_logged_for_staff_with_numbers_masked(configured, transport,
+                                                                      caplog):
+    import logging
+
+    order_routes(transport)
+    transport["routes"][("POST", "/api/pub/v2/verifications")] = FakeResponse(
+        400, {"errorCode": "PricingFailure",
+              "errorDescription": "Price 1.80 is above maxPrice for 12025550142"}
+    )
+    # The app's loggers do not propagate to the root, so listen on them directly.
+    app_logger = logging.getLogger("verifygh")
+    app_logger.addHandler(caplog.handler)
+    try:
+        with caplog.at_level(logging.INFO, logger="verifygh"), pytest.raises(ProviderError):
+            configured.create_order("instagram", "US", "order:abc")
+    finally:
+        app_logger.removeHandler(caplog.handler)
+
+    logged = [r for r in caplog.records if r.getMessage() == "textverified_error"]
+    assert logged and "above maxPrice" in logged[0].provider_description
+    assert "12025550142" not in logged[0].provider_description
+    refused = [r for r in caplog.records if r.getMessage() == "textverified_create_refused"]
+    assert refused and refused[0].max_price == "0.79"
 
 
 @pytest.mark.parametrize(("error_code", "expected"), [

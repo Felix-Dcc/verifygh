@@ -93,6 +93,11 @@ PRICING_CURSOR_KEY = "textverified:pricing_cursor"
 #: empty balance stops every order and needs a person to top it up.
 OPERATIONAL_ERROR_CODES = {"insufficientbalance"}
 
+#: A purchase TextVerified answers "Unavailable" reserved nothing, and the
+#: shortage is often momentary (the same number can be bought minutes later).
+#: One more try after this pause, before the customer is refunded.
+UNAVAILABLE_RETRY_SECONDS = 3
+
 WEBHOOK_SIGNATURE_HEADER = "x-webhook-signature"
 WEBHOOK_SIGNATURE_PREFIX = "HMAC-SHA512="
 
@@ -299,8 +304,16 @@ class TextVerifiedProvider(VerificationProvider):
             # The documented error shape is {errorCode, errorDescription}.
             code = str(payload.get("errorCode", "") if isinstance(payload, dict) else "")[:60]
             operational = code.lower() in OPERATIONAL_ERROR_CODES
+            # TextVerified's own explanation, for staff: it says *why* ("price
+            # above maxPrice", "no stock for these options") where the code
+            # alone cannot. Long digit runs are masked - a description must
+            # never put a number or a code in the log.
+            description = str(payload.get("errorDescription", "")
+                              if isinstance(payload, dict) else "")
+            description = re.sub(r"\d{4,}", "#", description)[:200]
             logger.error("textverified_error", extra={"status": response.status_code,
                                                       "provider_code": code,
+                                                      "provider_description": description,
                                                       "operational": operational})
             raise _provider_error(_message_for(code), code, operational=operational)
         return payload
@@ -493,16 +506,31 @@ class TextVerifiedProvider(VerificationProvider):
         # nothing on a cheap service ($0.10 x 1.05 would round back to $0.10).
         max_price = (price * tolerance).quantize(Decimal("0.01"), rounding=ROUND_CEILING)
 
-        created = self._request(
-            "POST", self._url(self.PATH_CREATE_ORDER),
-            json_body={
-                "serviceName": service_code,
-                "capability": self.CAPABILITY,
-                "maxPrice": float(max_price),
-            },
+        body = {
+            "serviceName": service_code,
+            "capability": self.CAPABILITY,
+            "maxPrice": float(max_price),
+        }
+        for attempt in (1, 2):
             # Forwarded so a retry after a timeout cannot reserve two numbers.
-            extra_headers={"Idempotency-Key": idempotency_key[:128]},
-        )
+            # The second attempt needs a key of its own: the first answered
+            # 400 and reserved nothing, and its key would replay that answer.
+            key = idempotency_key if attempt == 1 else f"{idempotency_key}:retry"
+            try:
+                created = self._request(
+                    "POST", self._url(self.PATH_CREATE_ORDER),
+                    json_body=body, extra_headers={"Idempotency-Key": key[:128]},
+                )
+                break
+            except ProviderError as exc:
+                code = str(getattr(exc, "provider_code", "") or "")
+                logger.warning("textverified_create_refused", extra={
+                    "service": service_code[:60], "attempt": attempt, "provider_code": code,
+                    "price": str(price), "max_price": str(max_price),
+                })
+                if attempt == 2 or code.lower() != "unavailable":
+                    raise
+                time.sleep(UNAVAILABLE_RETRY_SECONDS)
 
         # The documented 201 response is a link to the new verification.
         href = str(created.get("href") or "")

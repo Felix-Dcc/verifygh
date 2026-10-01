@@ -635,6 +635,11 @@ def fulfil_order(order: Order) -> Order:
         except Exception:
             # Alerting must never stand between the customer and their refund.
             logger.exception("provider_failure_alert_failed")
+        if str(getattr(exc, "provider_code", "") or "").lower() == "unavailable":
+            return fail_order(order, reason=(
+                f"No {order.service.name} number was available just then. Your money is back "
+                "in your wallet - try again in a few minutes."
+            ))
         return fail_order(order, reason="The provider could not supply a number.")
 
     if result.state == ProviderOrderState.FAILED:

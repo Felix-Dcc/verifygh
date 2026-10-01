@@ -312,6 +312,26 @@ def test_an_empty_provider_balance_refunds_and_alerts_staff(tv, tv_catalog, buye
     assert "InsufficientBalance" in alert.message
 
 
+def test_no_number_available_is_retried_then_explained_plainly(
+    tv, tv_catalog, buyer, auth, django_capture_on_commit_callbacks, monkeypatch
+):
+    from apps.verification import textverified
+
+    monkeypatch.setattr(textverified, "UNAVAILABLE_RETRY_SECONDS", 0)
+    authorise(tv_catalog)
+    tv["routes"][("POST", "/api/pub/v2/verifications")] = Reply(
+        400, {"errorCode": "Unavailable", "errorDescription": "No inventory."})
+
+    response = buy(auth(buyer), django_capture_on_commit_callbacks)
+    order = Order.objects.get(reference=response.data["reference"])
+
+    assert len(creates(tv)) == 2  # tried twice before giving up
+    assert order.status == OrderStatus.REFUNDED
+    assert order.failure_reason.startswith(f"No {order.service.name} number was available")
+    assert "inventory" not in order.failure_reason.lower()  # their wording stays internal
+    assert get_or_create_wallet(buyer).balance == Decimal("200.00")
+
+
 def test_a_provider_timeout_refunds(tv, tv_catalog, buyer, auth,
                                     django_capture_on_commit_callbacks):
     authorise(tv_catalog)
