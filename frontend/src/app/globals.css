@@ -527,6 +527,14 @@
     margin-bottom: calc(4.5rem + var(--safe-bottom));
   }
 
+  /* The app's content area on phones: room for the fixed bottom navigation
+     (4rem tall, plus the home-indicator inset it sits above) and a little air,
+     so the last thing on a page - "Show more", a form's button - is never
+     under it. lg:pb-* takes over where the bar is hidden. */
+  .pb-safe-nav {
+    padding-bottom: calc(5.5rem + var(--safe-bottom));
+  }
+
   .no-scrollbar::-webkit-scrollbar {
     display: none;
   }
