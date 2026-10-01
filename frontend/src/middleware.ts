@@ -181,7 +181,7 @@ export const config = {
      */
     {
       source:
-        "/((?!_next/static|_next/image|favicon.ico|icon.svg|apple-icon.png|manifest.webmanifest|opengraph-image|twitter-image|icons/|service-icons/|robots.txt|sitemap.xml).*)",
+        "/((?!_next/static|_next/image|favicon.ico|icon.svg|apple-icon.png|manifest.webmanifest|opengraph-image|twitter-image|icons/|service-icons/|networks/|robots.txt|sitemap.xml).*)",
       missing: [
         { type: "header", key: "next-router-prefetch" },
         { type: "header", key: "purpose", value: "prefetch" },

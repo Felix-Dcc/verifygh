@@ -5,6 +5,7 @@ import useSWR from "swr";
 
 import { CountryFlag } from "@/components/country-flag";
 import { ArrowLeftIcon, CheckCircleIcon, GridIcon, LockIcon, PhoneIcon, PlusIcon, WalletIcon } from "@/components/icons";
+import { NetworkLogo } from "@/components/network-logo";
 import { Skeleton, cn } from "@/components/ui/primitives";
 import { cedis, signedCedis } from "@/lib/format";
 import type { MarketHome, PaymentOptions } from "@/lib/types";
@@ -20,8 +21,8 @@ import { BottomNav, Device, Halo, HomeIndicator, Reveal, ScreenStack, StatusBar,
  * The networks, the quick amounts and which network a 024 number belongs to
  * all come from the live payment options (the same data the Add funds screen
  * uses), so nothing here can name a network that is not supported today.
- * Names, not logos: the networks' marks are theirs. Invented: the example
- * balance and phone number.
+ * Each is shown with its own logo (components/network-logo.tsx). Invented: the
+ * example balance and phone number.
  */
 
 const STEP_MS = 3800;
@@ -100,9 +101,9 @@ export function PaymentSection() {
                 ? data.networks.map((entry) => (
                     <li
                       key={entry.value}
-                      className="flex items-center gap-2.5 rounded-2xl border border-line bg-surface py-2 pl-3 pr-4 shadow-card"
+                      className="flex items-center gap-2.5 rounded-2xl border border-line bg-surface py-2 pl-2 pr-4 shadow-card"
                     >
-                      <span aria-hidden className="h-2 w-2 shrink-0 rounded-full bg-brand-500" />
+                      <NetworkLogo network={entry.value} label={entry.label} />
                       <span>
                         <span className="block text-sm font-semibold text-ink">{entry.label}</span>
                         {/* Which numbers belong to it - how people here tell networks apart */}

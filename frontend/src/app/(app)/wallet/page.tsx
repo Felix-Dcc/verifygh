@@ -6,6 +6,7 @@ import useSWR from "swr";
 import { AppHero, HeroAmount } from "@/components/app-hero";
 import { ArrowRightIcon, PlusIcon } from "@/components/icons";
 import { StatementArt, WalletArt } from "@/components/illustrations";
+import { NetworkLogo } from "@/components/network-logo";
 import {
   Alert,
   ButtonLink,
@@ -143,7 +144,7 @@ export default function WalletPage() {
               <ul className="divide-y divide-line">
                 {payments.data.results.map((payment) => (
                   <li key={payment.id} className="flex items-center gap-3 px-4 py-3.5 sm:px-5">
-                    <NetworkMark label={payment.network_label} />
+                    <NetworkLogo network={payment.network} label={payment.network_label} />
                     <div className="min-w-0 flex-1">
                       <p className="text-sm text-ink">
                         <span className="tabular font-semibold">{cedis(payment.amount)}</span>
@@ -218,19 +219,6 @@ function InAndOut({
         ))}
       </div>
     </div>
-  );
-}
-
-/** The network a top-up came from, as a small mark of its initials - named, not its logo. */
-function NetworkMark({ label }: { label: string }) {
-  const short = label.startsWith("MTN") ? "MTN" : label.startsWith("Telecel") ? "TC" : label.startsWith("AT") ? "AT" : label.slice(0, 2);
-  return (
-    <span
-      aria-hidden
-      className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-gradient-to-br from-[#0B63B6] to-[#137A4E] text-2xs font-bold text-white shadow-[0_6px_14px_-6px_rgba(8,120,209,0.7)]"
-    >
-      {short}
-    </span>
   );
 }
 

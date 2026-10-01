@@ -7,6 +7,7 @@ import useSWR, { mutate as globalMutate } from "swr";
 import { PageHeader } from "@/components/app-shell";
 import { useAuth } from "@/components/auth-provider";
 import { AlertIcon, CheckCircleIcon, ClockIcon, PhoneIcon } from "@/components/icons";
+import { NetworkLogo } from "@/components/network-logo";
 import {
   Alert,
   Button,
@@ -274,24 +275,32 @@ function DepositForm({
               }
               required
             >
-              <Select
-                id="network"
-                value={network}
-                onChange={(event) => {
-                  setNetwork(event.target.value);
-                  // Once they have chosen, stop the number field overriding it.
-                  userPickedNetwork.current = true;
-                }}
-                invalid={Boolean(fieldErrors.network)}
-                required
-              >
-                <option value="">Select your network</option>
-                {options.networks.map((item) => (
-                  <option key={item.value} value={item.value}>
-                    {item.label}
-                  </option>
-                ))}
-              </Select>
+              <div className="flex items-center gap-3">
+                {/* The chosen network's logo, so a wrong pick is easy to spot. */}
+                {network ? (
+                  <NetworkLogo network={network} className="h-11 w-11" />
+                ) : (
+                  <span aria-hidden className="h-11 w-11 shrink-0 rounded-xl border border-dashed border-line-strong" />
+                )}
+                <Select
+                  id="network"
+                  value={network}
+                  onChange={(event) => {
+                    setNetwork(event.target.value);
+                    // Once they have chosen, stop the number field overriding it.
+                    userPickedNetwork.current = true;
+                  }}
+                  invalid={Boolean(fieldErrors.network)}
+                  required
+                >
+                  <option value="">Select your network</option>
+                  {options.networks.map((item) => (
+                    <option key={item.value} value={item.value}>
+                      {item.label}
+                    </option>
+                  ))}
+                </Select>
+              </div>
             </Field>
           </div>
         </Step>
@@ -543,8 +552,11 @@ function AwaitingApproval({
               We sent a prompt for{" "}
               <span className="tabular font-semibold text-ink">{cedis(payment.amount)}</span> to{" "}
               <span className="tabular font-medium text-ink">{payment.phone_display}</span> on{" "}
-              {payment.network_label}. Enter your Mobile Money PIN on your handset to approve
-              it.
+              <span className="inline-flex items-center gap-1.5 whitespace-nowrap align-middle font-medium text-ink">
+                <NetworkLogo network={payment.network} label={payment.network_label} size="sm" />
+                {payment.network_label}
+              </span>
+              . Enter your Mobile Money PIN on your handset to approve it.
             </>
           ) : (
             <>
