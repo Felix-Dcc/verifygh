@@ -7,11 +7,13 @@ import { Pagination } from "@/components/admin/pagination";
 import { PageHeader } from "@/components/app-shell";
 import { CheckCircleIcon, SearchIcon } from "@/components/icons";
 import { ServiceLogo } from "@/components/service-logo";
+import { Dialog } from "@/components/ui/dialog";
 import {
   Alert,
   Badge,
   Button,
   Card,
+  Checkbox,
   EmptyState,
   Input,
   LoadError,
@@ -57,6 +59,21 @@ export default function AdminLogosPage() {
     { page, search: debounced },
   ]);
 
+  // What each row's live search found, and which of those logos did not load.
+  const [found, setFound] = React.useState<Record<string, Candidate[]>>({});
+  const [missing, setMissing] = React.useState<Record<string, true>>({});
+  const [reviewing, setReviewing] = React.useState(false);
+  const onFound = React.useCallback((slug: string, results: Candidate[]) => {
+    setFound((current) => ({ ...current, [slug]: results }));
+  }, []);
+  const onMissing = React.useCallback((domain: string) => {
+    setMissing((current) => (current[domain] ? current : { ...current, [domain]: true }));
+  }, []);
+
+  const picks = (data?.results ?? [])
+    .map((row) => ({ row, choice: claimedChoice(row, found[row.slug], missing) }))
+    .filter((item): item is { row: QueueRow; choice: Candidate } => item.choice !== null);
+
   return (
     <div className="space-y-4">
       <PageHeader
@@ -79,6 +96,17 @@ export default function AdminLogosPage() {
               : `${data.count} services on sale still show the generic tile.`
             : " "}
         </p>
+        <div className="flex flex-col gap-2 sm:flex-row sm:items-center">
+          {data?.configured ? (
+            <Button
+              variant="secondary"
+              disabled={picks.length === 0}
+              onClick={() => setReviewing(true)}
+              className="shrink-0"
+            >
+              Use claimed brands ({picks.length})
+            </Button>
+          ) : null}
         <div className="relative sm:w-80">
           <SearchIcon className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-ink-muted" />
           <Input
@@ -88,6 +116,7 @@ export default function AdminLogosPage() {
             className="pl-9"
             aria-label="Find a service"
           />
+        </div>
         </div>
       </div>
 
@@ -112,7 +141,14 @@ export default function AdminLogosPage() {
       ) : (
         <Card className="divide-y divide-line overflow-hidden">
           {data.results.map((row) => (
-            <QueueItem key={row.slug} row={row} enabled={data.configured} onDone={() => mutate()} />
+            <QueueItem
+              key={row.slug}
+              row={row}
+              enabled={data.configured}
+              onDone={() => mutate()}
+              onFound={onFound}
+              onMissing={onMissing}
+            />
           ))}
         </Card>
       )}
@@ -128,11 +164,157 @@ export default function AdminLogosPage() {
           noun="services"
         />
       ) : null}
+
+      <ClaimedReview
+        open={reviewing}
+        picks={picks}
+        onClose={() => setReviewing(false)}
+        onDone={() => {
+          setReviewing(false);
+          void mutate();
+        }}
+      />
     </div>
   );
 }
 
-function QueueItem({ row, enabled, onDone }: { row: QueueRow; enabled: boolean; onDone: () => void }) {
+/**
+ * The brand-claimed match for one service, when one click can safely decide it:
+ * the one claimed brand, or - if several are claimed - the one with exactly
+ * the service's name. None when it is ambiguous, or its logo did not load.
+ */
+function claimedChoice(
+  row: QueueRow,
+  candidates: Candidate[] | undefined,
+  missing: Record<string, true>,
+): Candidate | null {
+  const claimed = (candidates ?? []).filter((candidate) => candidate.claimed && !missing[candidate.domain]);
+  if (claimed.length === 1) return claimed[0];
+  const named = claimed.filter((candidate) => sameName(candidate.name, row.name));
+  return named.length === 1 ? named[0] : null;
+}
+
+/** Confirm the claimed brands for this page, untick any that look wrong, then apply. */
+function ClaimedReview({
+  open,
+  picks,
+  onClose,
+  onDone,
+}: {
+  open: boolean;
+  picks: { row: QueueRow; choice: Candidate }[];
+  onClose: () => void;
+  onDone: () => void;
+}) {
+  const toast = useToast();
+  const [chosen, setChosen] = React.useState<Record<string, boolean>>({});
+  const [progress, setProgress] = React.useState<{ done: number; failed: number } | null>(null);
+
+  React.useEffect(() => {
+    if (open) {
+      setChosen(Object.fromEntries(picks.map(({ row }) => [row.slug, true])));
+      setProgress(null);
+    }
+    // Only when the dialog opens: picks keep arriving as rows finish searching.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [open]);
+
+  const selected = picks.filter(({ row }) => chosen[row.slug]);
+  const running = progress !== null;
+
+  async function apply() {
+    let done = 0;
+    let failed = 0;
+    setProgress({ done, failed });
+    // One at a time: each is its own audited decision.
+    for (const { row, choice } of selected) {
+      try {
+        await api.post(`/admin/services/${row.slug}/brand-logo/`, {
+          domain: choice.domain,
+          reason: `Brand-claimed match on Brandfetch: ${choice.domain}`,
+        });
+        done += 1;
+      } catch {
+        failed += 1;
+      }
+      setProgress({ done, failed });
+    }
+    if (failed) toast.error(`${done} logos set, ${failed} failed`, "The failed ones are still in the queue.");
+    else toast.success(`${done} logos set`, "Each is in the audit log.");
+    onDone();
+  }
+
+  return (
+    <Dialog
+      open={open}
+      onClose={onClose}
+      title="Use the brand-claimed logos?"
+      description="For each service below, the logo of the one company that claimed its own Brandfetch profile. Untick any that is not the right company."
+      dismissible={!running}
+    >
+      <div className="space-y-4">
+        <ul className="max-h-[50vh] divide-y divide-line overflow-y-auto rounded-xl border border-line">
+          {picks.map(({ row, choice }) => {
+            const different = !sameName(choice.name, row.name);
+            return (
+              <li key={row.slug} className="flex items-center gap-3 px-3 py-2.5">
+                <Checkbox
+                  id={`claimed-${row.slug}`}
+                  checked={Boolean(chosen[row.slug])}
+                  disabled={running}
+                  onChange={(event) => setChosen((current) => ({ ...current, [row.slug]: event.target.checked }))}
+                  label={
+                    <span className="flex items-center gap-3">
+                      {/* eslint-disable-next-line @next/next/no-img-element -- Brandfetch requires hotlinking its CDN */}
+                      <img src={choice.logo_url} alt="" width={32} height={32} className="h-8 w-8 rounded-lg ring-1 ring-ink/10" />
+                      <span className="min-w-0">
+                        <span className="block truncate text-sm font-medium text-ink">{row.name}</span>
+                        <span className="block truncate text-caption text-ink-muted">
+                          {choice.name} - {choice.domain}
+                        </span>
+                      </span>
+                    </span>
+                  }
+                />
+                {different ? <Badge tone="warn" className="ml-auto shrink-0">Different name</Badge> : null}
+              </li>
+            );
+          })}
+        </ul>
+        <p className="text-caption text-ink-muted">
+          Services with several claimed companies, or none, are left for you to decide one by one.
+        </p>
+        <div className="flex items-center justify-end gap-2">
+          {progress ? (
+            <span className="mr-auto text-sm text-ink-muted">
+              {progress.done + progress.failed} of {selected.length} done
+            </span>
+          ) : null}
+          <Button variant="secondary" onClick={onClose} disabled={running}>
+            Cancel
+          </Button>
+          <Button onClick={apply} loading={running} disabled={selected.length === 0}>
+            Use {selected.length} {selected.length === 1 ? "logo" : "logos"}
+          </Button>
+        </div>
+      </div>
+    </Dialog>
+  );
+}
+
+function QueueItem({
+  row,
+  enabled,
+  onDone,
+  onFound,
+  onMissing,
+}: {
+  row: QueueRow;
+  enabled: boolean;
+  onDone: () => void;
+  onFound: (slug: string, results: Candidate[]) => void;
+  onMissing: (domain: string) => void;
+}) {
   const toast = useToast();
   const [query, setQuery] = React.useState(row.name);
   const [draft, setDraft] = React.useState(row.name);
@@ -143,6 +325,10 @@ function QueueItem({ row, enabled, onDone }: { row: QueueRow; enabled: boolean; 
     enabled ? [`/admin/services/${row.slug}/logo-candidates/`, { q: query }] : null,
     { revalidateOnFocus: false, shouldRetryOnError: false },
   );
+
+  React.useEffect(() => {
+    if (data) onFound(row.slug, data.results);
+  }, [data, row.slug, onFound]);
 
   async function decide(body: Record<string, unknown>, done: string, key: string) {
     setBusy(key);
@@ -202,6 +388,7 @@ function QueueItem({ row, enabled, onDone }: { row: QueueRow; enabled: boolean; 
               exact={sameName(candidate.name, row.name)}
               busy={busy === candidate.domain}
               disabled={Boolean(busy)}
+              onMissing={() => onMissing(candidate.domain)}
               onUse={() =>
                 decide({ domain: candidate.domain }, `${row.name}: logo from ${candidate.domain}`, candidate.domain)
               }
@@ -261,12 +448,14 @@ function CandidateCard({
   busy,
   disabled,
   onUse,
+  onMissing,
 }: {
   candidate: Candidate;
   exact: boolean;
   busy: boolean;
   disabled: boolean;
   onUse: () => void;
+  onMissing: () => void;
 }) {
   // Brandfetch answers 404 for a brand with no logo: there is nothing to use.
   const [missing, setMissing] = React.useState(false);
@@ -285,7 +474,10 @@ function CandidateCard({
           width={40}
           height={40}
           loading="lazy"
-          onError={() => setMissing(true)}
+          onError={() => {
+            setMissing(true);
+            onMissing();
+          }}
           className="h-10 w-10 shrink-0 rounded-xl object-cover ring-1 ring-ink/10"
         />
       )}
