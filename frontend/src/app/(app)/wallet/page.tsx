@@ -3,11 +3,11 @@
 import Link from "next/link";
 import useSWR from "swr";
 
-import { PageHeader } from "@/components/app-shell";
+import { AppHero, HeroAmount } from "@/components/app-hero";
+import { ArrowRightIcon, PlusIcon } from "@/components/icons";
 import { StatementArt, WalletArt } from "@/components/illustrations";
 import {
   Alert,
-  Amount,
   ButtonLink,
   Card,
   EmptyState,
@@ -20,6 +20,11 @@ import { TransactionRow } from "@/components/wallet/transaction-row";
 import { cedis, formatDateTime } from "@/lib/format";
 import type { Paginated, Payment, Transaction, WalletSummary } from "@/lib/types";
 
+/**
+ * The wallet: what can be spent now (cash and promotional credit, always
+ * shown apart), what has gone in and out over time drawn to scale, and the
+ * two histories - every ledger movement, and the Mobile Money top-ups.
+ */
 export default function WalletPage() {
   const {
     data: summary,
@@ -36,10 +41,54 @@ export default function WalletPage() {
 
   return (
     <div className="space-y-8">
-      <PageHeader
+      <AppHero
         title="Wallet"
-        description="Your cedi balance, top-ups and everything you have spent."
-      />
+        description="Your cedi balance, your Mobile Money top-ups and everything you have spent."
+        actions={
+          <>
+            <ButtonLink href="/wallet/deposit" variant="onBand" icon={<PlusIcon className="h-4 w-4" />}>
+              Add funds
+            </ButtonLink>
+            <ButtonLink href="/services" variant="onBandOutline">
+              Buy a number
+            </ButtonLink>
+          </>
+        }
+        aside={
+          <InAndOut
+            loading={isLoading}
+            failed={summaryFailed}
+            added={wallet?.total_deposited}
+            spent={wallet?.total_spent}
+          />
+        }
+      >
+        <div className="mt-6">
+          <p className="text-caption font-medium text-white/60">{hasPromo ? "Available to spend" : "Available balance"}</p>
+          <div className="mt-1 min-h-12">
+            {isLoading ? (
+              <Skeleton className="h-12 w-56" />
+            ) : summaryFailed ? (
+              <LoadError compact what="your balance" onRetry={() => retrySummary()} className="pt-2" />
+            ) : (
+              <HeroAmount value={cedis(hasPromo ? wallet?.spendable : wallet?.balance)} />
+            )}
+          </div>
+          {/* Cash and promotional credit are shown apart, always. One can be
+              withdrawn and refunded as money; the other cannot. */}
+          {hasPromo ? (
+            <div className="mt-3 flex flex-wrap gap-2">
+              <span className="rounded-full border border-white/15 bg-white/[0.06] px-3 py-1 text-caption text-white/80">
+                <span className="tabular font-semibold text-white">{cedis(wallet?.balance)}</span> cash
+              </span>
+              <span className="rounded-full border border-[#E9C46A]/30 bg-[#E9C46A]/10 px-3 py-1 text-caption text-[#F3D98B]">
+                <span className="tabular font-semibold">{cedis(wallet?.promo_balance)}</span> promotional credit,
+                used first
+              </span>
+            </div>
+          ) : null}
+        </div>
+      </AppHero>
 
       {wallet?.is_frozen ? (
         <Alert tone="danger" title="This wallet is on hold">
@@ -47,59 +96,16 @@ export default function WalletPage() {
         </Alert>
       ) : null}
 
-      <Card className="grid grid-cols-1 gap-6 p-5 sm:p-6 md:grid-cols-5">
-        <div className="md:col-span-3">
-          <p className="text-sm text-ink-muted">{hasPromo ? "Available to spend" : "Available balance"}</p>
-          <div className="mt-1.5 min-h-10">
-            {isLoading ? (
-              <Skeleton className="h-10 w-48" />
-            ) : summaryFailed ? (
-              <LoadError compact what="your balance" onRetry={() => retrySummary()} className="pt-2" />
-            ) : (
-              <Amount value={cedis(hasPromo ? wallet?.spendable : wallet?.balance)} />
-            )}
-          </div>
-          {/* Cash and promotional credit are shown apart, always. One can be
-              withdrawn and refunded as money; the other cannot. */}
-          {hasPromo ? (
-            <p className="mt-1.5 text-caption text-ink-muted">
-              <span className="tabular">{cedis(wallet?.balance)}</span> cash and{" "}
-              <span className="tabular font-medium text-gold-700">{cedis(wallet?.promo_balance)}</span>{" "}
-              promotional credit, which is used first.
-            </p>
-          ) : null}
-          <div className="mt-5 flex flex-wrap gap-2">
-            <ButtonLink href="/wallet/deposit">Add funds</ButtonLink>
-            <ButtonLink href="/services" variant="secondary">Buy a number</ButtonLink>
-          </div>
-        </div>
-
-        <dl className="grid grid-cols-2 gap-4 border-t border-line pt-5 md:col-span-2 md:grid-cols-1 md:content-center md:border-l md:border-t-0 md:pl-6 md:pt-0">
-          <div>
-            <dt className="text-caption text-ink-muted">Total added</dt>
-            <dd className="tabular mt-0.5 text-heading text-ink">
-              {isLoading ? <Skeleton className="h-5 w-24" /> : cedis(wallet?.total_deposited)}
-            </dd>
-          </div>
-          <div>
-            <dt className="text-caption text-ink-muted">Total spent</dt>
-            <dd className="tabular mt-0.5 text-heading text-ink">
-              {isLoading ? <Skeleton className="h-5 w-24" /> : cedis(wallet?.total_spent)}
-            </dd>
-          </div>
-        </dl>
-      </Card>
-
-      <div className="grid grid-cols-1 gap-8 lg:grid-cols-2">
+      <div className="grid grid-cols-1 gap-8 lg:grid-cols-2 lg:gap-6">
         <Section
           title="Recent transactions"
           action={
-            <Link href="/transactions" className="link text-sm">
-              All transactions
+            <Link href="/transactions" className="link inline-flex min-h-11 items-center gap-1 text-sm sm:min-h-0">
+              Full statement <ArrowRightIcon className="h-3.5 w-3.5" />
             </Link>
           }
         >
-          <Card className="overflow-hidden">
+          <Card className="overflow-hidden rounded-2xl">
             {transactions.error && !transactions.data ? (
               <LoadError what="your transactions" onRetry={() => transactions.mutate()} />
             ) : !transactions.data ? (
@@ -121,7 +127,7 @@ export default function WalletPage() {
         </Section>
 
         <Section title="Top-ups" description="Mobile Money payments into your wallet.">
-          <Card className="overflow-hidden">
+          <Card className="overflow-hidden rounded-2xl">
             {payments.error && !payments.data ? (
               <LoadError what="your top-ups" onRetry={() => payments.mutate()} />
             ) : !payments.data ? (
@@ -131,17 +137,16 @@ export default function WalletPage() {
                 art={<WalletArt />}
                 title="No top-ups yet"
                 description="Add funds from MTN MoMo, Telecel Cash or AT Money."
-                action={
-                  <ButtonLink href="/wallet/deposit" size="sm">Add funds</ButtonLink>
-                }
+                action={<ButtonLink href="/wallet/deposit" size="sm">Add funds</ButtonLink>}
               />
             ) : (
               <ul className="divide-y divide-line">
                 {payments.data.results.map((payment) => (
-                  <li key={payment.id} className="flex items-center gap-3 px-4 py-3 sm:px-5">
+                  <li key={payment.id} className="flex items-center gap-3 px-4 py-3.5 sm:px-5">
+                    <NetworkMark label={payment.network_label} />
                     <div className="min-w-0 flex-1">
                       <p className="text-sm text-ink">
-                        <span className="tabular font-medium">{cedis(payment.amount)}</span>
+                        <span className="tabular font-semibold">{cedis(payment.amount)}</span>
                         <span className="text-ink-muted"> from {payment.network_label}</span>
                       </p>
                       <p className="truncate text-caption text-ink-muted">
@@ -161,6 +166,71 @@ export default function WalletPage() {
         </Section>
       </div>
     </div>
+  );
+}
+
+/**
+ * Money in and money out, drawn to scale against each other: two bars on the
+ * navy panel. Just the two totals the wallet reports - no sums implied
+ * between them (refunds and promotional credit live elsewhere).
+ */
+function InAndOut({
+  loading,
+  failed,
+  added,
+  spent,
+}: {
+  loading: boolean;
+  failed: boolean;
+  added?: string;
+  spent?: string;
+}) {
+  const inValue = Number.parseFloat(added ?? "0") || 0;
+  const outValue = Number.parseFloat(spent ?? "0") || 0;
+  const max = Math.max(inValue, outValue, 1);
+  const bars = [
+    { label: "Total added", value: added, width: inValue / max, tone: "from-azure to-aqua" },
+    { label: "Total spent", value: spent, width: outValue / max, tone: "from-aqua to-leaf" },
+  ];
+  return (
+    <div className="rounded-2xl border border-white/10 bg-white/[0.06] p-4 backdrop-blur sm:p-5">
+      <p className="text-caption font-medium text-white/60">Since you joined</p>
+      <div className="mt-3 space-y-4">
+        {bars.map((bar) => (
+          <div key={bar.label}>
+            <div className="flex items-baseline justify-between gap-3">
+              <span className="text-sm text-white/80">{bar.label}</span>
+              {loading ? (
+                <Skeleton className="h-5 w-20" />
+              ) : (
+                <span className="tabular text-lg font-bold tracking-tight text-white">
+                  {failed ? "—" : cedis(bar.value)}
+                </span>
+              )}
+            </div>
+            <span aria-hidden className="mt-2 block h-2 overflow-hidden rounded-full bg-white/10">
+              <span
+                className={`block h-full rounded-full bg-gradient-to-r ${bar.tone} transition-[width] duration-700 ease-out`}
+                style={{ width: loading || failed ? "0%" : `${Math.max(bar.width * 100, bar.width > 0 ? 3 : 0)}%` }}
+              />
+            </span>
+          </div>
+        ))}
+      </div>
+    </div>
+  );
+}
+
+/** The network a top-up came from, as a small mark of its initials - named, not its logo. */
+function NetworkMark({ label }: { label: string }) {
+  const short = label.startsWith("MTN") ? "MTN" : label.startsWith("Telecel") ? "TC" : label.startsWith("AT") ? "AT" : label.slice(0, 2);
+  return (
+    <span
+      aria-hidden
+      className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-gradient-to-br from-[#0B63B6] to-[#137A4E] text-2xs font-bold text-white shadow-[0_6px_14px_-6px_rgba(8,120,209,0.7)]"
+    >
+      {short}
+    </span>
   );
 }
 

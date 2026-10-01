@@ -107,6 +107,8 @@ aliases are pinned to 12px. Borders separate surfaces; shadows (`shadow-raised`,
 | Component | Where |
 |---|---|
 | `AppShell`, `PageHeader` | `components/app-shell.tsx` |
+| `AppHero` (the navy panel at the top of Home, Buy a number, Orders, Wallet and Account), `HeroStat`, `HeroAmount` | `components/app-hero.tsx` |
+| `LiveOrderCard`, `useNow` (a running order with its live countdown) | `components/orders/live-order-card.tsx` |
 | `Button`, `Input`, `Select`, `Textarea`, `Checkbox`, `Field` | `ui/primitives.tsx` |
 | `ButtonLink` (a link styled as a button), `PasswordInput` (show/hide) | `ui/primitives.tsx` |
 | `Card`, `CardHeader`, `Section`, `DescriptionList`, `Amount` | `ui/primitives.tsx` |
@@ -154,6 +156,18 @@ aliases are pinned to 12px. Borders separate surfaces; shadows (`shadow-raised`,
 * **The main homepage action is `dawn`** (blue into green, white text at 5:1
   or better on both ends); inside the app, `primary` green stays the one
   solid action.
+* **The main app pages open on the navy panel (`AppHero`).** Home, Buy a
+  number, Orders, Wallet and Account each start with the homepage's night:
+  the page's title and the few figures and actions that matter most, every
+  figure the account's own (wallet summary, orders, catalogue). The panel
+  carries the `dark` class, so any token-coloured thing inside it (a skeleton,
+  an error) takes the dark theme's colours and reads on navy; buttons on it are
+  `onBand` / `onBandOutline`. The rest of the page stays light, in cards with
+  `rounded-2xl`. Sub-pages (an order, Add funds, the statement) keep
+  `PageHeader`.
+* **Running orders count down live.** `LiveOrderCard` drains a bar from the
+  order's own `created_at` to `expires_at` and says "Closing…" rather than
+  "0:00" once the time is up and the server has not closed it yet.
 * **No testimonials until there are real ones.** Invented reviews - even
   "demo" ones - would be presented to real visitors as customers' words.
 

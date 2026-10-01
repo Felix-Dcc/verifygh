@@ -5,17 +5,16 @@ import { useSearchParams } from "next/navigation";
 import * as React from "react";
 import useSWR from "swr";
 
-import { PageHeader } from "@/components/app-shell";
+import { AppHero, HeroAmount, HeroStat } from "@/components/app-hero";
 import { useAuth } from "@/components/auth-provider";
-import { CountryFlag } from "@/components/country-flag";
-import { ChevronRightIcon } from "@/components/icons";
+import { ArrowRightIcon, PlusIcon } from "@/components/icons";
 import { PhoneMessageArt, StatementArt } from "@/components/illustrations";
+import { LiveOrderCard, useNow } from "@/components/orders/live-order-card";
 import { OrderStatusRow } from "@/components/orders/order-row";
 import { ServiceLogo } from "@/components/service-logo";
 import { TransactionRow } from "@/components/wallet/transaction-row";
 import {
   Alert,
-  Amount,
   Button,
   ButtonLink,
   Card,
@@ -23,11 +22,10 @@ import {
   LoadError,
   Section,
   Skeleton,
-  StatusBadge,
 } from "@/components/ui/primitives";
 import { useToast } from "@/components/ui/toast";
 import { api } from "@/lib/api";
-import { cedis, groupInternational } from "@/lib/format";
+import { cedis } from "@/lib/format";
 import type {
   MarketHome,
   OrderSummary,
@@ -37,9 +35,10 @@ import type {
 } from "@/lib/types";
 
 /**
- * Home: where the money is, what is running, and the quickest way to the next
- * number. Everything here is the customer's own data or the marketplace's real
- * popularity - nothing is filled in to make the page look busy.
+ * Home: the money, what is running right now, and the quickest way to the
+ * next number. Everything here is the customer's own data or the
+ * marketplace's real popularity - nothing is filled in to make the page look
+ * busy.
  */
 export default function DashboardPage() {
   return (
@@ -77,7 +76,7 @@ function Dashboard() {
     refreshInterval: 15_000,
   });
   const recentOrders = useSWR<Paginated<OrderSummary>>(["/orders/", { page_size: 8 }]);
-  const recentTransactions = useSWR<Paginated<Transaction>>(["/transactions/", { page_size: 4 }]);
+  const recentTransactions = useSWR<Paginated<Transaction>>(["/transactions/", { page_size: 5 }]);
   const market = useSWR<MarketHome>("/marketplace/home/");
 
   const [resending, setResending] = React.useState(false);
@@ -96,20 +95,68 @@ function Dashboard() {
 
   const firstName = user?.full_name?.split(" ")[0];
   const live = activeOrders ?? [];
+  const now = useNow(live.length > 0);
   // Orders already shown under "In progress" are not repeated below it.
   const liveIds = new Set(live.map((order) => order.id));
   const finished = (recentOrders.data?.results ?? []).filter((order) => !liveIds.has(order.id)).slice(0, 5);
 
+  const wallet = summary.data?.wallet;
+  const loading = summary.isLoading;
+  const failed = Boolean(summary.error) && !summary.data;
+  const promo = Number.parseFloat(wallet?.promo_balance ?? "0");
+  const stat = (value: React.ReactNode) => (loading ? <Skeleton className="mt-1 h-6 w-16" /> : value);
+
   return (
     <div className="space-y-8">
-      <PageHeader
+      <AppHero
+        eyebrow={TODAY.format(new Date())}
         title={firstName ? `${greeting()}, ${firstName}` : greeting()}
-        description={TODAY.format(new Date())}
-      />
+        actions={
+          <>
+            <ButtonLink href="/wallet/deposit" variant="onBand" icon={<PlusIcon className="h-4 w-4" />}>
+              Add funds
+            </ButtonLink>
+            <ButtonLink href="/services" variant="onBandOutline">
+              Buy a number
+            </ButtonLink>
+          </>
+        }
+        aside={
+          <div className="grid grid-cols-2 gap-2.5">
+            <HeroStat label="Spent today" value={stat(failed ? "—" : cedis(summary.data?.today_spending))} />
+            <HeroStat label="In progress" value={stat(failed ? "—" : summary.data?.active_orders ?? 0)} />
+            <HeroStat label="Completed" value={stat(failed ? "—" : summary.data?.successful_orders ?? 0)} />
+            <HeroStat label="All orders" value={stat(failed ? "—" : summary.data?.total_orders ?? 0)} />
+          </div>
+        }
+      >
+        <div className="mt-6">
+          <p className="text-caption font-medium text-white/60">Available balance</p>
+          <div className="mt-1 min-h-12">
+            {loading ? (
+              <Skeleton className="h-12 w-56" />
+            ) : failed ? (
+              <LoadError compact what="your balance" onRetry={() => summary.mutate()} className="pt-2" />
+            ) : (
+              <HeroAmount value={cedis(wallet?.balance)} />
+            )}
+          </div>
+          {wallet?.is_frozen ? (
+            <p className="mt-1.5 text-caption font-medium text-[#FFB86B]">
+              This wallet is on hold. Contact support before buying or adding funds.
+            </p>
+          ) : promo > 0 ? (
+            <p className="mt-1.5 text-caption text-white/70">
+              Plus <span className="tabular font-semibold text-white">{cedis(wallet?.promo_balance)}</span>{" "}
+              promotional credit, used first.
+            </p>
+          ) : null}
+        </div>
+      </AppHero>
 
       {params.get("welcome") === "1" || user?.is_email_verified === false ||
       user?.has_accepted_current_terms === false ? (
-        <div className="-mt-3 space-y-3">
+        <div className="-mt-2 space-y-3">
           {params.get("welcome") === "1" ? (
             <Alert tone="brand" title="Welcome to VerifyGH">
               Add funds to your wallet, then pick a service to get your first number.
@@ -155,47 +202,25 @@ function Dashboard() {
         </div>
       ) : null}
 
-      <BalancePanel
-        summary={summary.data}
-        loading={summary.isLoading}
-        failed={Boolean(summary.error) && !summary.data}
-        onRetry={() => summary.mutate()}
-      />
-
       {live.length > 0 ? (
         <Section
           title="In progress"
-          description="Open orders - waiting for a code, or with one to use. Open an order to see it live."
+          description="Live orders - waiting for a code, or with one ready to use."
+          action={
+            <Link href="/orders?filter=active" className="link text-sm">
+              View all
+            </Link>
+          }
         >
-          <Card className="overflow-hidden">
-            <ul className="divide-y divide-line">
-              {live.map((order) => (
-                <li key={order.id}>
-                  <Link
-                    href={`/orders/${order.reference}`}
-                    className="flex items-center gap-3 px-4 py-3 transition-colors hover:bg-sunken/60 sm:px-5"
-                  >
-                    <ServiceLogo name={order.service_name} src={order.service_icon} slug={order.service_slug} />
-                    <div className="min-w-0 flex-1">
-                      <p className="flex items-center gap-2 text-sm font-medium text-ink">
-                        <span className="truncate">{order.service_name}</span>
-                        <CountryFlag code={order.country_code} size="sm" />
-                      </p>
-                      <p className="tabular truncate text-caption text-ink-muted">
-                        {order.phone_number
-                          ? groupInternational(order.phone_number, order.country_dial_code)
-                          : "Getting a number…"}
-                      </p>
-                    </div>
-                    <StatusBadge status={order.status} />
-                    <ChevronRightIcon className="h-4 w-4 shrink-0 text-ink-faint" />
-                  </Link>
-                </li>
-              ))}
-            </ul>
-          </Card>
+          <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 xl:grid-cols-3">
+            {live.map((order) => (
+              <LiveOrderCard key={order.id} order={order} now={now} />
+            ))}
+          </div>
         </Section>
       ) : null}
+
+      <QuickBuy market={market.data} failed={Boolean(market.error) && !market.data} onRetry={() => market.mutate()} />
 
       <div className="grid grid-cols-1 gap-8 lg:grid-cols-5 lg:gap-6">
         <Section
@@ -207,7 +232,7 @@ function Dashboard() {
             </Link>
           }
         >
-          <Card className="overflow-hidden">
+          <Card className="overflow-hidden rounded-2xl">
             {recentOrders.isLoading ? (
               <RowSkeletons />
             ) : recentOrders.error && !recentOrders.data ? (
@@ -235,42 +260,35 @@ function Dashboard() {
           </Card>
         </Section>
 
-        <div className="space-y-8 lg:col-span-2">
-          <PopularServices
-            market={market.data}
-            failed={Boolean(market.error) && !market.data}
-            onRetry={() => market.mutate()}
-          />
-
-          <Section
-            title="Wallet activity"
-            action={
-              <Link href="/transactions" className="link text-sm">
-                All transactions
-              </Link>
-            }
-          >
-            <Card className="overflow-hidden">
-              {recentTransactions.isLoading ? (
-                <RowSkeletons rows={3} />
-              ) : recentTransactions.error && !recentTransactions.data ? (
-                <LoadError what="your transactions" onRetry={() => recentTransactions.mutate()} />
-              ) : (recentTransactions.data?.results?.length ?? 0) === 0 ? (
-                <EmptyState
-                  art={<StatementArt />}
-                  title="No transactions yet"
-                  description="Deposits, purchases and refunds will be listed here."
-                />
-              ) : (
-                <ul className="divide-y divide-line">
-                  {recentTransactions.data?.results.map((entry) => (
-                    <TransactionRow key={entry.id} entry={entry} />
-                  ))}
-                </ul>
-              )}
-            </Card>
-          </Section>
-        </div>
+        <Section
+          className="lg:col-span-2"
+          title="Wallet activity"
+          action={
+            <Link href="/transactions" className="link text-sm">
+              Statement
+            </Link>
+          }
+        >
+          <Card className="overflow-hidden rounded-2xl">
+            {recentTransactions.isLoading ? (
+              <RowSkeletons rows={3} />
+            ) : recentTransactions.error && !recentTransactions.data ? (
+              <LoadError what="your transactions" onRetry={() => recentTransactions.mutate()} />
+            ) : (recentTransactions.data?.results?.length ?? 0) === 0 ? (
+              <EmptyState
+                art={<StatementArt />}
+                title="No transactions yet"
+                description="Deposits, purchases and refunds will be listed here."
+              />
+            ) : (
+              <ul className="divide-y divide-line">
+                {recentTransactions.data?.results.map((entry) => (
+                  <TransactionRow key={entry.id} entry={entry} />
+                ))}
+              </ul>
+            )}
+          </Card>
+        </Section>
       </div>
     </div>
   );
@@ -278,69 +296,11 @@ function Dashboard() {
 
 /* ------------------------------------------------------------------ */
 
-function BalancePanel({
-  summary,
-  loading,
-  failed,
-  onRetry,
-}: {
-  summary: WalletSummary | undefined;
-  loading: boolean;
-  failed: boolean;
-  onRetry: () => unknown;
-}) {
-  const wallet = summary?.wallet;
-  const promo = Number.parseFloat(wallet?.promo_balance ?? "0");
-
-  return (
-    <Card className="grid grid-cols-1 gap-6 p-5 sm:p-6 md:grid-cols-3">
-      <div className="md:col-span-2">
-        <p className="text-sm text-ink-muted">Available balance</p>
-        <div className="mt-1.5 min-h-10">
-          {loading ? (
-            <Skeleton className="h-10 w-48" />
-          ) : failed ? (
-            <LoadError compact what="your balance" onRetry={onRetry} className="pt-2" />
-          ) : (
-            <Amount value={cedis(wallet?.balance)} />
-          )}
-        </div>
-        {wallet?.is_frozen ? (
-          <p className="mt-1.5 text-caption font-medium text-danger-700">
-            This wallet is on hold. Contact support before buying or adding funds.
-          </p>
-        ) : promo > 0 ? (
-          <p className="mt-1.5 text-caption text-ink-muted">
-            Plus {cedis(wallet?.promo_balance)} promotional credit, used first.
-          </p>
-        ) : null}
-        <div className="mt-5 flex flex-wrap gap-2">
-          <ButtonLink href="/wallet/deposit">Add funds</ButtonLink>
-          <ButtonLink href="/services" variant="secondary">
-            Buy a number
-          </ButtonLink>
-        </div>
-      </div>
-
-      <dl className="grid grid-cols-2 gap-4 border-t border-line pt-5 md:grid-cols-1 md:content-center md:border-l md:border-t-0 md:pl-6 md:pt-0">
-        <div>
-          <dt className="text-caption text-ink-muted">Spent today</dt>
-          <dd className="tabular mt-0.5 text-heading text-ink">
-            {loading ? <Skeleton className="h-5 w-20" /> : cedis(summary?.today_spending)}
-          </dd>
-        </div>
-        <div>
-          <dt className="text-caption text-ink-muted">Completed orders</dt>
-          <dd className="tabular mt-0.5 text-heading text-ink">
-            {loading ? <Skeleton className="h-5 w-12" /> : (summary?.successful_orders ?? "—")}
-          </dd>
-        </div>
-      </dl>
-    </Card>
-  );
-}
-
-function PopularServices({
+/**
+ * The quickest way to a number: today's popular services as tiles with their
+ * live prices - a row that scrolls sideways on a phone, a grid from lg.
+ */
+function QuickBuy({
   market,
   failed,
   onRetry,
@@ -350,52 +310,61 @@ function PopularServices({
   onRetry: () => unknown;
 }) {
   const country = market?.country ?? "US";
-  const rows = (market?.popular ?? []).slice(0, 5);
+  const rows = (market?.popular ?? []).filter((row) => !row.temporarily_unavailable).slice(0, 6);
+
   return (
     <Section
-      title="Popular services"
+      title="Get a number"
+      description="Today's most-bought services, with their prices in cedis."
       action={
-        <Link href="/services" className="link text-sm">
-          All services
+        <Link href="/services" className="link inline-flex min-h-11 items-center gap-1 text-sm sm:min-h-0">
+          All services <ArrowRightIcon className="h-3.5 w-3.5" />
         </Link>
       }
     >
-      <Card className="overflow-hidden">
-        {failed ? (
+      {failed ? (
+        <Card className="rounded-2xl">
           <LoadError what="the services" onRetry={onRetry} />
-        ) : !market ? (
-          <RowSkeletons rows={4} />
-        ) : rows.length === 0 ? (
-          <EmptyState
-            title="Nothing popular yet"
-            description="The most-bought services will show here. Browse everything on sale meanwhile."
-            action={
-              <ButtonLink href="/services" size="sm" variant="secondary">
-                Browse services
-              </ButtonLink>
-            }
-          />
-        ) : (
-          <ul className="divide-y divide-line">
-            {rows.map((row) => (
-              <li key={row.slug}>
-                <Link
-                  href={`/services?service=${encodeURIComponent(row.slug)}&country=${country}`}
-                  className="flex items-center gap-3 px-4 py-2.5 transition-colors hover:bg-sunken/60 sm:px-5"
-                >
-                  <ServiceLogo name={row.name} src={row.icon_url} slug={row.slug} size="sm" />
-                  <span className="min-w-0 flex-1 truncate text-sm font-medium text-ink">{row.name}</span>
-                  <span className="tabular text-sm text-ink-soft">
-                    {row.price && !row.temporarily_unavailable ? cedis(row.price) : "Unavailable"}
-                  </span>
-                  <ChevronRightIcon className="h-4 w-4 shrink-0 text-ink-faint" />
-                </Link>
-              </li>
-            ))}
-          </ul>
-        )}
-      </Card>
+        </Card>
+      ) : (
+        <ul className="no-scrollbar -mx-4 flex snap-x snap-mandatory gap-3 overflow-x-auto px-4 pb-1 sm:mx-0 sm:px-0 lg:grid lg:grid-cols-6 lg:overflow-visible">
+          {!market
+            ? Array.from({ length: 6 }).map((_, index) => (
+                <li key={index} className="w-36 shrink-0 snap-start sm:w-40 lg:w-auto">
+                  <Skeleton className="h-36 w-full rounded-2xl" />
+                </li>
+              ))
+            : rows.map((row) => (
+                <li key={row.slug} className="w-36 shrink-0 snap-start sm:w-40 lg:w-auto">
+                  <QuickTile row={row} country={country} />
+                </li>
+              ))}
+        </ul>
+      )}
     </Section>
+  );
+}
+
+function QuickTile({ row, country }: { row: MarketHome["popular"][number]; country: string }) {
+  return (
+    <Link
+      href={`/services?service=${encodeURIComponent(row.slug)}&country=${country}`}
+      className="group flex h-full flex-col gap-3 rounded-2xl border border-line bg-surface p-4 shadow-card transition-all hover:-translate-y-0.5 hover:border-brand-500/40 hover:shadow-raised"
+    >
+      <ServiceLogo name={row.name} src={row.icon_url} slug={row.slug} />
+      <span className="min-w-0">
+        <span className="block truncate text-sm font-semibold text-ink" title={row.name}>
+          {row.name}
+        </span>
+        <span className="tabular mt-0.5 block text-base font-bold tracking-tight text-ink">
+          {row.price ? cedis(row.price) : "—"}
+        </span>
+      </span>
+      <span className="mt-auto inline-flex items-center gap-1 text-caption font-semibold text-brand-700">
+        Buy
+        <ArrowRightIcon className="h-3.5 w-3.5 transition-transform group-hover:translate-x-0.5" />
+      </span>
+    </Link>
   );
 }
 
@@ -419,16 +388,8 @@ function RowSkeletons({ rows = 4 }: { rows?: number }) {
 function DashboardSkeleton() {
   return (
     <div className="space-y-8" aria-busy>
-      <div className="space-y-2">
-        <Skeleton className="h-7 w-56" />
-        <Skeleton className="h-4 w-40" />
-      </div>
-      <Card className="space-y-4 p-6">
-        <Skeleton className="h-4 w-32" />
-        <Skeleton className="h-10 w-48" />
-        <Skeleton className="h-11 w-60" />
-      </Card>
-      <Card className="overflow-hidden">
+      <div className="app-hero h-72 rounded-3xl" />
+      <Card className="overflow-hidden rounded-2xl">
         <RowSkeletons />
       </Card>
     </div>

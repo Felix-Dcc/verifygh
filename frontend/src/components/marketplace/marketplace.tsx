@@ -5,6 +5,7 @@ import * as React from "react";
 import useSWR from "swr";
 import useSWRInfinite from "swr/infinite";
 
+import { AppHero, HeroStat } from "@/components/app-hero";
 import { useAuth } from "@/components/auth-provider";
 import { CountryFlag } from "@/components/country-flag";
 import { SearchIcon, StarIcon } from "@/components/icons";
@@ -168,8 +169,53 @@ export function Marketplace() {
     onPin: () => togglePin(row),
   });
 
+  const prices = (home?.popular ?? [])
+    .map((row) => Number.parseFloat(row.price ?? ""))
+    .filter((value) => value > 0);
+  const cheapest = prices.length ? Math.min(...prices) : null;
+
   return (
     <div className="space-y-8">
+      <AppHero
+        title="Buy a number"
+        description="Pick the service you are signing up to. You get a number that receives its code, paid in cedis from your wallet."
+        aside={
+          <MarketFacts
+            facts={[
+              { label: "On sale", value: home ? `${home.total} services` : null },
+              {
+                label: "Numbers from",
+                value: countryName ? (
+                  <span className="flex items-center gap-2">
+                    <CountryFlag code={activeCountry} size="sm" />
+                    {countryName}
+                  </span>
+                ) : null,
+              },
+              { label: "Popular from", value: cheapest !== null ? cedis(cheapest) : home ? "—" : null },
+            ]}
+          />
+        }
+      >
+        <div className="mt-6 flex flex-col gap-3 sm:flex-row sm:items-center">
+          <label className="relative block flex-1">
+            <span className="sr-only">Search services</span>
+            <SearchIcon className="pointer-events-none absolute left-4 top-1/2 z-10 h-4 w-4 -translate-y-1/2 text-white/70" />
+            <input
+              type="search"
+              inputMode="search"
+              placeholder="Search WhatsApp, TikTok…"
+              value={search}
+              onChange={(event) => setSearch(event.target.value)}
+              className="h-12 w-full rounded-full border border-white/15 bg-white/10 pl-11 pr-4 text-base text-white placeholder:text-white/50 backdrop-blur transition-colors focus:border-aqua focus:bg-white/15 focus:outline-none focus:ring-2 focus:ring-aqua/40"
+            />
+          </label>
+          {homeFailed || (home?.countries.length ?? 0) < 2 ? null : (
+            <CountrySwitch countries={home?.countries ?? []} value={activeCountry} onChange={changeCountry} />
+          )}
+        </div>
+      </AppHero>
+
       {health && !health.ready ? (
         <Alert tone="warn" title="The catalogue is not fully live yet">
           {health.exchange_rate_configured
@@ -178,36 +224,15 @@ export function Marketplace() {
         </Alert>
       ) : null}
 
-      <div className="flex flex-col gap-3 sm:flex-row sm:items-center">
-        <label className="relative block flex-1">
-          <span className="sr-only">Search services</span>
-          <SearchIcon className="pointer-events-none absolute left-3.5 top-1/2 h-4 w-4 -translate-y-1/2 text-ink-faint" />
-          <input
-            type="search"
-            inputMode="search"
-            placeholder="Search - WhatsApp, TikTok, Gmail, Telegram…"
-            value={search}
-            onChange={(event) => setSearch(event.target.value)}
-            className="h-11 w-full rounded-lg border border-line-strong bg-surface pl-10 pr-3 text-base text-ink placeholder:text-ink-faint transition-shadow focus:border-brand-500 focus:shadow-focus focus:outline-none"
-          />
-        </label>
-        <div className="flex items-center gap-3">
-          {homeFailed ? null : (
-            <CountrySwitch
-              countries={home?.countries ?? []}
-              value={activeCountry}
-              onChange={changeCountry}
-            />
-          )}
-        </div>
-      </div>
-
       {!searching && popular.length > 0 ? (
         <section aria-labelledby="popular-heading">
-          <h2 id="popular-heading" className="mb-3 text-heading text-ink">
-            Popular
-          </h2>
-          <ul className="grid grid-cols-2 gap-3 md:grid-cols-4">
+          <div className="mb-3 flex items-baseline justify-between gap-3">
+            <h2 id="popular-heading" className="text-heading text-ink">
+              Popular today
+            </h2>
+            <p className="text-caption text-ink-muted">What people are buying most</p>
+          </div>
+          <ul className="grid grid-cols-2 gap-2.5 sm:grid-cols-4 sm:gap-3">
             {popular.map((row) => (
               <PopularTile key={row.slug} {...rowProps(row)} />
             ))}
@@ -217,7 +242,7 @@ export function Marketplace() {
 
       {!searching && buyAgain.length > 0 ? (
         <section aria-labelledby="again-heading">
-          <h2 id="again-heading" className="mb-2 text-label text-ink-muted">
+          <h2 id="again-heading" className="mb-2 text-heading text-ink">
             Buy again
           </h2>
           <div className="no-scrollbar -mx-4 flex gap-2 overflow-x-auto px-4 sm:mx-0 sm:flex-wrap sm:px-0">
@@ -226,7 +251,7 @@ export function Marketplace() {
                 key={service.slug}
                 type="button"
                 onClick={() => setBuying(service.slug)}
-                className="flex h-11 shrink-0 items-center gap-2 rounded-full border border-line bg-surface pl-1.5 pr-3.5 text-sm font-medium text-ink transition-colors hover:border-line-strong hover:bg-sunken sm:h-10 sm:pl-1.5"
+                className="flex h-11 shrink-0 items-center gap-2 rounded-full border border-line bg-surface pl-1.5 pr-4 text-sm font-semibold text-ink shadow-card transition-all hover:-translate-y-0.5 hover:border-brand-500/40 sm:h-10 sm:pl-1.5"
               >
                 <ServiceLogo name={service.name} src={service.icon} slug={service.slug} size="xs" />
                 {service.name}
@@ -304,18 +329,10 @@ function CountrySwitch({
   value: string;
   onChange: (code: string) => void;
 }) {
-  if (countries.length === 0) return <Skeleton className="h-11 w-44" />;
-  if (countries.length === 1) {
-    const [only] = countries;
-    return (
-      <p className="flex h-11 items-center gap-2 rounded-lg border border-line bg-surface px-3 text-sm font-medium text-ink">
-        <CountryFlag code={only.code} />
-        {only.name} numbers
-      </p>
-    );
-  }
+  if (countries.length < 2) return null;
+  // Lives on the navy panel: glass behind, the chosen country in white.
   return (
-    <div className="inline-flex rounded-lg bg-sunken p-0.5" role="radiogroup" aria-label="Country">
+    <div className="inline-flex rounded-full border border-white/15 bg-white/10 p-1" role="radiogroup" aria-label="Country">
       {countries.map((country) => {
         const active = value === country.code;
         return (
@@ -326,8 +343,8 @@ function CountrySwitch({
             aria-checked={active}
             onClick={() => onChange(country.code)}
             className={cn(
-              "flex h-10 items-center gap-2 rounded-md px-3 text-sm font-medium transition-colors",
-              active ? "bg-surface text-ink shadow-card ring-1 ring-line" : "text-ink-muted hover:text-ink",
+              "flex h-10 items-center gap-2 rounded-full px-3.5 text-sm font-semibold transition-colors",
+              active ? "bg-white text-navy" : "text-white/75 hover:text-white",
             )}
           >
             <CountryFlag code={country.code} size="sm" />
@@ -356,7 +373,7 @@ function ServiceList({
           <span className="tabular ml-2 text-sm font-normal text-ink-faint">{count}</span>
         ) : null}
       </h2>
-      <Card className="divide-y divide-line overflow-hidden">{children}</Card>
+      <Card className="divide-y divide-line overflow-hidden rounded-2xl">{children}</Card>
     </section>
   );
 }
@@ -433,8 +450,8 @@ function ServiceRow({ row, countryName, pinned, onOpen, onPin }: ServiceItemProp
         </span>
         <span
           className={cn(
-            "tabular shrink-0 text-right text-sm font-semibold",
-            unavailable ? "text-ink-faint" : "text-ink",
+            "tabular shrink-0 rounded-full px-3 py-1 text-right text-sm font-bold",
+            unavailable ? "text-ink-faint" : "bg-sunken text-ink",
           )}
         >
           {priceOf(row)}
@@ -452,25 +469,19 @@ function PopularTile({ row, countryName, pinned, onOpen, onPin }: ServiceItemPro
       <button
         type="button"
         onClick={onOpen}
-        className="card flex h-full w-full flex-col gap-3 p-4 text-left transition-colors hover:border-line-strong hover:bg-sunken/40"
+        className="flex h-full w-full flex-col rounded-2xl border border-line bg-surface p-3 text-left shadow-card transition-all hover:-translate-y-0.5 hover:border-brand-500/40 hover:shadow-raised sm:p-3.5"
       >
-        {/* Logo on its own row (the star sits beside it), so the name gets the
-            tile's full width - on a phone the two-column tiles are narrow. */}
-        <ServiceLogo name={row.name} src={row.icon_url} slug={row.slug} />
-        <span className="min-w-0">
-          <span className="block truncate text-sm font-medium text-ink" title={row.name}>
-            {row.name}
-          </span>
-          {countryName ? (
-            <span className="block truncate text-caption text-ink-muted">{countryName}</span>
-          ) : null}
+        {/* Compact: logo (the star sits beside it), name, then price and stock.
+            The country is the same for every tile and is on the panel above. */}
+        <ServiceLogo name={row.name} src={row.icon_url} slug={row.slug} size="sm" />
+        <span className="mt-2 block truncate text-sm font-semibold text-ink" title={row.name}>
+          {row.name}
+          {countryName ? <span className="sr-only">, {countryName}</span> : null}
         </span>
-        <span className="mt-auto">
-          <span className="tabular block text-heading text-ink">{priceOf(row)}</span>
-          <Stock row={row} />
-        </span>
+        <span className="tabular mt-1 block text-base font-bold tracking-tight text-ink">{priceOf(row)}</span>
+        <Stock row={row} />
       </button>
-      <span className="absolute right-1 top-1">
+      <span className="absolute right-0.5 top-0.5">
         <FavouriteButton row={row} pinned={pinned} onPin={onPin} />
       </span>
     </li>
@@ -488,6 +499,34 @@ function RowSkeletons() {
           <Skeleton className="h-4 w-16" />
         </div>
       ))}
+    </>
+  );
+}
+
+/**
+ * The marketplace's facts on the navy panel. Where the space is narrow - a
+ * phone, or the panel's side column from lg - they are one list, label left
+ * and value right, so a long value never squeezes; between sm and lg, where
+ * the panel is full width, they sit side by side as tiles.
+ */
+function MarketFacts({ facts }: { facts: { label: string; value: React.ReactNode | null }[] }) {
+  return (
+    <>
+      <dl className="divide-y divide-white/10 rounded-2xl border border-white/10 bg-white/[0.06] backdrop-blur sm:hidden lg:block">
+        {facts.map((fact) => (
+          <div key={fact.label} className="flex items-center justify-between gap-3 px-4 py-3">
+            <dt className="text-caption text-white/60">{fact.label}</dt>
+            <dd className="tabular min-w-0 text-right text-sm font-semibold text-white">
+              {fact.value ?? <Skeleton className="h-4 w-20" />}
+            </dd>
+          </div>
+        ))}
+      </dl>
+      <div className="hidden grid-cols-3 gap-2.5 sm:grid lg:hidden">
+        {facts.map((fact) => (
+          <HeroStat key={fact.label} label={fact.label} value={fact.value ?? <Skeleton className="mt-1 h-6 w-20" />} />
+        ))}
+      </div>
     </>
   );
 }

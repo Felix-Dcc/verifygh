@@ -385,6 +385,17 @@
     }
   }
 
+  /* The app's navy panel (AppHero): the homepage's night, sized for the top
+     of an app page - blue light from the top corner, aqua and green rising
+     from the bottom edge, all well inside the panel. */
+  .app-hero {
+    background:
+      radial-gradient(ellipse 60% 90% at 88% -20%, rgb(8 120 209 / 0.5), rgb(8 120 209 / 0) 62%),
+      radial-gradient(ellipse 45% 75% at 4% 115%, rgb(40 199 247 / 0.16), rgb(40 199 247 / 0) 65%),
+      radial-gradient(ellipse 45% 75% at 96% 115%, rgb(32 178 107 / 0.2), rgb(32 178 107 / 0) 65%),
+      linear-gradient(160deg, #0a1b35 0%, #071426 55%, #050b18 100%);
+  }
+
   /* "ours." - the one word the hero is about, in the dawn gradient. */
   .text-dawn {
     background: linear-gradient(95deg, #28c7f7 0%, #3fd0c6 48%, #65d99a 100%);

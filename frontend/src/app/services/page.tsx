@@ -2,7 +2,7 @@
 
 import * as React from "react";
 
-import { AppShell, PageHeader } from "@/components/app-shell";
+import { AppShell } from "@/components/app-shell";
 import { useAuth } from "@/components/auth-provider";
 import { Marketplace } from "@/components/marketplace/marketplace";
 import { SiteFooter, SiteHeader } from "@/components/marketing/site-chrome";
@@ -23,15 +23,8 @@ export default function ServicesPage() {
 function ServicesRoute() {
   const { user, ready } = useAuth();
 
-  const content = (
-    <>
-      <PageHeader
-        title="Buy a number"
-        description="Pick a service to get a number that receives its verification code. Prices are in cedis and paid from your wallet."
-      />
-      <Marketplace />
-    </>
-  );
+  // The page's title, search and live facts are the marketplace's own navy panel.
+  const content = <Marketplace />;
 
   if (!ready) {
     // Neutral shell until we know which chrome to render - flipping layout

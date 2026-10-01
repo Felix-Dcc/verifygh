@@ -239,7 +239,7 @@ function SidebarLink({ item, badge }: { item: NavItem; badge?: number }) {
       )}
     >
       {active ? (
-        <span aria-hidden className="absolute -left-3 bottom-2 top-2 w-0.5 rounded-r bg-brand-600" />
+        <span aria-hidden className="absolute -left-3 bottom-1.5 top-1.5 w-1 rounded-r bg-gradient-to-b from-azure to-leaf" />
       ) : null}
       <Icon
         className={cn(

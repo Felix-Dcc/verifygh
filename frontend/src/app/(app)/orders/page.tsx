@@ -5,7 +5,7 @@ import { useRouter, useSearchParams } from "next/navigation";
 import * as React from "react";
 import useSWR from "swr";
 
-import { PageHeader } from "@/components/app-shell";
+import { AppHero, HeroStat } from "@/components/app-hero";
 import { CountryFlag } from "@/components/country-flag";
 import { ChevronRightIcon, SearchIcon } from "@/components/icons";
 import { PhoneMessageArt, SearchArt } from "@/components/illustrations";
@@ -16,14 +16,13 @@ import {
   ButtonLink,
   Card,
   EmptyState,
-  Input,
   LoadError,
-  SegmentedControl,
   Skeleton,
   StatusBadge,
+  cn,
 } from "@/components/ui/primitives";
-import { cedis, formatDateTime, groupInternational } from "@/lib/format";
-import type { OrderSummary, Paginated } from "@/lib/types";
+import { cedis, dayGroup, formatDateTime, groupInternational } from "@/lib/format";
+import type { OrderSummary, Paginated, WalletSummary } from "@/lib/types";
 
 type Filter = "all" | "active" | "completed" | "failed" | "refunded";
 
@@ -47,6 +46,11 @@ export default function OrdersPage() {
   );
 }
 
+/**
+ * Orders: every number bought and how it turned out, grouped by day - rows on
+ * a phone, aligned columns from md. The counts on the panel are the wallet
+ * summary's own; the list is the server's, filtered and searched there.
+ */
 function Orders() {
   const router = useRouter();
   const params = useSearchParams();
@@ -70,10 +74,23 @@ function Orders() {
     "/orders/",
     { filter: filter === "all" ? "" : filter, search: debouncedSearch, page, page_size: 20 },
   ]);
+  const summary = useSWR<WalletSummary>("/wallet/summary/");
 
-  const orders = data?.results ?? [];
+  const orders = React.useMemo(() => data?.results ?? [], [data]);
   const pagination = data?.pagination;
   const filterLabel = FILTERS.find((option) => option.value === filter)?.label.toLowerCase();
+
+  // Today / Yesterday / Earlier, in the order the server sent them.
+  const groups = React.useMemo(() => {
+    const out: { label: string; orders: OrderSummary[] }[] = [];
+    for (const order of orders) {
+      const label = dayGroup(order.created_at);
+      const last = out[out.length - 1];
+      if (last && last.label === label) last.orders.push(order);
+      else out.push({ label, orders: [order] });
+    }
+    return out;
+  }, [orders]);
 
   function changeFilter(value: Filter) {
     setFilter(value);
@@ -81,38 +98,76 @@ function Orders() {
     router.replace(value === "all" ? "/orders" : `/orders?filter=${value}`, { scroll: false });
   }
 
+  const stat = (value: number | undefined) =>
+    summary.isLoading ? <Skeleton className="mt-1 h-6 w-10" /> : summary.error && !summary.data ? "—" : (value ?? 0);
+
   return (
-    <div>
-      <PageHeader
+    <div className="space-y-6">
+      <AppHero
         title="Orders"
         description="Every number you have bought, and how each one turned out."
-        action={
-          <ButtonLink href="/services">Buy a number</ButtonLink>
+        actions={
+          <ButtonLink href="/services" variant="onBand">
+            Buy a number
+          </ButtonLink>
+        }
+        aside={
+          <div className="grid grid-cols-3 gap-2 sm:gap-2.5">
+            <HeroStat label="In progress" value={stat(summary.data?.active_orders)} />
+            <HeroStat label="Completed" value={stat(summary.data?.successful_orders)} />
+            <HeroStat label="All orders" value={stat(summary.data?.total_orders)} />
+          </div>
         }
       />
 
-      <div className="mb-4 flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
-        <SegmentedControl options={FILTERS} value={filter} onChange={changeFilter} />
-        <label className="relative block sm:w-64">
+      <div className="flex flex-col gap-3 md:flex-row md:items-center md:justify-between">
+        <div
+          role="group"
+          aria-label="Show"
+          className="no-scrollbar -mx-4 flex gap-1.5 overflow-x-auto px-4 md:mx-0 md:px-0"
+        >
+          {FILTERS.map((option) => {
+            const active = filter === option.value;
+            return (
+              <button
+                key={option.value}
+                type="button"
+                aria-pressed={active}
+                onClick={() => changeFilter(option.value)}
+                className={cn(
+                  "min-h-11 shrink-0 rounded-full px-4 text-sm font-semibold transition-colors md:min-h-9",
+                  active ? "bg-ink text-canvas shadow-card" : "border border-line bg-surface text-ink-soft hover:border-line-strong hover:text-ink",
+                )}
+              >
+                {option.label}
+              </button>
+            );
+          })}
+        </div>
+        <label className="relative block md:w-72">
           <span className="sr-only">Search orders</span>
-          <SearchIcon className="pointer-events-none absolute left-3.5 top-1/2 h-4 w-4 -translate-y-1/2 text-ink-faint" />
-          <Input
+          <SearchIcon className="pointer-events-none absolute left-4 top-1/2 h-4 w-4 -translate-y-1/2 text-ink-faint" />
+          <input
             type="search"
             inputMode="search"
             placeholder="Reference or service"
             value={search}
             onChange={(event) => setSearch(event.target.value)}
-            className="pl-10"
+            className="h-11 w-full rounded-full border border-line-strong bg-surface pl-11 pr-4 text-base text-ink placeholder:text-ink-faint transition-shadow focus:border-brand-500 focus:shadow-focus focus:outline-none md:h-10 md:text-sm"
           />
         </label>
       </div>
 
-      <Card className="overflow-hidden">
-        {isLoading ? (
+      {isLoading ? (
+        <Card className="overflow-hidden rounded-2xl">
           <ListSkeleton />
-        ) : error && !data ? (
+        </Card>
+      ) : error && !data ? (
+        <Card className="rounded-2xl">
           <LoadError what="your orders" onRetry={() => mutate()} />
-        ) : orders.length === 0 ? (
+        </Card>
+      ) : orders.length === 0 ? (
+        <Card className="rounded-2xl">
           <EmptyState
             art={debouncedSearch ? <SearchArt /> : <PhoneMessageArt />}
             title={
@@ -143,99 +198,47 @@ function Orders() {
               )
             }
           />
-        ) : (
-          <>
-            {/* Rows on phones, a real table from md up: the same data, laid out
-                for the device rather than one squeezed into the other. */}
-            <ul className="divide-y divide-line md:hidden">
-              {orders.map((order) => (
-                <OrderStatusRow key={order.id} order={order} />
-              ))}
-            </ul>
-
-            <table className="hidden w-full text-left text-sm md:table">
-              <thead className="border-b border-line bg-sunken text-caption text-ink-muted">
-                <tr>
-                  <th scope="col" className="px-5 py-2.5 font-medium">
-                    Service
-                  </th>
-                  <th scope="col" className="px-5 py-2.5 font-medium">
-                    Number
-                  </th>
-                  <th scope="col" className="px-5 py-2.5 font-medium">
-                    Date
-                  </th>
-                  <th scope="col" className="px-5 py-2.5 text-right font-medium">
-                    Amount
-                  </th>
-                  <th scope="col" className="px-5 py-2.5 font-medium">
-                    Status
-                  </th>
-                  <th scope="col" className="w-10 px-3 py-2.5">
-                    <span className="sr-only">Open</span>
-                  </th>
-                </tr>
-              </thead>
-              <tbody className="divide-y divide-line">
-                {orders.map((order) => (
-                  <tr
-                    key={order.id}
-                    // The whole row opens the order; the link in the first cell
-                    // is the keyboard and screen-reader route to the same place.
-                    onClick={() => router.push(`/orders/${order.reference}`)}
-                    className="cursor-pointer transition-colors hover:bg-sunken/60"
+        </Card>
+      ) : (
+        <div className="space-y-6">
+          {groups.map((group) => (
+            <section key={group.label} aria-label={group.label}>
+              <h2 className="mb-2 px-1 text-caption font-semibold uppercase tracking-wider text-ink-muted">
+                {group.label}
+              </h2>
+              <Card className="overflow-hidden rounded-2xl">
+                {/* Phones: rows. From md: the same orders in aligned columns. */}
+                <ul className="divide-y divide-line md:hidden">
+                  {group.orders.map((order) => (
+                    <OrderStatusRow key={order.id} order={order} />
+                  ))}
+                </ul>
+                <div className="hidden md:block">
+                  <div
+                    aria-hidden
+                    className="grid grid-cols-[minmax(0,1.5fr)_minmax(0,1.2fr)_minmax(0,1fr)_7rem_9rem_1.5rem] gap-4 border-b border-line bg-sunken/60 px-5 py-2.5 text-2xs font-semibold uppercase tracking-wider text-ink-muted"
                   >
-                    <td className="px-5 py-3">
-                      <div className="flex items-center gap-3">
-                        <ServiceLogo
-                          name={order.service_name}
-                          src={order.service_icon}
-                          slug={order.service_slug}
-                          size="sm"
-                        />
-                        <div className="min-w-0">
-                          <p className="flex items-center gap-2">
-                            <Link
-                              href={`/orders/${order.reference}`}
-                              onClick={(event) => event.stopPropagation()}
-                              className="font-medium text-ink hover:underline"
-                            >
-                              {order.service_name}
-                            </Link>
-                            <CountryFlag code={order.country_code} size="sm" />
-                            <span className="sr-only">{order.country_name}</span>
-                          </p>
-                          <p className="code text-caption text-ink-muted">{order.reference}</p>
-                        </div>
-                      </div>
-                    </td>
-                    <td className="tabular whitespace-nowrap px-5 py-3 text-ink-soft">
-                      {order.phone_number
-                        ? groupInternational(order.phone_number, order.country_dial_code)
-                        : "-"}
-                    </td>
-                    <td className="whitespace-nowrap px-5 py-3 text-ink-muted">
-                      {formatDateTime(order.created_at)}
-                    </td>
-                    <td className="tabular whitespace-nowrap px-5 py-3 text-right font-medium text-ink">
-                      {cedis(order.price)}
-                    </td>
-                    <td className="px-5 py-3">
-                      <StatusBadge status={order.status} />
-                    </td>
-                    <td className="px-3 py-3">
-                      <ChevronRightIcon className="h-4 w-4 text-ink-faint" />
-                    </td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
-          </>
-        )}
-      </Card>
+                    <span>Service</span>
+                    <span>Number</span>
+                    <span>Date</span>
+                    <span className="text-right">Amount</span>
+                    <span>Status</span>
+                    <span />
+                  </div>
+                  <ul className="divide-y divide-line">
+                    {group.orders.map((order) => (
+                      <OrderLine key={order.id} order={order} />
+                    ))}
+                  </ul>
+                </div>
+              </Card>
+            </section>
+          ))}
+        </div>
+      )}
 
       {pagination && pagination.pages > 1 ? (
-        <div className="mt-4 flex items-center justify-between gap-3">
+        <div className="flex items-center justify-between gap-3">
           <p className="text-sm text-ink-muted">
             Page {pagination.page} of {pagination.pages}
             <span className="hidden sm:inline"> &middot; {pagination.count} orders</span>
@@ -261,6 +264,39 @@ function Orders() {
         </div>
       ) : null}
     </div>
+  );
+}
+
+/** One order as aligned columns (md and up): the whole line opens it. */
+function OrderLine({ order }: { order: OrderSummary }) {
+  return (
+    <li>
+      <Link
+        href={`/orders/${order.reference}`}
+        className="group grid grid-cols-[minmax(0,1.5fr)_minmax(0,1.2fr)_minmax(0,1fr)_7rem_9rem_1.5rem] items-center gap-4 px-5 py-3 text-sm transition-colors hover:bg-sunken/60"
+      >
+        <span className="flex min-w-0 items-center gap-3">
+          <ServiceLogo name={order.service_name} src={order.service_icon} slug={order.service_slug} size="sm" />
+          <span className="min-w-0">
+            <span className="flex items-center gap-2 font-semibold text-ink">
+              <span className="truncate">{order.service_name}</span>
+              <CountryFlag code={order.country_code} size="sm" />
+              <span className="sr-only">{order.country_name}</span>
+            </span>
+            <span className="code block truncate text-caption text-ink-muted">{order.reference}</span>
+          </span>
+        </span>
+        <span className="code truncate text-ink-soft">
+          {order.phone_number ? groupInternational(order.phone_number, order.country_dial_code) : "-"}
+        </span>
+        <span className="truncate text-ink-muted">{formatDateTime(order.created_at)}</span>
+        <span className="tabular text-right font-semibold text-ink">{cedis(order.price)}</span>
+        <span>
+          <StatusBadge status={order.status} />
+        </span>
+        <ChevronRightIcon className="h-4 w-4 text-ink-faint transition-transform group-hover:translate-x-0.5" />
+      </Link>
+    </li>
   );
 }
 
