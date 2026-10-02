@@ -644,6 +644,27 @@ export type AdminPayment = {
   created_at: string;
 };
 
+/** GET /admin/payments/{reference}/ - why a deposit went the way it did. */
+export type AdminPaymentDetail = AdminPayment & {
+  network_label: string;
+  phone_suffix: string;
+  instructions: string;
+  otp_attempts: number;
+  expires_at: string | null;
+  network_source: string;
+  prefix_network: string;
+  provider_status_initial: string;
+  provider_status_latest: string;
+  provider_checked_at: string;
+  webhook_events: {
+    event_type: string;
+    signature_valid: boolean;
+    processed: boolean;
+    processing_error: string;
+    received_at: string;
+  }[];
+};
+
 export type AdminOffering = {
   id: string;
   provider_name: string;

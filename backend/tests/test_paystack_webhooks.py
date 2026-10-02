@@ -18,6 +18,7 @@ import json
 from decimal import Decimal
 
 import pytest
+from django.core.cache import cache
 
 from apps.payments.models import Payment, PaymentStatus, PaymentWebhookEvent
 from apps.wallet.models import WalletLedgerEntry
@@ -300,7 +301,125 @@ def test_refresh_asks_paystack_and_obeys_its_answer(user, auth, payment, monkeyp
     Payment.objects.filter(pk=payment.pk).update(status=PaymentStatus.PENDING,
                                                  completed_at=None)
     answer["status"] = "success"
+    cache.clear()  # past the per-payment cooldown
     client.post(f"/api/v1/payments/{payment.reference}/refresh/", {}, format="json")
     assert balance(user) == Decimal("50.00")  # Paystack said yes
 
     assert all(url.endswith("/transaction/verify/VGH-PAY-PSTK0001") for _, url in calls)
+
+
+# ---------------------------------------------------------------------------
+# The waiting screen polls refresh: failures show at once, Paystack is spared
+# ---------------------------------------------------------------------------
+
+
+@pytest.fixture
+def paystack_verify(monkeypatch):
+    """Paystack's verify-transaction call, faked; records every request."""
+    import requests
+
+    state = {"answer": {"status": "pay_offline"}, "calls": []}
+
+    class FakeResponse:
+        status_code = 200
+
+        def __init__(self, data):
+            self._data = data
+
+        def json(self):
+            return {"status": True, "data": {"amount": 5000, "currency": "GHS",
+                                             "reference": "VGH-PAY-PSTK0001",
+                                             **self._data}}
+
+    def fake_request(self, method, url, **kwargs):
+        state["calls"].append((method, url))
+        return FakeResponse(dict(state["answer"]))
+
+    monkeypatch.setattr(requests.Session, "request", fake_request)
+    return state
+
+
+def refresh(client, reference="VGH-PAY-PSTK0001"):
+    return client.post(f"/api/v1/payments/{reference}/refresh/", {}, format="json")
+
+
+def test_a_failure_paystack_already_knows_shows_on_the_next_poll(
+        user, auth, payment, paystack_verify):
+    Payment.objects.filter(pk=payment.pk).update(status=PaymentStatus.PHONE_AUTH)
+    paystack_verify["answer"] = {"status": "failed", "gateway_response": "Declined"}
+
+    response = refresh(auth(user))
+
+    assert response.status_code == 200
+    assert response.data["status"] == "FAILED"
+    assert response.data["failure_reason"] == "Declined"
+    assert balance(user) == Decimal("0.00")
+
+
+def test_still_waiting_on_the_handset_changes_nothing(user, auth, payment, paystack_verify):
+    Payment.objects.filter(pk=payment.pk).update(status=PaymentStatus.PHONE_AUTH)
+
+    response = refresh(auth(user))
+
+    assert response.data["status"] == "PHONE_AUTH"
+    assert len(paystack_verify["calls"]) == 1
+
+
+def test_paystack_is_asked_at_most_once_per_cooldown_however_often_we_poll(
+        user, auth, payment, paystack_verify):
+    Payment.objects.filter(pk=payment.pk).update(status=PaymentStatus.PHONE_AUTH)
+    client = auth(user)
+
+    for _ in range(5):
+        assert refresh(client).status_code == 200
+    assert len(paystack_verify["calls"]) == 1
+
+    cache.clear()  # the cooldown has passed
+    refresh(client)
+    assert len(paystack_verify["calls"]) == 2
+
+
+def test_the_cooldown_answers_from_our_own_record(user, auth, payment, paystack_verify):
+    """Polling inside the cooldown still sees what a callback has since applied."""
+    Payment.objects.filter(pk=payment.pk).update(status=PaymentStatus.PHONE_AUTH)
+    client = auth(user)
+    refresh(client)
+    Payment.objects.filter(pk=payment.pk).update(status=PaymentStatus.FAILED,
+                                                 failure_reason="Declined")
+
+    response = refresh(client)
+
+    assert response.data["status"] == "FAILED"
+    assert len(paystack_verify["calls"]) == 1
+
+
+def test_a_settled_payment_is_never_asked_about(user, auth, payment, paystack_verify):
+    Payment.objects.filter(pk=payment.pk).update(status=PaymentStatus.FAILED)
+
+    assert refresh(auth(user)).data["status"] == "FAILED"
+    assert paystack_verify["calls"] == []
+
+
+def test_without_the_cache_paystack_is_not_called(
+        user, auth, payment, paystack_verify, monkeypatch):
+    """Fails closed: no cooldown means no look-up, not unlimited look-ups."""
+    Payment.objects.filter(pk=payment.pk).update(status=PaymentStatus.PHONE_AUTH)
+
+    def broken(*args, **kwargs):
+        raise ConnectionError("redis is down")
+
+    monkeypatch.setattr(cache, "add", broken)
+    response = refresh(auth(user))
+
+    assert response.status_code == 200
+    assert response.data["status"] == "PHONE_AUTH"
+    assert paystack_verify["calls"] == []
+
+
+def test_another_customers_payment_cannot_be_polled(user, auth, payment, paystack_verify,
+                                                     django_user_model):
+    other = django_user_model.objects.create_user(email="kofi@gmail.com",
+                                                  password="Correct-Horse-Battery-2")
+
+    assert refresh(auth(other, "Correct-Horse-Battery-2")).status_code == 404
+    assert paystack_verify["calls"] == []

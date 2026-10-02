@@ -408,10 +408,14 @@ function AwaitingApproval({
 
   const terminal = ["SUCCESS", "FAILED", "CANCELLED", "EXPIRED"];
 
-  // Poll our own API. The wallet is only credited by a verified provider
-  // callback - this screen reflects that, it never decides it.
+  // Poll our own API, which also asks the provider (at most every few seconds),
+  // so a payment the provider has already failed says so at once instead of at
+  // the next scheduled sweep. The wallet is only credited by a verified
+  // callback or the provider's own answer - this screen reflects that, it
+  // never decides it.
   const { data: current, mutate } = useSWR<PaymentType>(
     timedOut ? null : `/payments/${payment.reference}/`,
+    (path: string) => api.post<PaymentType>(`${path}refresh/`, {}),
     {
       refreshInterval: (latest) => {
         if (!latest) return 4000;

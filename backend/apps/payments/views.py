@@ -3,6 +3,7 @@ from __future__ import annotations
 import logging
 
 from django.conf import settings
+from django.core.cache import cache
 from django.views.decorators.csrf import csrf_exempt
 from rest_framework import mixins, status, viewsets
 from rest_framework.decorators import action
@@ -80,15 +81,40 @@ class PaymentViewSet(mixins.ListModelMixin, mixins.RetrieveModelMixin, viewsets.
     def refresh(self, request, reference=None):
         """Ask the provider directly what happened to this payment.
 
-        The client may call this while waiting; it never *sets* a status, it
-        only asks the provider and applies the provider's answer.
+        The waiting screen polls this, so a payment the provider has already
+        failed says so within seconds - no callback arrived for the failed
+        Mobile Money charges seen so far, and the scheduled sweep only runs
+        every 15 minutes.
+        It never *sets* a status, it only asks the provider and applies the
+        provider's answer. The provider is asked at most once per
+        PROVIDER_CHECK_SECONDS per payment, however many tabs are polling; in
+        between, this answers from our own record.
         """
         payment = self.get_queryset().filter(reference=reference).first()
         if payment is None:
             raise NotFound("We could not find that payment.")
-        if not payment.is_terminal:
+        if not payment.is_terminal and _provider_check_due(payment):
             payment = reconcile_payment(payment)
         return Response(PaymentSerializer(payment).data)
+
+
+#: The least time between two provider look-ups for one payment.
+PROVIDER_CHECK_SECONDS = 4
+
+
+def _provider_check_due(payment: Payment) -> bool:
+    """True when this payment's provider look-up is not on cooldown.
+
+    Fails closed: with the cache unreachable, the provider is not asked (the
+    scheduled sweep still settles the payment), rather than letting a polling
+    client turn into unlimited calls to Paystack.
+    """
+    try:
+        return cache.add(f"payment-provider-check:{payment.pk}", 1, PROVIDER_CHECK_SECONDS)
+    except Exception:
+        logger.warning("payment_check_cooldown_unavailable",
+                       extra={"reference": payment.reference})
+        return False
 
 
 class PaymentOptionsView(APIView):

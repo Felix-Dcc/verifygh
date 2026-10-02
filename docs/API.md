@@ -255,7 +255,7 @@ ledger. Nothing the browser sends can award credit.
 | POST | `/payments/deposit/` | Start a MoMo collection. |
 | GET | `/payments/` | Your payments. |
 | GET | `/payments/{reference}/` | One payment. |
-| POST | `/payments/{reference}/refresh/` | Ask the provider directly. Applies their answer. |
+| POST | `/payments/{reference}/refresh/` | Ask the provider directly and apply their answer. The waiting screen polls this; the provider is asked at most once every 4 seconds per payment, otherwise it answers from our record. |
 | POST | `/payments/webhooks/{provider}/` | Provider callback. Unauthenticated, signature-verified. |
 
 `POST /payments/deposit/`
