@@ -826,6 +826,15 @@ def reconcile_payment(payment: Payment) -> Payment:
         return _credit_payment(payment, synthetic)
 
     target = _CHARGE_TO_PAYMENT.get(charge.status)
+    if (target == PaymentStatus.CANCELLED and payment.expires_at
+            and payment.expires_at > timezone.now()):
+        # Paystack's verify answers `abandoned` for a charge still waiting on
+        # the customer - a code not yet entered, a prompt not yet approved. It
+        # is not final until the payment window closes: cancelling on it
+        # killed every send_otp deposit (all of Telecel) a second after it
+        # started, before the customer could type the code. The expiry sweep
+        # settles it once the window has passed.
+        return payment
     if target and target in TERMINAL_PAYMENT_STATUSES:
         return _mark_unsuccessful(payment, target, charge.failure_reason)
     return payment

@@ -423,3 +423,73 @@ def test_another_customers_payment_cannot_be_polled(user, auth, payment, paystac
 
     assert refresh(auth(other, "Correct-Horse-Battery-2")).status_code == 404
     assert paystack_verify["calls"] == []
+
+
+# ---------------------------------------------------------------------------
+# Found in production on Oct 2: every send_otp deposit (all of Telecel) was
+# cancelled a second after it started. Paystack's verify answers `abandoned`
+# for a charge still waiting on the customer, and the waiting screen's first
+# refresh treated that as final.
+# ---------------------------------------------------------------------------
+
+
+def _awaiting(payment, status, *, minutes_left=10):
+    from datetime import timedelta
+
+    from django.utils import timezone
+
+    Payment.objects.filter(pk=payment.pk).update(
+        status=status, expires_at=timezone.now() + timedelta(minutes=minutes_left))
+
+
+def test_a_payment_waiting_for_its_code_is_not_checked_or_cancelled(
+        user, auth, payment, paystack_verify):
+    _awaiting(payment, PaymentStatus.OTP_REQUIRED)
+    paystack_verify["answer"] = {"status": "abandoned"}
+
+    response = refresh(auth(user))
+
+    assert response.data["status"] == "OTP_REQUIRED"
+    assert paystack_verify["calls"] == []
+
+
+def test_abandoned_inside_the_payment_window_is_not_final(user, auth, payment,
+                                                          paystack_verify):
+    _awaiting(payment, PaymentStatus.PHONE_AUTH)
+    paystack_verify["answer"] = {"status": "abandoned"}
+
+    response = refresh(auth(user))
+
+    assert response.data["status"] == "PHONE_AUTH"
+    assert len(paystack_verify["calls"]) == 1
+
+
+def test_abandoned_after_the_window_closes_settles_the_payment(user, auth, payment,
+                                                               paystack_verify):
+    _awaiting(payment, PaymentStatus.PHONE_AUTH, minutes_left=-1)
+    paystack_verify["answer"] = {"status": "abandoned"}
+
+    response = refresh(auth(user))
+
+    assert response.data["status"] == "CANCELLED"
+
+
+def test_the_reconcile_sweep_does_not_cancel_a_deposit_still_in_its_window(
+        payment, paystack_verify):
+    from apps.payments.tasks import reconcile_recent_payments
+
+    _awaiting(payment, PaymentStatus.OTP_REQUIRED)
+    paystack_verify["answer"] = {"status": "abandoned"}
+
+    reconcile_recent_payments()
+
+    payment.refresh_from_db()
+    assert payment.status == PaymentStatus.OTP_REQUIRED
+
+
+def test_a_real_failure_inside_the_window_still_shows_at_once(user, auth, payment,
+                                                              paystack_verify):
+    _awaiting(payment, PaymentStatus.PHONE_AUTH)
+    paystack_verify["answer"] = {"status": "failed", "gateway_response": "Declined"}
+
+    assert refresh(auth(user)).data["status"] == "FAILED"

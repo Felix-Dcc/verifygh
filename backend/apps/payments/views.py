@@ -16,7 +16,7 @@ from apps.common.errors import NotFound
 from apps.common.middleware import get_client_ip
 from apps.common.permissions import IsActiveUser
 from apps.common.throttling import DepositThrottle, OtpSubmitThrottle, WebhookThrottle
-from apps.payments.models import Payment
+from apps.payments.models import Payment, PaymentStatus
 from apps.payments.registry import get_payment_provider, webhook_providers
 from apps.payments.serializers import (
     DepositSerializer,
@@ -93,7 +93,10 @@ class PaymentViewSet(mixins.ListModelMixin, mixins.RetrieveModelMixin, viewsets.
         payment = self.get_queryset().filter(reference=reference).first()
         if payment is None:
             raise NotFound("We could not find that payment.")
-        if not payment.is_terminal and _provider_check_due(payment):
+        # While a one-time code is awaited the customer must act; the provider
+        # has nothing to tell us yet.
+        waiting_for_code = payment.status == PaymentStatus.OTP_REQUIRED
+        if not payment.is_terminal and not waiting_for_code and _provider_check_due(payment):
             payment = reconcile_payment(payment)
         return Response(PaymentSerializer(payment).data)
 
