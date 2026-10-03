@@ -148,7 +148,7 @@ export async function request<T = unknown>(
 
   // An expired access token is routine: refresh once, in the background, and
   // replay the original request rather than bouncing the user to sign-in.
-  if (response.status === 401 && !options._retried && !path.startsWith("/auth/")) {
+  if (response.status === 401 && !options._retried && mayRefreshAfter(path)) {
     const refreshed = await tryRefresh();
     if (refreshed) return request<T>(path, { ...options, _retried: true });
   }
@@ -161,6 +161,33 @@ export async function request<T = unknown>(
     (envelope?.details ?? {}) as Record<string, unknown>,
     envelope?.request_id as string | undefined,
   );
+}
+
+/**
+ * Auth endpoints where a 401 is the answer itself - wrong password, no
+ * session to renew, a bad reset link - not an access token that just expired.
+ */
+const NO_REFRESH_AUTH_PATHS = [
+  "/auth/login/",
+  "/auth/register/",
+  "/auth/refresh/",
+  "/auth/logout/",
+  "/auth/password/reset/",
+  "/auth/email/verify/confirm/",
+  "/auth/sign-in-options/",
+  "/auth/google/",
+];
+
+function mayRefreshAfter(path: string): boolean {
+  if (!path.startsWith("/auth/")) return true;
+  if (NO_REFRESH_AUTH_PATHS.some((prefix) => path.startsWith(prefix))) return false;
+  // The session endpoints (/auth/me/ above all - every page load asks it who
+  // is signed in) must renew too. Leaving them out signed everyone out the
+  // moment their 20-minute access token lapsed, despite a 14-day session.
+  // The CSRF cookie lives exactly as long as that session and is cleared on
+  // sign-out, so without it there is nothing to renew: a signed-out visitor
+  // costs no extra request.
+  return Boolean(readCookie(CSRF_COOKIE));
 }
 
 let refreshInFlight: Promise<boolean> | null = null;
