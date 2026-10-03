@@ -166,6 +166,7 @@ class RateLimitedProvider(VerificationProvider):
         self.permits_code_display = inner.permits_code_display
         self.supports_webhooks = inner.supports_webhooks
         self.supports_issue_reports = inner.supports_issue_reports
+        self.tracks_report_refunds = inner.tracks_report_refunds
         self.supports_balance = inner.supports_balance
         self.supports_reuse = inner.supports_reuse
         self.supports_account_funding = inner.supports_account_funding
@@ -233,6 +234,11 @@ class RateLimitedProvider(VerificationProvider):
         if not self._inner.supports_issue_reports:
             return None
         return self._call("report_number_issue", provider_order_id, reason)
+
+    def report_outcome(self, provider_order_id: str):
+        if not self._inner.tracks_report_refunds:
+            return None
+        return self._call("report_outcome", provider_order_id)
 
     def check_number_reuse(self, provider_order_id: str, service_code: str):
         return self._inner.check_number_reuse(provider_order_id, service_code)

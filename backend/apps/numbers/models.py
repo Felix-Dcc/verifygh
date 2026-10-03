@@ -139,6 +139,10 @@ class IssueReason(models.TextChoices):
 class IssueStatus(models.TextChoices):
     OPEN = "OPEN", "Open"
     IN_REVIEW = "IN_REVIEW", "In review"
+    #: Sent to a provider that refunds reported verifications (TextVerified).
+    #: The customer is refunded only when the provider refunds us, or the claim
+    #: is rejected with the provider's reply - nothing in between moves money.
+    AWAITING_PROVIDER = "AWAITING_PROVIDER", "Waiting for the provider"
     REFUNDED = "REFUNDED", "Refunded"
     REPLACED = "REPLACED", "Replaced"
     REJECTED = "REJECTED", "Not approved"
@@ -146,7 +150,9 @@ class IssueStatus(models.TextChoices):
 
 
 #: A case staff can still act on.
-OPEN_ISSUE_STATUSES = frozenset({IssueStatus.OPEN, IssueStatus.IN_REVIEW})
+OPEN_ISSUE_STATUSES = frozenset(
+    {IssueStatus.OPEN, IssueStatus.IN_REVIEW, IssueStatus.AWAITING_PROVIDER}
+)
 
 
 class ProviderReportStatus(models.TextChoices):
@@ -181,7 +187,7 @@ class VerificationIssue(BaseModel):
     details = models.CharField(max_length=500, blank=True, default="")
 
     status = models.CharField(
-        max_length=10, choices=IssueStatus.choices, default=IssueStatus.OPEN, db_index=True
+        max_length=20, choices=IssueStatus.choices, default=IssueStatus.OPEN, db_index=True
     )
     #: Whether the report fits the replacement/refund policy, with the reasons,
     #: worked out when it was filed. Advice for staff, never an automatic payout.
@@ -208,6 +214,21 @@ class VerificationIssue(BaseModel):
     )
     ip_address = models.GenericIPAddressField(null=True, blank=True)
 
+    # -- the provider's review (AWAITING_PROVIDER) ----------------------------
+    provider_reported_at = models.DateTimeField(null=True, blank=True)
+    #: When the provider's decision is expected. Shown to the customer; passing
+    #: it changes nothing but the wording - the claim stays open.
+    provider_decision_due_at = models.DateTimeField(null=True, blank=True)
+    #: The provider's raw verification state at the last check.
+    provider_state = models.CharField(max_length=40, blank=True, default="")
+    provider_checked_at = models.DateTimeField(null=True, blank=True)
+    #: The support ticket staff opened with the provider, if any.
+    provider_ticket_reference = models.CharField(max_length=80, blank=True, default="")
+    provider_ticket_filed_at = models.DateTimeField(null=True, blank=True)
+    #: The provider's answer when it declines, shown to the customer as the
+    #: reason. Separate from resolution_note, which stays internal.
+    customer_reply = models.CharField(max_length=500, blank=True, default="")
+
     class Meta:
         db_table = "numbers_verification_issue"
         ordering = ["-created_at"]
@@ -232,3 +253,23 @@ class VerificationIssue(BaseModel):
     @property
     def is_open(self) -> bool:
         return self.status in OPEN_ISSUE_STATUSES
+
+
+class IssueEvidence(BaseModel):
+    """A screenshot the customer attached to a report.
+
+    Kept in the database, like uploaded logos: there is no persistent disk, and
+    these are few and small. Served only to staff, never publicly, and only the
+    formats a browser can show safely.
+    """
+
+    issue = models.ForeignKey(VerificationIssue, on_delete=models.CASCADE,
+                              related_name="evidence")
+    data = models.BinaryField(editable=False)
+    content_type = models.CharField(max_length=20)
+    size = models.PositiveIntegerField()
+    sha256 = models.CharField(max_length=64)
+
+    class Meta:
+        db_table = "numbers_issue_evidence"
+        ordering = ["created_at"]

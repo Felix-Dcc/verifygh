@@ -242,6 +242,9 @@ export type Order = OrderSummary & {
   /** Whether "Report a problem" is offered: a code arrived, within the window, no case yet. */
   can_report: boolean;
   report_window_ends_at: string | null;
+  /** The provider reviews reports (TextVerified): a screenshot is required and
+   *  the window is the provider's few minutes. */
+  report_needs_evidence: boolean;
   issue: OrderIssue | null;
   /** Set on a free replacement: the reference of the order it replaces. */
   replacement_for: string | null;
@@ -463,7 +466,14 @@ export type IssueReason =
   | "SERVICE_REJECTED_NUMBER"
   | "OTHER";
 
-export type IssueStatus = "OPEN" | "IN_REVIEW" | "REFUNDED" | "REPLACED" | "REJECTED" | "RESOLVED";
+export type IssueStatus =
+  | "OPEN"
+  | "IN_REVIEW"
+  | "AWAITING_PROVIDER"
+  | "REFUNDED"
+  | "REPLACED"
+  | "REJECTED"
+  | "RESOLVED";
 
 /** A customer's report on their own order, as the customer sees it. */
 export type OrderIssue = {
@@ -474,6 +484,8 @@ export type OrderIssue = {
   status_label: string;
   message: string;
   replacement_order_reference: string | null;
+  /** When the provider's decision is expected (AWAITING_PROVIDER). */
+  decision_due_at: string | null;
   created_at: string;
 };
 
@@ -508,6 +520,14 @@ export type AdminNumberIssue = {
   price: string;
   refund: { reference: string; amount: string; reason: string; status: string } | null;
   created_at: string;
+  provider_reported_at: string | null;
+  provider_decision_due_at: string | null;
+  provider_state: string;
+  provider_checked_at: string | null;
+  provider_ticket_reference: string;
+  provider_ticket_filed_at: string | null;
+  customer_reply: string;
+  evidence_count: number;
 };
 
 export type AdminNumberIssueDetail = AdminNumberIssue & {
@@ -550,6 +570,9 @@ export type AdminNumberIssueDetail = AdminNumberIssue & {
     reports: number;
     remedies: number;
   };
+  evidence: { id: string; content_type: string; size: number; url: string; created_at: string }[];
+  /** What staff paste into the provider's support ticket (AWAITING_PROVIDER). */
+  ticket_pack: { issue_type: string; verification_id: string; message: string } | null;
 };
 
 export type NumberIssueBreakdown = {

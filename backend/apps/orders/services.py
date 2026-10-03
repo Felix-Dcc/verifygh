@@ -980,7 +980,8 @@ def split_refund(order: Order, amount) -> tuple[Decimal, Decimal]:
 
 
 def issue_refund(order: Order, *, reason: str, amount=None, actor=None, note: str = "",
-                 automatic: bool = True, override_delivered: bool = False) -> Order:
+                 automatic: bool = True, override_delivered: bool = False,
+                 provider_refunded: bool = False) -> Order:
     """Refund an order.
 
     Refund policy, in one place:
@@ -995,13 +996,18 @@ def issue_refund(order: Order, *, reason: str, amount=None, actor=None, note: st
     could not be used (apps/numbers). It is never automatic - the caller must
     also pass automatic=False and an actor - and it is audited like any refund.
 
+    `provider_refunded` is the one way it may happen without a person: the
+    provider reviewed the customer's report and refunded us for that very
+    verification, which is the decision a person would otherwise make. We
+    then do not ask the provider for a refund it has already given.
+
     Every refund creates an immutable ledger entry. The OneToOne on Refund means
     a second attempt cannot create a second credit.
     """
     if order.refund_status == RefundStatus.COMPLETED:
         return order
 
-    if override_delivered and (automatic or actor is None):
+    if override_delivered and not provider_refunded and (automatic or actor is None):
         raise ValueError("override_delivered needs a staff actor and automatic=False.")
 
     code_delivered = bool(order.verification_code or order.code_received_at)
@@ -1094,7 +1100,12 @@ def issue_refund(order: Order, *, reason: str, amount=None, actor=None, note: st
 
     # Ask the provider for its own refund where its policy allows it. This is
     # our cost recovery and is independent of the user already being made whole.
-    _request_provider_refund(order)
+    if provider_refunded:
+        Refund.objects.filter(order=order).update(
+            provider_refund_requested=True, provider_refund_accepted=True
+        )
+    else:
+        _request_provider_refund(order)
 
     order.refresh_from_db()
 

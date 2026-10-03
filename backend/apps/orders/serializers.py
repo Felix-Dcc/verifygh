@@ -69,6 +69,9 @@ class OrderDetailSerializer(OrderListSerializer):
     can_complete = serializers.SerializerMethodField()
     can_report = serializers.SerializerMethodField()
     report_window_ends_at = serializers.SerializerMethodField()
+    #: The provider reviews reports itself (TextVerified): a screenshot is
+    #: required, and the window is the provider's few minutes, not ours.
+    report_needs_evidence = serializers.SerializerMethodField()
     issue = serializers.SerializerMethodField()
     replacement_for = serializers.SerializerMethodField()
     can_reuse = serializers.SerializerMethodField()
@@ -93,6 +96,7 @@ class OrderDetailSerializer(OrderListSerializer):
             "refund",
             "can_report",
             "report_window_ends_at",
+            "report_needs_evidence",
             "issue",
             "replacement_for",
             "reusable_until",
@@ -134,6 +138,11 @@ class OrderDetailSerializer(OrderListSerializer):
         from apps.numbers.services import report_window_ends
 
         return report_window_ends(obj)
+
+    def get_report_needs_evidence(self, obj: Order) -> bool:
+        from apps.numbers.services import provider_reviews_reports
+
+        return bool(obj.provider_id) and provider_reviews_reports(obj.provider.adapter_key)
 
     def get_issue(self, obj: Order) -> dict | None:
         from apps.numbers.serializers import CustomerIssueSerializer

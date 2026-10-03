@@ -49,10 +49,32 @@ const REASONS: { value: IssueReason; label: string; hint: string }[] = [
  * passwords, no codes, no PINs. The customer deals with TikTok (or whoever)
  * directly; all we need to know is what happened.
  */
+/** Seconds until `iso`, ticking once a second; null with no deadline. */
+function useSecondsLeft(iso: string | null): number | null {
+  const [now, setNow] = React.useState(() => Date.now());
+  React.useEffect(() => {
+    if (!iso) return;
+    const timer = window.setInterval(() => setNow(Date.now()), 1000);
+    return () => window.clearInterval(timer);
+  }, [iso]);
+  if (!iso) return null;
+  return Math.max(0, Math.floor((new Date(iso).getTime() - now) / 1000));
+}
+
+function clock(seconds: number): string {
+  const m = Math.floor(seconds / 60);
+  const s = seconds % 60;
+  return `${m}:${String(s).padStart(2, "0")}`;
+}
+
 export function ReportProblem({ order, onReported }: { order: Order; onReported: () => void }) {
   const [open, setOpen] = React.useState(false);
+  // A provider that reviews reports (TextVerified) only takes them within a
+  // few minutes of the code arriving, so the button counts down and closes.
+  const secondsLeft = useSecondsLeft(order.report_needs_evidence ? order.report_window_ends_at : null);
+  const expired = secondsLeft !== null && secondsLeft <= 0;
 
-  if (!order.issue && !order.can_report) return null;
+  if (!order.issue && (!order.can_report || (expired && !open))) return null;
 
   return (
     <>
@@ -64,9 +86,18 @@ export function ReportProblem({ order, onReported }: { order: Order; onReported:
             <div>
               <p className="text-sm font-medium text-ink">Number not working as expected?</p>
               <p className="mt-0.5 text-caption text-ink-muted">
-                {order.report_window_ends_at
-                  ? `You can report a problem until ${formatDateTime(order.report_window_ends_at)}.`
-                  : "Tell us what happened and we'll review it."}
+                {secondsLeft !== null ? (
+                  <>
+                    Report within{" "}
+                    <span className="tabular font-semibold text-ink">{clock(secondsLeft)}</span>,
+                    with a screenshot of the problem. Reports are reviewed by our number provider,
+                    who only accepts them in the first few minutes after the code arrives.
+                  </>
+                ) : order.report_window_ends_at ? (
+                  `You can report a problem until ${formatDateTime(order.report_window_ends_at)}.`
+                ) : (
+                  "Tell us what happened and we'll review it."
+                )}
               </p>
             </div>
             <Button
@@ -105,29 +136,43 @@ function ReportDialog({
 }) {
   const [reason, setReason] = React.useState<IssueReason | null>(null);
   const [details, setDetails] = React.useState("");
+  const [files, setFiles] = React.useState<File[]>([]);
   const [busy, setBusy] = React.useState(false);
   const [error, setError] = React.useState("");
   const [filed, setFiled] = React.useState<OrderIssue | null>(null);
+  const needsEvidence = order.report_needs_evidence;
+  const missingEvidence = needsEvidence && files.length === 0;
 
   React.useEffect(() => {
     if (open) {
       setReason(null);
       setDetails("");
+      setFiles([]);
       setError("");
       setFiled(null);
     }
   }, [open]);
 
   async function submit() {
-    if (!reason) return;
+    if (!reason || missingEvidence) return;
     setBusy(true);
     setError("");
     try {
-      const issue = await api.post<OrderIssue>(`/orders/${order.reference}/report/`, {
+      const fields = {
         reason,
         details: details.trim(),
         confirmed_existing_account: reason === "NUMBER_ALREADY_LINKED",
-      });
+      };
+      let body: unknown = fields;
+      if (files.length) {
+        const form = new FormData();
+        form.append("reason", fields.reason);
+        form.append("details", fields.details);
+        form.append("confirmed_existing_account", String(fields.confirmed_existing_account));
+        for (const file of files) form.append("evidence", file);
+        body = form;
+      }
+      const issue = await api.post<OrderIssue>(`/orders/${order.reference}/report/`, body);
       setFiled(issue);
       onReported();
     } catch (caught) {
@@ -151,11 +196,25 @@ function ReportDialog({
             <CheckCircleIcon className="mt-0.5 h-5 w-5 shrink-0" />
             <div className="space-y-1 text-sm">
               <p className="font-medium">Thanks for reporting this.</p>
-              <p>We&apos;ve flagged this number for review.</p>
-              <p>
-                If the number is confirmed unusable for the requested service, your order will be
-                handled according to our replacement/refund policy.
-              </p>
+              {filed.status === "AWAITING_PROVIDER" ? (
+                <>
+                  <p>We&apos;ve sent your report and screenshot to our number provider.</p>
+                  <p>
+                    If they approve it, the full amount comes back to your wallet automatically.
+                    {filed.decision_due_at
+                      ? ` A decision is expected by ${formatDateTime(filed.decision_due_at)}.`
+                      : null}
+                  </p>
+                </>
+              ) : (
+                <>
+                  <p>We&apos;ve flagged this number for review.</p>
+                  <p>
+                    If the number is confirmed unusable for the requested service, your order will
+                    be handled according to our replacement/refund policy.
+                  </p>
+                </>
+              )}
             </div>
           </div>
           <p className="text-caption text-ink-muted">Report reference: {filed.reference}</p>
@@ -211,11 +270,14 @@ function ReportDialog({
                 Don&apos;t try to guess or reset that password - the account isn&apos;t yours. We
                 never need your password for {order.service_name} or any other service.
               </p>
+              {needsEvidence ? (
+                <EvidencePicker files={files} onChange={setFiles} disabled={busy} />
+              ) : null}
               <div className="flex flex-col-reverse gap-2 sm:flex-row sm:justify-end">
                 <Button variant="secondary" onClick={() => setReason(null)} disabled={busy}>
                   No
                 </Button>
-                <Button onClick={submit} loading={busy}>
+                <Button onClick={submit} loading={busy} disabled={missingEvidence}>
                   Yes, report this number
                 </Button>
               </div>
@@ -235,11 +297,14 @@ function ReportDialog({
                   onChange={(event) => setDetails(event.target.value)}
                 />
               </Field>
+              {needsEvidence ? (
+                <EvidencePicker files={files} onChange={setFiles} disabled={busy} />
+              ) : null}
               <div className="flex flex-col-reverse gap-2 sm:flex-row sm:justify-end">
                 <Button variant="secondary" onClick={onClose} disabled={busy}>
                   Cancel
                 </Button>
-                <Button onClick={submit} loading={busy}>
+                <Button onClick={submit} loading={busy} disabled={missingEvidence}>
                   Send report
                 </Button>
               </div>
@@ -264,11 +329,107 @@ function IssueStatusCard({ issue }: { issue: OrderIssue }) {
         <StatusBadge status={issue.status} />
       </div>
       <p className="mt-3 text-sm text-ink-soft">{issue.message}</p>
+      {issue.status === "AWAITING_PROVIDER" && issue.decision_due_at ? (
+        <p className="mt-2 text-caption text-ink-muted">
+          {new Date(issue.decision_due_at).getTime() > Date.now()
+            ? `Decision expected by ${formatDateTime(issue.decision_due_at)}.`
+            : "This is taking longer than usual. Your report stays open until the provider decides, and any refund still comes to your wallet automatically."}
+        </p>
+      ) : null}
       {issue.replacement_order_reference ? (
         <ButtonLink href={`/orders/${issue.replacement_order_reference}`} size="sm" className="mt-3">
           Open replacement order
         </ButtonLink>
       ) : null}
     </Card>
+  );
+}
+
+const EVIDENCE_TYPES = ["image/png", "image/jpeg", "image/webp"];
+const MAX_EVIDENCE = 3;
+const MAX_EVIDENCE_BYTES = 5 * 1024 * 1024;
+
+/** Up to three screenshots showing the problem - required where the provider
+ *  reviews reports, because it decides on the picture. */
+function EvidencePicker({
+  files,
+  onChange,
+  disabled,
+}: {
+  files: File[];
+  onChange: (files: File[]) => void;
+  disabled?: boolean;
+}) {
+  const [problem, setProblem] = React.useState("");
+  const previews = React.useMemo(() => files.map((file) => URL.createObjectURL(file)), [files]);
+  React.useEffect(() => () => previews.forEach((url) => URL.revokeObjectURL(url)), [previews]);
+
+  function add(event: React.ChangeEvent<HTMLInputElement>) {
+    const picked = Array.from(event.target.files ?? []);
+    event.target.value = "";
+    setProblem("");
+    const ok = picked.filter((file) => {
+      if (!EVIDENCE_TYPES.includes(file.type)) {
+        setProblem("Screenshots must be PNG, JPEG or WebP images.");
+        return false;
+      }
+      if (file.size > MAX_EVIDENCE_BYTES) {
+        setProblem("Each screenshot must be 5 MB or smaller.");
+        return false;
+      }
+      return true;
+    });
+    const next = [...files, ...ok].slice(0, MAX_EVIDENCE);
+    if (files.length + ok.length > MAX_EVIDENCE) setProblem(`Attach at most ${MAX_EVIDENCE} screenshots.`);
+    onChange(next);
+  }
+
+  return (
+    <div className="space-y-2">
+      <p className="text-sm font-medium text-ink">
+        Screenshot of the problem <span className="text-danger-700">*</span>
+      </p>
+      <p className="text-caption text-ink-muted">
+        For example, the app asking for an existing PIN or saying the number is in use. Hide
+        anything private before you take it.
+      </p>
+      {files.length ? (
+        <ul className="flex flex-wrap gap-2">
+          {files.map((file, index) => (
+            <li key={`${file.name}-${index}`} className="relative">
+              {/* eslint-disable-next-line @next/next/no-img-element */}
+              <img
+                src={previews[index]}
+                alt={`Screenshot ${index + 1}`}
+                className="h-20 w-20 rounded-lg border border-line object-cover"
+              />
+              <button
+                type="button"
+                onClick={() => onChange(files.filter((_, i) => i !== index))}
+                disabled={disabled}
+                className="absolute -right-1.5 -top-1.5 rounded-full bg-ink px-1.5 text-caption text-surface"
+                aria-label={`Remove screenshot ${index + 1}`}
+              >
+                &times;
+              </button>
+            </li>
+          ))}
+        </ul>
+      ) : null}
+      {files.length < MAX_EVIDENCE ? (
+        <label className="inline-flex cursor-pointer items-center rounded-lg border border-dashed border-line px-3 py-2 text-sm text-ink-soft hover:bg-sunken/60">
+          {files.length ? "Add another screenshot" : "Choose a screenshot"}
+          <input
+            type="file"
+            accept={EVIDENCE_TYPES.join(",")}
+            multiple
+            className="sr-only"
+            onChange={add}
+            disabled={disabled}
+          />
+        </label>
+      ) : null}
+      {problem ? <p className="text-caption text-danger-700">{problem}</p> : null}
+    </div>
   );
 }

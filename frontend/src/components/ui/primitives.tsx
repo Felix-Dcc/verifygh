@@ -474,6 +474,7 @@ const STATUS_TONES: Record<string, Tone> = {
   // Number-issue cases
   OPEN: "warn",
   IN_REVIEW: "info",
+  AWAITING_PROVIDER: "info",
   REPLACED: "success",
   REJECTED: "neutral",
   RESOLVED: "neutral",
@@ -501,6 +502,7 @@ const STATUS_LABELS: Record<string, string> = {
   PENDING: "Pending",
   OPEN: "Open",
   IN_REVIEW: "In review",
+  AWAITING_PROVIDER: "With provider",
   REPLACED: "Replaced",
   REJECTED: "Rejected",
   RESOLVED: "Resolved",

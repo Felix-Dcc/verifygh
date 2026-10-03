@@ -9,6 +9,7 @@ and lands in the AdminAction log.
 from __future__ import annotations
 
 from django.db.models import Q
+from django.http import HttpResponse
 from rest_framework import mixins, viewsets
 from rest_framework.decorators import action
 from rest_framework.response import Response
@@ -18,7 +19,7 @@ from apps.accounts.constants import AdminPermission
 from apps.adminapi.views import AdminBase
 from apps.common.errors import NotFound
 from apps.numbers import services
-from apps.numbers.models import VerificationIssue
+from apps.numbers.models import IssueEvidence, VerificationIssue
 from apps.numbers.serializers import (
     AdminIssueActionSerializer,
     AdminIssueDetailSerializer,
@@ -91,6 +92,45 @@ class AdminIssueViewSet(AdminBase, mixins.ListModelMixin, mixins.RetrieveModelMi
     @action(detail=True, methods=["post"])
     def resolve(self, request, reference=None):
         return self._act(request, AdminPermission.ISSUE_MANAGE, services.mark_resolved)
+
+    # -- a report the provider is reviewing ---------------------------------
+
+    @action(detail=True, methods=["post"], url_path="ticket-filed")
+    def ticket_filed(self, request, reference=None):
+        """Record the support ticket staff opened with the provider."""
+        return self._act(request, AdminPermission.ISSUE_MANAGE, services.mark_ticket_filed)
+
+    @action(detail=True, methods=["post"], url_path="provider-refunded")
+    def provider_refunded(self, request, reference=None):
+        """The provider refunded through its support: refund the customer."""
+        return self._act(request, AdminPermission.ORDER_REFUND,
+                         services.settle_provider_refund)
+
+    @action(detail=True, methods=["post"], url_path="provider-declined")
+    def provider_declined(self, request, reference=None):
+        """The provider declined; the reason is its reply, shown to the customer."""
+        return self._act(request, AdminPermission.ISSUE_MANAGE, services.provider_declined)
+
+    @action(detail=True, methods=["get"], url_path=r"evidence/(?P<evidence_id>[0-9a-f-]{36})")
+    def evidence(self, request, reference=None, evidence_id=None):
+        """A customer's screenshot, for staff only.
+
+        Served with headers that stop a browser treating it as anything but an
+        image: the type was checked from the bytes on upload, and nosniff plus
+        a locked-down CSP keep it that way.
+        """
+        item = IssueEvidence.objects.filter(
+            pk=evidence_id, issue__reference=self.kwargs["reference"]).first()
+        if item is None:
+            raise NotFound("We could not find that screenshot.")
+        response = HttpResponse(bytes(item.data), content_type=item.content_type)
+        response["X-Content-Type-Options"] = "nosniff"
+        response["Content-Security-Policy"] = "default-src 'none'; sandbox"
+        response["Cache-Control"] = "private, no-store"
+        response["Content-Disposition"] = (
+            f'inline; filename="{self.kwargs["reference"]}-{str(item.pk)[:8]}'
+            f'.{item.content_type.split("/")[-1]}"')
+        return response
 
 
 class AdminIssueMetricsView(AdminBase, APIView):

@@ -220,6 +220,20 @@ class VerificationProvider(abc.ABC):
         """
         return None
 
+    #: Whether the provider reviews reported verifications and shows its refund
+    #: on the verification itself - so a customer's refund can wait for, and
+    #: follow, the provider's own decision.
+    tracks_report_refunds: bool = False
+
+    def report_outcome(self, provider_order_id: str) -> str | None:
+        """The provider's decision on a reported verification.
+
+        "REFUNDED" once it has refunded us, "PENDING" while it has not; None
+        where the provider cannot say. A refusal arrives through the provider's
+        support, not here, so it is never inferred from silence.
+        """
+        return None
+
     def check_number_reuse(self, provider_order_id: str, service_code: str) -> bool | None:
         """Whether the provider says this number was used for this service before.
 

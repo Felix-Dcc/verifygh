@@ -10,6 +10,9 @@ from apps.numbers.models import IssueReason, IssueStatus, NumberRecord, Verifica
 CUSTOMER_STATUS_TEXT = {
     IssueStatus.OPEN: services.CUSTOMER_MESSAGE,
     IssueStatus.IN_REVIEW: "We're reviewing your report.",
+    IssueStatus.AWAITING_PROVIDER: "We've sent your report and screenshot to our number "
+                                   "provider. If they approve it, the full amount comes back "
+                                   "to your wallet automatically.",
     IssueStatus.REFUNDED: "We confirmed the problem and refunded this order to your wallet.",
     IssueStatus.REPLACED: "We confirmed the problem and gave you a replacement number at no "
                           "charge.",
@@ -25,6 +28,10 @@ class ReportIssueSerializer(serializers.Serializer):
     #: The answer to "Did the service ask for an existing password instead of
     #: letting you create an account?" - required for NUMBER_ALREADY_LINKED.
     confirmed_existing_account = serializers.BooleanField(required=False, default=False)
+    #: Screenshots supporting the claim; required where the provider reviews
+    #: reports. Checked by their bytes in services.read_evidence.
+    evidence = serializers.ListField(child=serializers.FileField(), required=False,
+                                     allow_empty=True)
 
 
 class CustomerIssueSerializer(serializers.ModelSerializer):
@@ -38,10 +45,16 @@ class CustomerIssueSerializer(serializers.ModelSerializer):
     class Meta:
         model = VerificationIssue
         fields = ["reference", "reason", "reason_label", "status", "status_label", "message",
-                  "replacement_order_reference", "created_at"]
+                  "replacement_order_reference", "decision_due_at", "created_at"]
         read_only_fields = fields
 
+    decision_due_at = serializers.DateTimeField(source="provider_decision_due_at",
+                                                read_only=True)
+
     def get_message(self, obj) -> str:
+        if obj.status == IssueStatus.REJECTED and obj.customer_reply:
+            return ("Our number provider reviewed your report and did not approve a refund. "
+                    f"Their reply: {obj.customer_reply}")
         return CUSTOMER_STATUS_TEXT.get(obj.status, "")
 
 
@@ -82,8 +95,16 @@ class AdminIssueSerializer(serializers.ModelSerializer):
             "qualifies", "qualification", "risk_flags", "needs_review", "resolution_note",
             "resolved_by_email", "resolved_at", "replacement_order_reference",
             "replacement_order_status", "provider_report", "price", "refund", "created_at",
+            "provider_reported_at", "provider_decision_due_at", "provider_state",
+            "provider_checked_at", "provider_ticket_reference", "provider_ticket_filed_at",
+            "customer_reply", "evidence_count",
         ]
         read_only_fields = fields
+
+    evidence_count = serializers.SerializerMethodField()
+
+    def get_evidence_count(self, obj) -> int:
+        return obj.evidence.count()
 
     def get_number_masked(self, obj) -> str:
         if obj.number_record_id:
@@ -107,9 +128,27 @@ class AdminIssueDetailSerializer(AdminIssueSerializer):
     timeline = serializers.SerializerMethodField()
     customer = serializers.SerializerMethodField()
 
+    evidence = serializers.SerializerMethodField()
+    ticket_pack = serializers.SerializerMethodField()
+
     class Meta(AdminIssueSerializer.Meta):
-        fields = AdminIssueSerializer.Meta.fields + ["history", "timeline", "customer"]
+        fields = AdminIssueSerializer.Meta.fields + [
+            "history", "timeline", "customer", "evidence", "ticket_pack"]
         read_only_fields = fields
+
+    def get_evidence(self, obj) -> list[dict]:
+        # The images themselves come from the staff-only evidence endpoint.
+        return [
+            {"id": str(item.pk), "content_type": item.content_type, "size": item.size,
+             "url": f"/admin/number-issues/{obj.reference}/evidence/{item.pk}/",
+             "created_at": item.created_at}
+            for item in obj.evidence.defer("data")
+        ]
+
+    def get_ticket_pack(self, obj) -> dict | None:
+        if obj.status != IssueStatus.AWAITING_PROVIDER:
+            return None
+        return services.ticket_pack(obj)
 
     def get_history(self, obj) -> dict | None:
         record = obj.number_record

@@ -580,6 +580,21 @@ VERIFYGH = {
     # Reports by one customer in 30 days before their cases are flagged for a
     # closer look. Flagged, never refused.
     "NUMBER_ISSUE_REVIEW_THRESHOLD": env_int("NUMBER_ISSUE_REVIEW_THRESHOLD", 3),
+    # When a report goes to a provider that refunds reported verifications
+    # (TextVerified), how long its decision usually takes. TextVerified
+    # publishes no figure, so this is a starting estimate to tune: it is only
+    # the "decision expected by" the customer sees, and passing it never closes
+    # the claim.
+    "NUMBER_ISSUE_PROVIDER_DECISION_HOURS": env_int("NUMBER_ISSUE_PROVIDER_DECISION_HOURS", 48),
+    # How soon after the code arrives such a provider still takes a report.
+    # TextVerified publishes no figure; it declined a claim filed 6 minutes
+    # after the code arrived, so 5 is the working value until they confirm it.
+    # Customers see this as a countdown, and the report button closes with it.
+    "NUMBER_ISSUE_PROVIDER_REPORT_WINDOW_MINUTES": env_int(
+        "NUMBER_ISSUE_PROVIDER_REPORT_WINDOW_MINUTES", 5),
+    # Screenshots a customer attaches to a report.
+    "NUMBER_ISSUE_EVIDENCE_MAX_FILES": env_int("NUMBER_ISSUE_EVIDENCE_MAX_FILES", 3),
+    "NUMBER_ISSUE_EVIDENCE_MAX_BYTES": env_int("NUMBER_ISSUE_EVIDENCE_MAX_BYTES", 5 * 1024 * 1024),
     # How many times one purchase may turn away a flagged number and draw
     # again before giving up and refunding.
     "NUMBER_QUALITY_MAX_REDRAWS": env_int("NUMBER_QUALITY_MAX_REDRAWS", 2),

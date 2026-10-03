@@ -75,6 +75,11 @@ app.conf.beat_schedule = {
         "task": "apps.referrals.tasks.process_pending_referrals",
         "schedule": crontab(minute="*/30"),
     },
+    # Refunds customers once the provider refunds a verification they reported.
+    "check-provider-refunds": {
+        "task": "apps.numbers.tasks.check_provider_refunds",
+        "schedule": crontab(minute="*/10"),
+    },
     # Catches deposits whose provider callback never arrived.
     "reconcile-recent-payments": {
         "task": "apps.payments.tasks.reconcile_recent_payments",

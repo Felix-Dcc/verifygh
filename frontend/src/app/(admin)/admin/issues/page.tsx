@@ -26,7 +26,7 @@ import {
   Textarea,
 } from "@/components/ui/primitives";
 import { useToast } from "@/components/ui/toast";
-import { ApiError, api } from "@/lib/api";
+import { API_URL, ApiError, api } from "@/lib/api";
 import { cedis, formatDateTime } from "@/lib/format";
 import type {
   AdminNumberIssue,
@@ -40,6 +40,7 @@ const STATUS_FILTERS = [
   { value: "", label: "All" },
   { value: "OPEN", label: "Open" },
   { value: "IN_REVIEW", label: "In review" },
+  { value: "AWAITING_PROVIDER", label: "With provider" },
   { value: "REFUNDED", label: "Refunded" },
   { value: "REPLACED", label: "Replaced" },
   { value: "REJECTED", label: "Rejected" },
@@ -299,9 +300,20 @@ function Breakdown({ title, rows }: { title: string; rows: NumberIssueBreakdown[
   );
 }
 
-type Verb = "review" | "refund" | "replace" | "reject" | "resolve";
+type Verb =
+  | "review"
+  | "refund"
+  | "replace"
+  | "reject"
+  | "resolve"
+  | "ticket-filed"
+  | "provider-refunded"
+  | "provider-declined";
 
-const VERBS: Record<Verb, { label: string; done: string; warning?: string; tone?: "danger" }> = {
+const VERBS: Record<
+  Verb,
+  { label: string; done: string; warning?: string; tone?: "danger"; field?: string; hint?: string }
+> = {
   review: { label: "Start review", done: "Marked as in review" },
   refund: {
     label: "Approve refund",
@@ -322,6 +334,26 @@ const VERBS: Record<Verb, { label: string; done: string; warning?: string; tone?
     tone: "danger",
   },
   resolve: { label: "Mark resolved", done: "Report resolved", warning: "Closes the report with no money moving." },
+  "ticket-filed": {
+    label: "Ticket filed",
+    done: "Ticket recorded",
+    field: "Ticket reference",
+    hint: "The ticket number or a short note, e.g. \"TextVerified ticket #4821\".",
+  },
+  "provider-refunded": {
+    label: "Provider refunded",
+    done: "Customer refunded",
+    warning:
+      "Use when TextVerified refunded the credits through support. Credits the customer's wallet with the full order price. VerifyGH also does this automatically when TextVerified marks the verification refunded.",
+  },
+  "provider-declined": {
+    label: "Provider declined",
+    done: "Claim rejected",
+    tone: "danger",
+    field: "TextVerified's reply",
+    hint: "Paste their answer. The customer sees it as the reason. No money moves.",
+    warning: "Rejects the claim with the provider's reply. No refund.",
+  },
 };
 
 function IssueDialog({
@@ -365,6 +397,12 @@ function IssueDialog({
     if (canRemedy && (open || replacementFailed)) available.push("refund");
     if (canRemedy && open) available.push("replace");
     if (canManage && open) available.push("reject", "resolve");
+    // With the provider: the refund follows theirs, never a staff decision.
+    if (issue.status === "AWAITING_PROVIDER") {
+      if (canManage && !issue.provider_ticket_filed_at) available.push("ticket-filed");
+      if (canRemedy) available.push("provider-refunded");
+      if (canManage) available.push("provider-declined");
+    }
   }
 
   async function submit(event: React.FormEvent) {
@@ -410,12 +448,22 @@ function IssueDialog({
           {verb ? (
             <form onSubmit={submit} className="space-y-4">
               {VERBS[verb].warning ? (
-                <Alert tone={verb === "refund" ? "warn" : "info"} title={VERBS[verb].label}>
+                <Alert
+                  tone={verb === "refund" || verb === "provider-refunded" ? "warn" : "info"}
+                  title={VERBS[verb].label}
+                >
                   {VERBS[verb].warning}
-                  {verb === "refund" ? ` Amount: ${cedis(issue.price)}.` : null}
+                  {verb === "refund" || verb === "provider-refunded"
+                    ? ` Amount: ${cedis(issue.price)}.`
+                    : null}
                 </Alert>
               ) : null}
-              <Field label="Reason" htmlFor="issue-action-reason" required hint="At least 5 characters. Recorded in the admin log.">
+              <Field
+                label={VERBS[verb].field ?? "Reason"}
+                htmlFor="issue-action-reason"
+                required
+                hint={VERBS[verb].hint ?? "At least 5 characters. Recorded in the admin log."}
+              >
                 <Textarea
                   id="issue-action-reason"
                   rows={3}
@@ -460,6 +508,31 @@ function IssueDialog({
                 <Row label="Reported" value={when(issue.timeline.reported_at)} />
                 <Row label="Refund" value={issue.refund ? `${cedis(issue.refund.amount)} (${issue.refund.reference})` : issue.timeline.refund_status} />
                 <Row label="Provider notified" value={PROVIDER_REPORT_TEXT[issue.provider_report]} />
+                {issue.provider_reported_at ? (
+                  <Row label="Reported to provider" value={when(issue.provider_reported_at)} />
+                ) : null}
+                {issue.status === "AWAITING_PROVIDER" ? (
+                  <>
+                    <Row label="Decision expected" value={when(issue.provider_decision_due_at)} />
+                    <Row
+                      label="Provider status"
+                      value={
+                        issue.provider_checked_at
+                          ? `${issue.provider_state || "-"} (checked ${formatDateTime(issue.provider_checked_at)})`
+                          : "Not checked yet"
+                      }
+                    />
+                  </>
+                ) : null}
+                {issue.provider_ticket_reference ? (
+                  <Row
+                    label="Provider ticket"
+                    value={`${issue.provider_ticket_reference} (${when(issue.provider_ticket_filed_at)})`}
+                  />
+                ) : null}
+                {issue.customer_reply ? (
+                  <Row label="Provider's reply" value={issue.customer_reply} />
+                ) : null}
                 {issue.replacement_order_reference ? (
                   <Row
                     label="Replacement"
@@ -473,6 +546,31 @@ function IssueDialog({
                   />
                 ) : null}
               </dl>
+
+              {issue.evidence.length > 0 ? (
+                <div>
+                  <p className="mb-2 text-sm font-semibold text-ink">Customer&apos;s screenshots</p>
+                  <ul className="flex flex-wrap gap-2">
+                    {issue.evidence.map((item, index) => (
+                      <li key={item.id}>
+                        <a href={`${API_URL}${item.url}`} target="_blank" rel="noreferrer">
+                          {/* eslint-disable-next-line @next/next/no-img-element */}
+                          <img
+                            src={`${API_URL}${item.url}`}
+                            alt={`Screenshot ${index + 1}`}
+                            className="h-24 w-24 rounded-lg border border-line object-cover"
+                          />
+                        </a>
+                      </li>
+                    ))}
+                  </ul>
+                  <p className="mt-1 text-caption text-ink-muted">
+                    Open one to save it for the provider ticket.
+                  </p>
+                </div>
+              ) : null}
+
+              {issue.ticket_pack ? <TicketPack pack={issue.ticket_pack} /> : null}
 
               {issue.details ? (
                 <div>
@@ -542,7 +640,13 @@ function IssueDialog({
                   {available.map((option) => (
                     <Button
                       key={option}
-                      variant={option === "reject" ? "danger" : option === "refund" || option === "replace" ? "primary" : "secondary"}
+                      variant={
+                        option === "reject" || option === "provider-declined"
+                          ? "danger"
+                          : ["refund", "replace", "provider-refunded"].includes(option)
+                            ? "primary"
+                            : "secondary"
+                      }
                       fullWidth
                       onClick={() => setVerb(option)}
                     >
@@ -556,6 +660,60 @@ function IssueDialog({
         </div>
       )}
     </Dialog>
+  );
+}
+
+/**
+ * What staff paste into TextVerified's support. Their support is a website
+ * form with no API, so a person files the ticket - this makes it a copy and a
+ * paste rather than retyping.
+ */
+function TicketPack({
+  pack,
+}: {
+  pack: { issue_type: string; verification_id: string; message: string };
+}) {
+  const toast = useToast();
+
+  async function copy(text: string, what: string) {
+    try {
+      await navigator.clipboard.writeText(text);
+      toast.success(`${what} copied`);
+    } catch {
+      toast.error("Could not copy", "Select the text and copy it instead.");
+    }
+  }
+
+  return (
+    <div className="space-y-2 rounded-xl border border-line p-3.5">
+      <p className="text-sm font-semibold text-ink">TextVerified ticket</p>
+      <ol className="list-decimal space-y-0.5 pl-5 text-caption text-ink-muted">
+        <li>In TextVerified, open Support and start a new ticket.</li>
+        <li>
+          Choose <span className="font-medium text-ink">{pack.issue_type}</span> and select
+          this verification in your History.
+        </li>
+        <li>Paste the message below and attach the customer&apos;s screenshot.</li>
+        <li>Then press &quot;Ticket filed&quot; here with the ticket number.</li>
+      </ol>
+      <pre className="whitespace-pre-wrap rounded-lg bg-sunken p-3 text-caption text-ink-soft">
+        {pack.message}
+      </pre>
+      <div className="flex flex-wrap gap-2">
+        <Button size="sm" variant="secondary" onClick={() => copy(pack.message, "Message")}>
+          Copy message
+        </Button>
+        {pack.verification_id ? (
+          <Button
+            size="sm"
+            variant="secondary"
+            onClick={() => copy(pack.verification_id, "Verification ID")}
+          >
+            Copy verification ID
+          </Button>
+        ) : null}
+      </div>
+    </div>
   );
 }
 

@@ -5,7 +5,11 @@ Money rules, restated because this module is the one place that refunds an
 order whose code was delivered:
 
 * A report never moves money by itself. Refunds and replacements are staff
-  decisions, each written to the AdminAction log with a reason.
+  decisions, each written to the AdminAction log with a reason - with one
+  exception: a report sent to a provider that refunds reported verifications
+  (TextVerified) is refunded when, and only when, that provider refunds us for
+  it. Until then staff can neither refund nor replace it; if the provider
+  declines, the claim is rejected with the provider's reply.
 * A refund goes through `orders.services.issue_refund`, so it gets the same
   ledger entry, the same one-refund-per-order constraint and the same audit as
   every other refund.
@@ -14,6 +18,7 @@ order whose code was delivered:
 
 from __future__ import annotations
 
+import hashlib
 import logging
 from datetime import timedelta
 from decimal import Decimal
@@ -33,6 +38,7 @@ from apps.common.money import format_ghs
 from apps.numbers.models import (
     EXCLUDED_QUALITIES,
     OPEN_ISSUE_STATUSES,
+    IssueEvidence,
     IssueReason,
     IssueStatus,
     NumberQuality,
@@ -204,10 +210,31 @@ def _window_hours() -> int:
     return int(settings.VERIFYGH["NUMBER_ISSUE_REPORT_WINDOW_HOURS"])
 
 
+def report_window(order) -> timedelta:
+    """How long after the code arrives a problem can be reported.
+
+    A provider that reviews reports (TextVerified) only refunds a report made
+    within minutes of the code arriving - a claim filed six minutes after was
+    declined for exactly that - and our refund follows theirs, so its window
+    is ours. Other providers' orders keep the longer policy window.
+    """
+    if provider_reviews_reports(order.provider.adapter_key):
+        return timedelta(
+            minutes=int(settings.VERIFYGH["NUMBER_ISSUE_PROVIDER_REPORT_WINDOW_MINUTES"]))
+    return timedelta(hours=_window_hours())
+
+
+def describe_window(window: timedelta) -> str:
+    minutes = int(window.total_seconds() // 60)
+    if minutes < 120:
+        return f"{minutes} minute{'s' if minutes != 1 else ''}"
+    return f"{minutes // 60} hours"
+
+
 def report_window_ends(order):
     if not order.code_received_at:
         return None
-    return order.code_received_at + timedelta(hours=_window_hours())
+    return order.code_received_at + report_window(order)
 
 
 def can_report(order) -> bool:
@@ -233,7 +260,8 @@ def _qualification(order, reason: str) -> list[dict]:
     return [
         {"check": "A verification code was delivered to this number",
          "ok": bool(order.code_received_at)},
-        {"check": f"Reported within {_window_hours()} hours of the code arriving",
+        {"check": f"Reported within {describe_window(report_window(order))} of the code "
+                  "arriving",
          "ok": bool(ends and timezone.now() <= ends)},
         {"check": "The reason is covered by the replacement/refund policy",
          "ok": reason in POLICY_REASONS},
@@ -292,12 +320,16 @@ def _risk_flags(order, user, ip: str | None) -> list[dict]:
 
 
 def report_issue(order, *, user, reason: str, details: str = "",
-                 confirmed_existing_account: bool = False, request=None
+                 confirmed_existing_account: bool = False, evidence=None, request=None
                  ) -> tuple[VerificationIssue, bool]:
     """File a customer's report. Returns (issue, created).
 
     A second report on the same order returns the first, unchanged: one case
     per order, enforced by a unique constraint as well as by this check.
+
+    For a provider that reviews reported verifications (TextVerified), a
+    screenshot is required, the report goes to the provider at once, and the
+    case waits for the provider's decision rather than for staff.
     """
     from apps.orders.models import Order, OrderEvent
 
@@ -322,9 +354,13 @@ def report_issue(order, *, user, reason: str, details: str = "",
     ends = report_window_ends(order)
     if timezone.now() > ends:
         raise Conflict(
-            f"Problems can be reported within {_window_hours()} hours of the code arriving. "
+            f"Problems can be reported within {describe_window(report_window(order))} of the "
+            "code arriving. "
             "Contact support with your order reference."
         )
+
+    provider_reviews = provider_reviews_reports(order.provider.adapter_key)
+    screenshots = read_evidence(evidence or [], required=provider_reviews)
 
     ip = (get_client_ip(request) if request else None) or None
     details = " ".join(str(details or "").split())[:500]
@@ -353,7 +389,16 @@ def report_issue(order, *, user, reason: str, details: str = "",
                 risk_flags=flags,
                 needs_review=bool(flags),
                 ip_address=ip,
+                **({"status": IssueStatus.AWAITING_PROVIDER,
+                    "provider_decision_due_at": timezone.now() + timedelta(
+                        hours=int(settings.VERIFYGH["NUMBER_ISSUE_PROVIDER_DECISION_HOURS"]))}
+                   if provider_reviews else {}),
             )
+            for data, content_type in screenshots:
+                IssueEvidence.objects.create(
+                    issue=issue, data=data, content_type=content_type, size=len(data),
+                    sha256=hashlib.sha256(data).hexdigest(),
+                )
 
             if record is not None:
                 NumberRecord.objects.filter(pk=record.pk).update(
@@ -395,8 +440,217 @@ def report_issue(order, *, user, reason: str, details: str = "",
         "number_issue_reported",
         extra={"issue": issue.reference, "order": order.reference, "reason": reason},
     )
+    if provider_reviews:
+        from apps.numbers.tasks import send_issue_to_provider
+
+        transaction.on_commit(lambda: send_issue_to_provider.delay(str(issue.pk)))
     _alert_staff_issue_reported(issue, order, user)
     return issue, True
+
+
+# ---------------------------------------------------------------------------
+# Evidence and the provider's review
+# ---------------------------------------------------------------------------
+
+_IMAGE_TYPES = (
+    (b"\x89PNG\r\n\x1a\n", "image/png"),
+    (b"\xff\xd8\xff", "image/jpeg"),
+)
+
+
+def _image_type(data: bytes) -> str | None:
+    """Only formats a browser shows safely, recognised by their bytes - never by
+    the name or type the upload claims."""
+    for magic, content_type in _IMAGE_TYPES:
+        if data.startswith(magic):
+            return content_type
+    if len(data) > 12 and data[:4] == b"RIFF" and data[8:12] == b"WEBP":
+        return "image/webp"
+    return None
+
+
+def read_evidence(files, *, required: bool) -> list[tuple[bytes, str]]:
+    """Check the screenshots attached to a report: (bytes, content type) each."""
+    limit = int(settings.VERIFYGH["NUMBER_ISSUE_EVIDENCE_MAX_FILES"])
+    max_bytes = int(settings.VERIFYGH["NUMBER_ISSUE_EVIDENCE_MAX_BYTES"])
+    files = [f for f in files if f]
+    if required and not files:
+        raise ValidationFailed(
+            "Attach a screenshot that shows the problem - for example, the app saying "
+            "the number is already in use."
+        )
+    if len(files) > limit:
+        raise ValidationFailed(f"Attach at most {limit} screenshots.")
+    out = []
+    for upload in files:
+        if getattr(upload, "size", 0) > max_bytes:
+            raise ValidationFailed(
+                f"Each screenshot must be {max_bytes // (1024 * 1024)} MB or smaller.")
+        data = upload.read(max_bytes + 1)
+        if len(data) > max_bytes:
+            raise ValidationFailed(
+                f"Each screenshot must be {max_bytes // (1024 * 1024)} MB or smaller.")
+        content_type = _image_type(data)
+        if content_type is None:
+            raise ValidationFailed("Screenshots must be PNG, JPEG or WebP images.")
+        out.append((data, content_type))
+    return out
+
+
+def provider_reviews_reports(adapter_key: str) -> bool:
+    from apps.verification.registry import get_provider
+
+    try:
+        return bool(get_provider(adapter_key).tracks_report_refunds)
+    except ServiceUnavailable:
+        return False
+
+
+def send_to_provider(issue: VerificationIssue) -> bool:
+    """File the report with the provider through its documented report call."""
+    from apps.verification.registry import get_provider
+
+    order = issue.order
+    try:
+        accepted = get_provider(order.provider.adapter_key).report_number_issue(
+            order.provider_order_id, issue.reason)
+    except Exception:
+        logger.warning("provider_issue_report_failed", extra={"issue": issue.reference})
+        return False
+    if accepted is None:
+        return True
+    VerificationIssue.objects.filter(pk=issue.pk).update(
+        provider_report=(ProviderReportStatus.ACCEPTED if accepted
+                         else ProviderReportStatus.REFUSED),
+        provider_reported_at=timezone.now(), updated_at=timezone.now(),
+    )
+    logger.info("provider_issue_reported",
+                extra={"issue": issue.reference, "accepted": bool(accepted)})
+    return True
+
+
+def check_provider_decision(issue: VerificationIssue) -> str | None:
+    """Ask the provider whether it refunded a reported verification; settle it if so."""
+    from apps.verification.registry import get_provider
+
+    if issue.status != IssueStatus.AWAITING_PROVIDER or not issue.order.provider_order_id:
+        return None
+    try:
+        outcome = get_provider(issue.order.provider.adapter_key).report_outcome(
+            issue.order.provider_order_id)
+    except Exception:
+        logger.warning("provider_decision_check_failed", extra={"issue": issue.reference})
+        return None
+    VerificationIssue.objects.filter(pk=issue.pk).update(
+        provider_state=str(outcome or "")[:40], provider_checked_at=timezone.now())
+    if outcome == "REFUNDED":
+        settle_provider_refund(issue, admin=None,
+                               reason="The provider refunded this verification.")
+    return outcome
+
+
+def settle_provider_refund(issue, *, admin, reason: str, request=None) -> VerificationIssue:
+    """The provider refunded us for this verification: refund the customer.
+
+    Called by the scheduled check when the provider's verification shows the
+    refund, or by staff when the provider refunded through its support instead.
+    """
+    from apps.orders.models import RefundReason, RefundStatus
+    from apps.orders.services import issue_refund
+
+    if issue.status != IssueStatus.AWAITING_PROVIDER:
+        raise Conflict("This report is not waiting for the provider.")
+    order = paying_order(issue)
+    before = {"issue_status": issue.status, "refund_status": order.refund_status}
+    if order.refund_status != RefundStatus.COMPLETED:
+        order = issue_refund(
+            order, reason=RefundReason.NUMBER_UNUSABLE, actor=admin,
+            automatic=admin is None, override_delivered=True, provider_refunded=True,
+            note=f"{issue.reference}: {reason}",
+        )
+        if order.refund_status != RefundStatus.COMPLETED:
+            raise Conflict("The refund could not be completed. Nothing was credited.")
+
+    if admin is not None:
+        record_admin_action(admin=admin, action="ISSUE_PROVIDER_REFUNDED", target=issue,
+                            reason=reason, before=before,
+                            after={"order": order.reference, "amount": str(order.price)},
+                            request=request)
+    record_audit(actor=admin, action="NUMBER_ISSUE_PROVIDER_REFUNDED", target=issue,
+                 request=request, metadata={"order": order.reference})
+    _confirm_number(issue)
+    issue = _finish(issue, admin=admin, status=IssueStatus.REFUNDED, note=reason,
+                    allowed_from={IssueStatus.AWAITING_PROVIDER},
+                    provider_report=ProviderReportStatus.ACCEPTED)
+    _notify(issue, "Refund approved",
+            f"Our number provider approved your report on {issue.order.reference}. "
+            f"{format_ghs(order.price)} is back in your wallet.")
+    return issue
+
+
+def provider_declined(issue, *, admin, reason: str, request=None) -> VerificationIssue:
+    """The provider reviewed the report and declined. `reason` is its reply,
+    passed on to the customer as the reason."""
+    if issue.status != IssueStatus.AWAITING_PROVIDER:
+        raise Conflict("This report is not waiting for the provider.")
+    reply = " ".join(str(reason).split())[:500]
+    record_admin_action(admin=admin, action="ISSUE_PROVIDER_DECLINED", target=issue,
+                        reason=reply, before={"status": issue.status},
+                        after={"status": "REJECTED"}, request=request)
+    issue = _finish(issue, admin=admin, status=IssueStatus.REJECTED,
+                    note=f"Provider declined: {reply}",
+                    allowed_from={IssueStatus.AWAITING_PROVIDER},
+                    provider_report=ProviderReportStatus.REFUSED, customer_reply=reply)
+    _unflag_if_unreported(issue)
+    _notify(issue, "Your report was not approved",
+            f"Our number provider reviewed your report on {issue.order.reference} and did "
+            f"not approve a refund. Their reply: {reply}")
+    return issue
+
+
+def mark_ticket_filed(issue, *, admin, reason: str, request=None) -> VerificationIssue:
+    """Staff opened a support ticket with the provider; `reason` is its reference."""
+    if issue.status != IssueStatus.AWAITING_PROVIDER:
+        raise Conflict("This report is not waiting for the provider.")
+    ticket = " ".join(str(reason).split())[:80]
+    record_admin_action(admin=admin, action="ISSUE_PROVIDER_TICKET", target=issue,
+                        reason=ticket, request=request)
+    VerificationIssue.objects.filter(pk=issue.pk).update(
+        provider_ticket_reference=ticket, provider_ticket_filed_at=timezone.now(),
+        updated_at=timezone.now())
+    issue.refresh_from_db()
+    return issue
+
+
+def ticket_pack(issue: VerificationIssue) -> dict:
+    """Everything staff paste into the provider's support ticket.
+
+    The provider's support is a website form with no API, so a person files it;
+    this makes that a copy and a paste. The full phone number stays out - the
+    verification ID identifies it in the provider's history.
+    """
+    order = issue.order
+    number = (issue.number_record.number_masked if issue.number_record_id
+              else mask(order.phone_number, order.country.dial_code))
+    received = timezone.localtime(order.code_received_at).strftime("%d %b %Y %H:%M %Z") \
+        if order.code_received_at else "-"
+    lines = [
+        f"Issue: {IssueReason(issue.reason).label}",
+        f"Verification ID: {order.provider_order_id or '-'}",
+        f"Number: {number}",
+        f"Service: {order.service.name}",
+        f"Code received: {received}",
+        "",
+        f"Our customer reports: {IssueReason(issue.reason).label.lower()}.",
+    ]
+    if issue.details:
+        lines.append(f'Their words: "{issue.details}"')
+    lines.append("Screenshot attached. Please review and refund this verification.")
+    return {
+        "issue_type": IssueReason(issue.reason).label,
+        "verification_id": order.provider_order_id,
+        "message": "\n".join(lines),
+    }
 
 
 def _alert_staff_issue_reported(issue, order, user) -> None:
@@ -496,10 +750,19 @@ def start_review(issue, *, admin, reason: str, request=None) -> VerificationIssu
     return issue
 
 
+def _not_with_provider(issue: VerificationIssue) -> None:
+    if issue.status == IssueStatus.AWAITING_PROVIDER:
+        raise Conflict(
+            "This report is with the provider. The customer is refunded when the provider "
+            "refunds it - or record the provider's reply to decline it."
+        )
+
+
 def approve_refund(issue, *, admin, reason: str, request=None) -> VerificationIssue:
     from apps.orders.models import RefundReason, RefundStatus
     from apps.orders.services import issue_refund
 
+    _not_with_provider(issue)
     _remedy_allowed("REFUND")
     allowed_from = set(OPEN_ISSUE_STATUSES)
     if issue.status == IssueStatus.REPLACED and _replacement_failed(issue):
@@ -572,6 +835,7 @@ def approve_replacement(issue, *, admin, reason: str, request=None) -> Verificat
     from apps.pricing.engine import quote_for_offering
     from apps.verification.registry import get_provider
 
+    _not_with_provider(issue)
     _remedy_allowed("REPLACE")
     if issue.status not in OPEN_ISSUE_STATUSES:
         raise Conflict("This report has already been dealt with.")
@@ -671,7 +935,20 @@ def approve_replacement(issue, *, admin, reason: str, request=None) -> Verificat
     return issue
 
 
+def _unflag_if_unreported(issue: VerificationIssue) -> None:
+    """Un-flag the number, unless another report still stands against it."""
+    record = issue.number_record
+    if record is not None and record.quality == NumberQuality.POSSIBLY_REUSED:
+        still_reported = VerificationIssue.objects.filter(
+            number_record=record, reason=IssueReason.NUMBER_ALREADY_LINKED,
+            status__in=[*OPEN_ISSUE_STATUSES, IssueStatus.REFUNDED, IssueStatus.REPLACED],
+        ).exclude(pk=issue.pk).exists()
+        if not still_reported:
+            _set_quality(record, NumberQuality.NO_ISSUE_REPORTED)
+
+
 def reject_claim(issue, *, admin, reason: str, request=None) -> VerificationIssue:
+    _not_with_provider(issue)
     if issue.status not in OPEN_ISSUE_STATUSES:
         raise Conflict("This report has already been dealt with.")
     record_admin_action(admin=admin, action="ISSUE_REJECT", target=issue, reason=reason,
@@ -679,16 +956,7 @@ def reject_claim(issue, *, admin, reason: str, request=None) -> VerificationIssu
                         request=request)
     issue = _finish(issue, admin=admin, status=IssueStatus.REJECTED, note=reason,
                     allowed_from=set(OPEN_ISSUE_STATUSES))
-
-    # Un-flag the number, unless another report still stands against it.
-    record = issue.number_record
-    if record is not None and record.quality == NumberQuality.POSSIBLY_REUSED:
-        still_reported = VerificationIssue.objects.filter(
-            number_record=record, reason=IssueReason.NUMBER_ALREADY_LINKED,
-            status__in=[*OPEN_ISSUE_STATUSES, IssueStatus.REFUNDED, IssueStatus.REPLACED],
-        ).exists()
-        if not still_reported:
-            _set_quality(record, NumberQuality.NO_ISSUE_REPORTED)
+    _unflag_if_unreported(issue)
 
     _notify(issue, "We've reviewed your report",
             f"We looked into your report on {issue.order.reference} and could not confirm "

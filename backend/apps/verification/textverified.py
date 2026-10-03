@@ -652,6 +652,15 @@ class TextVerifiedProvider(VerificationProvider):
         self._require_configured("reporting a number")
         return self._report(provider_order_id)
 
+    #: A report moves the verification to `verificationReported`, and a refund
+    #: to `verificationRefunded` - both in the documented state enum.
+    tracks_report_refunds = True
+
+    def report_outcome(self, provider_order_id: str) -> str | None:
+        self._require_configured("checking a report")
+        state = str(self.get_order_status(provider_order_id).raw.get("state", "")).lower()
+        return "REFUNDED" if state == "verificationrefunded" else "PENDING"
+
     def _report(self, provider_order_id: str) -> bool:
         try:
             self._request("POST", self._url(self.PATH_ORDER_REFUND, id=provider_order_id))

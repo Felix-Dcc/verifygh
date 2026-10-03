@@ -537,3 +537,216 @@ def test_a_report_alerts_the_staff_who_resolve_reports(user, customer, delivered
     with _capture(execute=True):
         report(customer, delivered)
     assert Notification.objects.filter(event="STAFF_ISSUE_REPORTED").count() == 2
+
+
+# ---------------------------------------------------------------------------
+# Reports a provider reviews (TextVerified): screenshot, sent at once, and the
+# customer refunded only when the provider refunds us
+# ---------------------------------------------------------------------------
+
+PNG = b"\x89PNG\r\n\x1a\n" + b"\x00" * 64
+
+
+def screenshot(data: bytes = PNG, name: str = "shot.png"):
+    from django.core.files.uploadedfile import SimpleUploadedFile
+
+    return SimpleUploadedFile(name, data, content_type="image/png")
+
+
+@pytest.fixture
+def reviewing(monkeypatch):
+    """The mock provider behaving like TextVerified: it reviews reports."""
+    state = {"outcome": "PENDING", "reports": []}
+    cls = verification_mock.MockVerificationProvider
+    monkeypatch.setattr(cls, "tracks_report_refunds", True, raising=False)
+    monkeypatch.setattr(cls, "report_outcome",
+                        lambda self, provider_order_id: state["outcome"], raising=False)
+    original = cls.report_number_issue
+
+    def recording(self, provider_order_id, reason):
+        state["reports"].append(provider_order_id)
+        return original(self, provider_order_id, reason)
+
+    monkeypatch.setattr(cls, "report_number_issue", recording)
+    return state
+
+
+def report_with_evidence(client, order, files=None, body=LINKED):
+    payload = {**body, "evidence": files if files is not None else [screenshot()]}
+    with _capture(execute=True):
+        return client.post(f"/api/v1/orders/{order.reference}/report/", payload,
+                           format="multipart")
+
+
+def balance(user) -> Decimal:
+    return get_or_create_wallet(user).balance
+
+
+def test_a_report_the_provider_reviews_needs_a_screenshot(customer, delivered, reviewing):
+    response = report_with_evidence(customer, delivered, files=[])
+    assert response.status_code == 400
+    assert not VerificationIssue.objects.exists()
+
+
+def test_only_real_images_are_accepted_as_evidence(customer, delivered, reviewing):
+    response = report_with_evidence(customer, delivered,
+                                    files=[screenshot(b"<html>not an image</html>", "x.png")])
+    assert response.status_code == 400
+    assert not VerificationIssue.objects.exists()
+
+
+def test_the_report_goes_to_the_provider_at_once_and_waits_for_it(
+        user, customer, delivered, reviewing):
+    before = balance(user)
+    response = report_with_evidence(customer, delivered)
+    assert response.status_code == 201, response.data
+
+    issue = VerificationIssue.objects.get(order=delivered)
+    assert issue.status == IssueStatus.AWAITING_PROVIDER
+    assert reviewing["reports"] == [delivered.provider_order_id]
+    assert issue.provider_report == "ACCEPTED" and issue.provider_reported_at
+    assert issue.provider_decision_due_at > issue.created_at
+    assert issue.evidence.count() == 1
+    assert balance(user) == before  # nothing moves until the provider decides
+    assert response.data["decision_due_at"]
+    assert "number provider" in response.data["message"]
+
+
+def test_staff_cannot_refund_replace_or_reject_while_the_provider_decides(
+        customer, staff, delivered, reviewing):
+    report_with_evidence(customer, delivered)
+    issue = VerificationIssue.objects.get(order=delivered)
+    for verb in ("refund", "replace", "reject"):
+        assert act(staff, issue.reference, verb).status_code == 409, verb
+    issue.refresh_from_db()
+    assert issue.status == IssueStatus.AWAITING_PROVIDER
+
+
+def test_the_customer_is_refunded_when_the_provider_refunds(user, customer, delivered,
+                                                             reviewing):
+    from apps.numbers.tasks import check_provider_refunds
+
+    report_with_evidence(customer, delivered)
+    before = balance(user)
+
+    reviewing["outcome"] = "PENDING"
+    with _capture(execute=True):
+        check_provider_refunds()
+    assert VerificationIssue.objects.get(order=delivered).status == IssueStatus.AWAITING_PROVIDER
+
+    reviewing["outcome"] = "REFUNDED"
+    with _capture(execute=True):
+        check_provider_refunds()
+        check_provider_refunds()  # a second run must not refund twice
+
+    issue = VerificationIssue.objects.get(order=delivered)
+    assert issue.status == IssueStatus.REFUNDED
+    assert balance(user) == before + delivered.price
+    refund = Refund.objects.get(order=delivered)
+    assert refund.provider_refund_accepted is True
+    assert WalletLedgerEntry.objects.filter(entry_type=LedgerEntryType.REFUND).count() == 1
+    assert verify_wallet_integrity(get_or_create_wallet(user))["ok"]
+
+
+def test_a_claim_past_its_expected_decision_stays_open(customer, delivered, reviewing):
+    from datetime import timedelta
+
+    from django.utils import timezone
+
+    from apps.numbers.tasks import check_provider_refunds
+
+    report_with_evidence(customer, delivered)
+    VerificationIssue.objects.filter(order=delivered).update(
+        provider_decision_due_at=timezone.now() - timedelta(hours=1))
+    with _capture(execute=True):
+        check_provider_refunds()
+
+    issue = VerificationIssue.objects.get(order=delivered)
+    assert issue.status == IssueStatus.AWAITING_PROVIDER
+    assert issue.provider_checked_at is not None
+
+
+def test_a_declined_claim_is_rejected_with_the_providers_reply(user, customer, staff,
+                                                               delivered, reviewing):
+    report_with_evidence(customer, delivered)
+    issue = VerificationIssue.objects.get(order=delivered)
+    before = balance(user)
+
+    reply = "The number received the code and worked as expected."
+    response = act(staff, issue.reference, "provider-declined", reason=reply)
+    assert response.status_code == 200, response.data
+
+    issue.refresh_from_db()
+    assert issue.status == IssueStatus.REJECTED
+    assert issue.customer_reply == reply
+    assert balance(user) == before
+    seen = customer.get(f"/api/v1/orders/{delivered.reference}/").data["issue"]
+    assert reply in seen["message"]
+
+
+def test_staff_can_record_a_refund_the_provider_gave_through_support(
+        user, customer, staff, delivered, reviewing):
+    report_with_evidence(customer, delivered)
+    issue = VerificationIssue.objects.get(order=delivered)
+    before = balance(user)
+
+    response = act(staff, issue.reference, "provider-refunded",
+                   reason="TextVerified refunded the credits on ticket #4821")
+    assert response.status_code == 200, response.data
+    assert VerificationIssue.objects.get(pk=issue.pk).status == IssueStatus.REFUNDED
+    assert balance(user) == before + delivered.price
+    assert AdminAction.objects.filter(action="ISSUE_PROVIDER_REFUNDED").exists()
+
+
+def test_staff_get_a_ticket_pack_and_the_screenshot_customers_do_not(
+        customer, staff, delivered, reviewing):
+    report_with_evidence(customer, delivered)
+    issue = VerificationIssue.objects.get(order=delivered)
+
+    detail = staff.get(f"/api/v1/admin/number-issues/{issue.reference}/").data
+    pack = detail["ticket_pack"]
+    assert pack["verification_id"] == delivered.provider_order_id
+    assert "Screenshot attached" in pack["message"]
+    assert delivered.phone_number not in pack["message"]  # never the full number
+
+    (item,) = detail["evidence"]
+    image = staff.get(f"/api/v1{item['url']}")
+    assert image.status_code == 200
+    assert image["Content-Type"] == "image/png"
+    assert image["X-Content-Type-Options"] == "nosniff"
+    assert image.content == PNG
+    assert customer.get(f"/api/v1{item['url']}").status_code == 403
+
+    assert act(staff, issue.reference, "ticket-filed",
+               reason="TextVerified ticket #4821").status_code == 200
+    issue.refresh_from_db()
+    assert issue.provider_ticket_reference == "TextVerified ticket #4821"
+    assert issue.provider_ticket_filed_at is not None
+
+
+def test_the_providers_report_window_is_minutes_not_hours(customer, delivered, reviewing):
+    """TextVerified declined a claim filed six minutes after the code arrived."""
+    from datetime import timedelta
+
+    detail = customer.get(f"/api/v1/orders/{delivered.reference}/").data
+    assert detail["report_needs_evidence"] is True
+    assert detail["can_report"] is True
+    ends = numbers.report_window_ends(Order.objects.get(pk=delivered.pk))
+    assert ends - delivered.code_received_at == timedelta(minutes=5)
+
+    Order.objects.filter(pk=delivered.pk).update(
+        code_received_at=delivered.code_received_at - timedelta(minutes=6))
+    late = customer.get(f"/api/v1/orders/{delivered.reference}/").data
+    assert late["can_report"] is False
+    response = report_with_evidence(customer, delivered)
+    assert response.status_code == 409
+    assert "5 minutes" in str(response.data)
+
+
+def test_other_providers_keep_the_longer_window(customer, delivered):
+    from datetime import timedelta
+
+    detail = customer.get(f"/api/v1/orders/{delivered.reference}/").data
+    assert detail["report_needs_evidence"] is False
+    ends = numbers.report_window_ends(Order.objects.get(pk=delivered.pk))
+    assert ends - delivered.code_received_at == timedelta(hours=72)
