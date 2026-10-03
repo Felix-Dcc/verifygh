@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from django.db.models import Q, Sum
+from django.db.models import Q
 from django.utils import timezone
 from rest_framework import mixins, viewsets
 from rest_framework.decorators import action
@@ -10,7 +10,7 @@ from rest_framework.response import Response
 from apps.common.permissions import IsActiveUser
 from apps.wallet.models import WalletLedgerEntry
 from apps.wallet.serializers import LedgerEntrySerializer, WalletSerializer
-from apps.wallet.services import get_or_create_wallet
+from apps.wallet.services import get_or_create_wallet, net_spending
 
 
 class WalletViewSet(viewsets.ViewSet):
@@ -26,17 +26,14 @@ class WalletViewSet(viewsets.ViewSet):
     @action(detail=False, methods=["get"])
     def summary(self, request):
         from apps.orders.models import ACTIVE_ORDER_STATUSES, Order, OrderStatus
-        from apps.wallet.models import LedgerEntryType
 
         wallet = get_or_create_wallet(request.user)
         today = timezone.localtime().date()
 
         orders = Order.objects.filter(user=request.user)
-        spent_today = WalletLedgerEntry.objects.filter(
-            wallet=wallet,
-            entry_type=LedgerEntryType.PURCHASE,
-            created_at__date=today,
-        ).aggregate(total=Sum("amount"))["total"]
+        # Only orders that are or were successful (a code arrived), net of any
+        # refund: a cancelled, failed or still-waiting order is not "spent".
+        spent_today = net_spending(wallet, successful_only=True, created_at__date=today)
 
         return Response(
             {

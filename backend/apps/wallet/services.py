@@ -27,7 +27,7 @@ import time
 from decimal import Decimal
 
 from django.db import IntegrityError, OperationalError, connection, transaction
-from django.db.models import F
+from django.db.models import F, Sum
 
 from apps.common.errors import Conflict, InsufficientFunds, ValidationFailed
 from apps.common.ids import ledger_reference
@@ -272,6 +272,32 @@ def credit_deposit(*, wallet: Wallet, amount, idempotency_key: str, payment_refe
         # not bounce it back to the user's MoMo account.
         allow_frozen=True,
     )
+
+
+def net_spending(wallet: Wallet, *, successful_only: bool = False, **when) -> Decimal:
+    """What the customer actually spent on orders placed in a period.
+
+    Purchases in the period minus the refunds of those same orders, whenever
+    the refund landed: an order that was cancelled or failed and refunded cost
+    nothing, so it is not "spent". `when` filters the purchase entries'
+    `created_at`, e.g. created_at__date=today or created_at__gte=since.
+
+    `successful_only` counts just the orders that are or were successful - a
+    code arrived - which is what the customer means by "spent": an order still
+    waiting for its code is not counted until it delivers.
+    """
+    purchases = wallet.ledger_entries.filter(entry_type=LedgerEntryType.PURCHASE, **when)
+    if successful_only:
+        from apps.orders.models import Order
+
+        purchases = purchases.filter(related_order_id__in=Order.objects.filter(
+            user_id=wallet.user_id, code_received_at__isnull=False).values("id"))
+    spent = purchases.aggregate(total=Sum("amount"))["total"] or ZERO
+    refunded = wallet.ledger_entries.filter(
+        entry_type=LedgerEntryType.REFUND,
+        related_order_id__in=purchases.exclude(related_order_id=None).values("related_order_id"),
+    ).aggregate(total=Sum("amount"))["total"] or ZERO
+    return max(quantize(spent - refunded), ZERO)
 
 
 def debit_purchase(*, wallet: Wallet, amount, idempotency_key: str, order_id, order_reference: str,

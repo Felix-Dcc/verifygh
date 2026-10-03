@@ -583,3 +583,64 @@ def test_a_purchase_confirmation_email_goes_through_brevo(user, auth, catalog, f
     completed = [c["json"] for c in brevo.calls if "completed" in c["json"]["subject"].lower()]
     assert completed and completed[-1]["to"] == [{"email": user.email}]
     assert order.service.name in completed[-1]["textContent"]
+
+
+# ---------------------------------------------------------------------------
+# "Spent today" counts only orders that are or were successful
+# ---------------------------------------------------------------------------
+
+
+def spent_today(client) -> Decimal:
+    return Decimal(client.get("/api/v1/wallet/summary/").data["today_spending"])
+
+
+def test_a_cancelled_and_refunded_order_is_not_spent(user, auth, catalog, funded_wallet):
+    verification_mock.force_scenario("SLOW_CODE")
+    funded_wallet(user, "200.00")
+    client = auth(user)
+
+    reference = buy(client).data["reference"]
+    assert spent_today(client) == Decimal("0.00")  # still waiting: not spent yet
+    assert client.post(f"/api/v1/orders/{reference}/cancel/", {},
+                       format="json").status_code == 200
+
+    assert spent_today(client) == Decimal("0.00")
+
+
+def test_a_successful_order_counts_as_spent(user, auth, catalog, funded_wallet):
+    verification_mock.force_scenario("HAPPY")
+    funded_wallet(user, "200.00")
+    client = auth(user)
+
+    order = Order.objects.get(reference=buy(client).data["reference"])
+    drive(order, seconds=30)
+
+    assert spent_today(client) == order.price
+
+
+def test_a_failed_order_refunded_automatically_is_not_spent(user, auth, catalog,
+                                                            funded_wallet):
+    verification_mock.force_scenario("NO_STOCK")
+    funded_wallet(user, "200.00")
+    client = auth(user)
+
+    buy(client)
+    assert spent_today(client) == Decimal("0.00")
+
+
+def test_refunded_orders_do_not_use_up_the_daily_spending_limit(user, auth, catalog,
+                                                                 funded_wallet, settings):
+    from apps.wallet.services import net_spending
+
+    verification_mock.force_scenario("SLOW_CODE")
+    funded_wallet(user, "200.00")
+    client = auth(user)
+
+    reference = buy(client).data["reference"]
+    wallet = get_or_create_wallet(user)
+    since = timezone.now() - timezone.timedelta(days=1)
+    held = net_spending(wallet, created_at__gte=since)
+    assert held > 0  # an order still in progress counts towards the limit
+
+    client.post(f"/api/v1/orders/{reference}/cancel/", {}, format="json")
+    assert net_spending(wallet, created_at__gte=since) == Decimal("0.00")

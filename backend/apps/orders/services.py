@@ -52,7 +52,7 @@ from apps.orders.models import (
 from apps.pricing.engine import quote_for_offering
 from apps.verification.base import ProviderOrderState
 from apps.verification.registry import get_provider
-from apps.wallet.models import FundType, LedgerEntryType
+from apps.wallet.models import FundType
 from apps.wallet.services import charge_order, credit_refund, get_or_create_wallet
 
 logger = logging.getLogger("verifygh.orders")
@@ -190,11 +190,10 @@ def check_purchase_eligibility(user) -> None:
 
     spend_cap = quantize(settings.VERIFYGH["MAX_DAILY_SPEND"])
     wallet = get_or_create_wallet(user)
-    from django.db.models import Sum
+    from apps.wallet.services import net_spending
 
-    spent_today = wallet.ledger_entries.filter(
-        entry_type=LedgerEntryType.PURCHASE, created_at__gte=since
-    ).aggregate(total=Sum("amount"))["total"] or quantize("0")
+    # Refunded orders do not count towards the limit: the money came back.
+    spent_today = net_spending(wallet, created_at__gte=since)
     if spent_today >= spend_cap:
         raise LimitExceeded(
             f"You have reached the daily spending limit of {format_ghs(spend_cap)}.",
