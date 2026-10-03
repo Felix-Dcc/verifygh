@@ -791,10 +791,23 @@ export type SuspiciousActivity = {
   level: "LOW" | "MEDIUM" | "HIGH";
   description: string;
   evidence: Record<string, unknown>;
+  /** Shared-device signals only: every account seen on that device. */
+  linked_accounts: LinkedAccount[];
   resolved: boolean;
   resolved_at: string | null;
   resolution_note: string;
   created_at: string;
+};
+
+export type LinkedAccount = {
+  id: string;
+  email: string;
+  date_joined: string;
+  is_email_verified: boolean;
+  is_suspended: boolean;
+  first_seen_on_device: string;
+  last_seen_on_device: string;
+  is_flagged_user: boolean;
 };
 
 export type AuditLogEntry = {

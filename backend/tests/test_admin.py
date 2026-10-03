@@ -345,3 +345,57 @@ def test_support_can_see_abuse_signals_but_not_dismiss_them(as_support, user):
     assert response.status_code == 403
     flag.refresh_from_db()
     assert flag.resolved is False
+
+
+# ---------------------------------------------------------------------------
+# A shared-device signal lists the accounts behind it
+# ---------------------------------------------------------------------------
+
+
+def _accounts_on_one_device(django_user_model, fingerprint="f" * 64):
+    from apps.accounts.models import UserDevice
+
+    people = [django_user_model.objects.create_user(email=f"emma{i}@example.org",
+                                                    password="Correct-Horse-Battery-9")
+              for i in range(3)]
+    for person in people:
+        UserDevice.objects.create(user=person, fingerprint_hash=fingerprint)
+    return people
+
+
+def test_a_shared_device_signal_lists_every_account_on_that_device(as_admin,
+                                                                     django_user_model):
+    from apps.audit.models import SuspiciousActivity
+    from apps.audit.services import evaluate_device_sharing
+
+    people = _accounts_on_one_device(django_user_model)
+    evaluate_device_sharing(user=people[-1], fingerprint_hash="f" * 64, ip="203.0.113.9")
+
+    (flag,) = as_admin.get("/api/v1/admin/flags/").data["results"]
+    assert flag["kind"] == SuspiciousActivity.Kind.SHARED_DEVICE
+    linked = flag["linked_accounts"]
+    assert [a["email"] for a in linked] == [p.email for p in people]
+    assert [a["is_flagged_user"] for a in linked] == [False, False, True]
+    assert {"date_joined", "is_email_verified", "is_suspended",
+            "last_seen_on_device"} <= set(linked[0])
+
+
+def test_an_older_signal_without_the_fingerprint_still_finds_the_accounts(as_admin,
+                                                                           django_user_model):
+    from apps.audit.models import SuspiciousActivity
+
+    people = _accounts_on_one_device(django_user_model)
+    SuspiciousActivity.objects.create(user=people[0], kind="SHARED_DEVICE", level="LOW",
+                                      evidence={"account_count": 3, "ip": ""})
+
+    (flag,) = as_admin.get("/api/v1/admin/flags/").data["results"]
+    assert len(flag["linked_accounts"]) == 3
+
+
+def test_other_signals_list_no_accounts(as_admin, user):
+    from apps.audit.models import SuspiciousActivity
+
+    SuspiciousActivity.objects.create(user=user, kind="DEPOSIT_ANOMALY", level="LOW")
+
+    (flag,) = as_admin.get("/api/v1/admin/flags/").data["results"]
+    assert flag["linked_accounts"] == []

@@ -1,5 +1,6 @@
 "use client";
 
+import Link from "next/link";
 import * as React from "react";
 import useSWR from "swr";
 
@@ -29,6 +30,7 @@ import type {
   AdminActionEntry,
   AdminSystemHealth,
   AuditLogEntry,
+  LinkedAccount,
   Paginated,
   SuspiciousActivity,
 } from "@/lib/types";
@@ -265,6 +267,43 @@ function Row({
 
 /* ------------------------------------------------------------------ */
 
+/**
+ * The accounts behind a shared-device signal. The "device" is a hash of
+ * browser and network, so strangers on one mobile carrier address with the
+ * same phone model can share it - join dates and activity tell them apart.
+ */
+function LinkedAccounts({ accounts }: { accounts: LinkedAccount[] }) {
+  return (
+    <div className="mt-2 rounded-lg border border-line">
+      <p className="border-b border-line px-3 py-2 text-caption text-ink-muted">
+        Accounts seen on this device (same browser and network - not proof of one person)
+      </p>
+      <ul className="divide-y divide-line">
+        {accounts.map((account) => (
+          <li key={account.id} className="flex flex-wrap items-center gap-x-3 gap-y-1 px-3 py-2">
+            <Link
+              href={`/admin/users?q=${encodeURIComponent(account.email)}`}
+              className="min-w-0 truncate text-sm font-medium text-ink underline-offset-2 hover:underline"
+            >
+              {account.email}
+            </Link>
+            {account.is_flagged_user ? <Badge tone="neutral">Flagged</Badge> : null}
+            {account.is_suspended ? <Badge tone="danger">Suspended</Badge> : null}
+            {account.is_email_verified ? null : <Badge tone="warn">Unverified</Badge>}
+            <span className="text-caption text-ink-muted">
+              Joined {formatDateTime(account.date_joined)}
+              <span className="mx-1.5" aria-hidden>
+                &middot;
+              </span>
+              Last on this device {formatDateTime(account.last_seen_on_device)}
+            </span>
+          </li>
+        ))}
+      </ul>
+    </div>
+  );
+}
+
 function FlagsTab() {
   const toast = useToast();
   const [showResolved, setShowResolved] = React.useState(false);
@@ -351,6 +390,9 @@ function FlagsTab() {
                       </span>
                     </div>
                     <p className="mt-1 text-sm text-ink-soft">{flag.description}</p>
+                    {flag.linked_accounts?.length ? (
+                      <LinkedAccounts accounts={flag.linked_accounts} />
+                    ) : null}
                     <p className="mt-1 text-caption text-ink-muted">
                       {flag.user_email || "no account"}
                       <span className="mx-1.5" aria-hidden>

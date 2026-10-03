@@ -134,7 +134,10 @@ def evaluate_device_sharing(*, user, fingerprint_hash: str, ip: str | None = Non
         kind=SuspiciousActivity.Kind.SHARED_DEVICE,
         level=SuspicionLevel.MEDIUM if account_count >= 5 else SuspicionLevel.LOW,
         description=f"This device has been seen on {account_count} accounts.",
-        evidence={"account_count": account_count, "ip": ip or ""},
+        # The fingerprint is a salted hash, never the raw user agent and IP;
+        # kept so a reviewer can see which accounts share this device.
+        evidence={"account_count": account_count, "ip": ip or "",
+                  "fingerprint_hash": fingerprint_hash},
         dedupe_hours=72,
     )
 

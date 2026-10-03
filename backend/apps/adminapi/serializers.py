@@ -359,12 +359,58 @@ class AdminActionSerializer(serializers.ModelSerializer):
 
 class SuspiciousActivitySerializer(serializers.ModelSerializer):
     user_email = serializers.CharField(source="user.email", read_only=True, default="")
+    linked_accounts = serializers.SerializerMethodField()
 
     class Meta:
         model = SuspiciousActivity
         fields = ["id", "user", "user_email", "kind", "level", "description", "evidence",
-                  "resolved", "resolved_at", "resolution_note", "created_at"]
+                  "linked_accounts", "resolved", "resolved_at", "resolution_note",
+                  "created_at"]
         read_only_fields = [field for field in fields if field != "resolution_note"]
+
+    def get_linked_accounts(self, obj) -> list[dict]:
+        """For a shared-device signal: every account seen on that device.
+
+        The "device" is a hash of browser and network, so accounts behind one
+        mobile carrier address with the same phone model can be strangers -
+        this list is what lets a reviewer tell a second account from a
+        coincidence. Signals raised before the fingerprint was recorded fall
+        back to the flagged user's most-shared device.
+        """
+        if obj.kind != SuspiciousActivity.Kind.SHARED_DEVICE:
+            return []
+        from django.db.models import Count
+
+        from apps.accounts.models import UserDevice
+
+        fingerprint = (obj.evidence or {}).get("fingerprint_hash", "")
+        if not fingerprint and obj.user_id:
+            mine = UserDevice.objects.filter(user_id=obj.user_id).values_list(
+                "fingerprint_hash", flat=True)
+            busiest = (UserDevice.objects.filter(fingerprint_hash__in=list(mine))
+                       .values("fingerprint_hash")
+                       .annotate(accounts=Count("user_id", distinct=True))
+                       .order_by("-accounts").first())
+            if busiest and busiest["accounts"] > 1:
+                fingerprint = busiest["fingerprint_hash"]
+        if not fingerprint:
+            return []
+
+        devices = (UserDevice.objects.filter(fingerprint_hash=fingerprint)
+                   .select_related("user").order_by("user__created_at")[:20])
+        return [
+            {
+                "id": str(device.user_id),
+                "email": device.user.email,
+                "date_joined": device.user.created_at,
+                "is_email_verified": device.user.is_email_verified,
+                "is_suspended": device.user.is_suspended,
+                "first_seen_on_device": device.created_at,
+                "last_seen_on_device": device.last_seen_at,
+                "is_flagged_user": device.user_id == obj.user_id,
+            }
+            for device in devices
+        ]
 
 
 class ResolveFlagSerializer(serializers.Serializer):

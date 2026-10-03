@@ -33,6 +33,11 @@ type Filter = "all" | "flagged" | "suspended";
 export default function AdminUsersPage() {
   const { can } = useAuth();
   const [search, setSearch] = React.useState("");
+  // Opened from an abuse signal: start on that account.
+  React.useEffect(() => {
+    const q = new URLSearchParams(window.location.search).get("q");
+    if (q) setSearch(q.slice(0, 120));
+  }, []);
   const [debounced, setDebounced] = React.useState("");
   const [filter, setFilter] = React.useState<Filter>("all");
   const [page, setPage] = React.useState(1);
