@@ -198,6 +198,9 @@ export function tryRefresh(): Promise<boolean> {
     refreshInFlight = fetch(buildUrl("/auth/refresh/"), {
       method: "POST",
       credentials: "include",
+      // Survive the customer moving on mid-renewal. A renewal dropped half-way
+      // left the browser holding a token the server had already retired.
+      keepalive: true,
       headers: { "Content-Type": "application/json" },
       body: "{}",
     })

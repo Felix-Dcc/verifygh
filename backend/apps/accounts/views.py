@@ -18,11 +18,14 @@ from rest_framework_simplejwt.tokens import RefreshToken
 
 from apps.accounts import google, services, turnstile
 from apps.accounts.authentication import (
+    access_for,
     blacklist_refresh_token,
     revoke_access_token,
     clear_auth_cookies,
     detect_refresh_token_reuse,
     issue_tokens,
+    recover_lost_rotation,
+    remember_rotation,
     rotate_refresh_token,
     set_auth_cookies,
     token_version_of,
@@ -56,8 +59,9 @@ from apps.common.throttling import (
 logger = logging.getLogger("verifygh.auth")
 
 
-def _auth_response(user: User, status_code: int = status.HTTP_200_OK) -> Response:
-    access, refresh = issue_tokens(user)
+def _auth_response(user: User, status_code: int = status.HTTP_200_OK, *,
+                   tokens: tuple[str, str] | None = None) -> Response:
+    access, refresh = tokens or issue_tokens(user)
     response = Response(
         {"user": UserSerializer(user).data},
         status=status_code,
@@ -198,6 +202,13 @@ class RefreshView(APIView):
             refresh = RefreshToken(raw)
             user = User.objects.get(pk=refresh["user_id"])
         except (TokenError, KeyError, User.DoesNotExist) as exc:
+            # The same browser whose last renewal reply was lost: send it the
+            # replacement it never received, rather than signing it out.
+            recovered = recover_lost_rotation(raw, request)
+            if recovered is not None:
+                user, successor = recovered
+                logger.info("refresh_rotation_recovered", extra={"user_id": str(user.pk)})
+                return _auth_response(user, tokens=(access_for(user, successor), successor))
             _handle_possible_reuse(request, raw)
             raise AuthenticationRequired("Your session has expired. Please sign in again.") from exc
 
@@ -216,7 +227,9 @@ class RefreshView(APIView):
         if not rotate_refresh_token(refresh):
             raise AuthenticationRequired("Your session has expired. Please sign in again.")
 
-        return _auth_response(user)
+        tokens = issue_tokens(user)
+        remember_rotation(refresh, tokens[1], request)
+        return _auth_response(user, tokens=tokens)
 
 
 def _handle_possible_reuse(request, raw) -> None:

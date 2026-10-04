@@ -127,7 +127,7 @@ def test_a_replayed_refresh_token_is_refused(api, user):
 
     api.post("/api/v1/auth/refresh/", {}, format="json")  # victim refreshes
 
-    attacker = type(api)()
+    attacker = type(api)(HTTP_USER_AGENT="Attacker/1.0")
     response = attacker.post("/api/v1/auth/refresh/", {"refresh": stolen}, format="json")
 
     assert response.status_code == 401
@@ -279,7 +279,7 @@ def test_replaying_a_rotated_token_ends_every_session(api, user):
     victim_refresh = api.cookies[settings.AUTH_COOKIE_REFRESH].value
     _age_blacklist_entry(stolen)
 
-    attacker = type(api)()
+    attacker = type(api)(HTTP_USER_AGENT="Attacker/1.0")
     assert attacker.post("/api/v1/auth/refresh/", {"refresh": stolen},
                          format="json").status_code == 401
 
@@ -296,17 +296,34 @@ def test_replaying_a_rotated_token_ends_every_session(api, user):
     ).count() == 1
 
 
-def test_a_two_tab_race_is_refused_without_a_mass_sign_out(api, user):
+def test_a_two_tab_race_keeps_both_tabs_signed_in(api, user):
+    """Same browser, same token, a second apart: the loser is handed the
+    replacement tab one already got, rather than refused."""
     login(api, user)
     shared = api.cookies[settings.AUTH_COOKIE_REFRESH].value
     api.post("/api/v1/auth/refresh/", {}, format="json")  # tab one wins
+    replacement = api.cookies[settings.AUTH_COOKIE_REFRESH].value
 
     tab_two = type(api)()
-    assert tab_two.post("/api/v1/auth/refresh/", {"refresh": shared},
-                        format="json").status_code == 401
+    response = tab_two.post("/api/v1/auth/refresh/", {"refresh": shared}, format="json")
+    assert response.status_code == 200
+    assert tab_two.cookies[settings.AUTH_COOKIE_REFRESH].value == replacement
     user.refresh_from_db()
     assert user.token_version == 0
     assert api.get(ME).status_code == 200  # tab one still signed in
+
+
+def test_another_browser_racing_is_refused_without_a_mass_sign_out(api, user):
+    login(api, user)
+    shared = api.cookies[settings.AUTH_COOKIE_REFRESH].value
+    api.post("/api/v1/auth/refresh/", {}, format="json")
+
+    elsewhere = type(api)(HTTP_USER_AGENT="Other/1.0")
+    assert elsewhere.post("/api/v1/auth/refresh/", {"refresh": shared},
+                          format="json").status_code == 401
+    user.refresh_from_db()
+    assert user.token_version == 0  # inside the race grace: no mass sign-out
+    assert api.get(ME).status_code == 200
 
 
 @pytest.mark.parametrize("junk", ["", "not-a-jwt", "a.b.c"])
@@ -344,3 +361,84 @@ def test_only_one_rotation_of_a_token_can_succeed(user):
     token = RefreshToken(raw)
     assert rotate_refresh_token(token) is True
     assert rotate_refresh_token(token) is False
+
+
+# ---------------------------------------------------------------------------
+# A renewal whose reply was lost (the customer tapped on mid-renewal)
+# ---------------------------------------------------------------------------
+
+
+def _lost_reply(api, user):
+    """Rotate, then put the browser back on the token it held before - what a
+    browser that never received the renewal's cookies is left with."""
+    login(api, user)
+    before = api.cookies[settings.AUTH_COOKIE_REFRESH].value
+    assert api.post("/api/v1/auth/refresh/", {}, format="json").status_code == 200
+    replacement = api.cookies[settings.AUTH_COOKIE_REFRESH].value
+    api.cookies[settings.AUTH_COOKIE_REFRESH] = before
+    _age_blacklist_entry(before)  # well past the two-tab race window
+    return before, replacement
+
+
+def test_a_lost_renewal_reply_is_recovered_not_treated_as_theft(api, user):
+    """Production, 4 Oct: a renewal took seven seconds on mobile, the customer
+    moved on, and every page after presented the retired token until the
+    second one was flagged as theft and all their sessions were ended."""
+    from apps.audit.models import SuspiciousActivity
+
+    _, replacement = _lost_reply(api, user)
+
+    response = api.post("/api/v1/auth/refresh/", {}, format="json")
+    assert response.status_code == 200
+    assert api.cookies[settings.AUTH_COOKIE_REFRESH].value == replacement
+    assert api.get(ME).status_code == 200
+    user.refresh_from_db()
+    assert user.token_version == 0
+    assert not SuspiciousActivity.objects.filter(
+        kind=SuspiciousActivity.Kind.TOKEN_REUSE).exists()
+
+    # And the recovered session renews normally afterwards.
+    assert api.post("/api/v1/auth/refresh/", {}, format="json").status_code == 200
+
+
+def test_a_retired_token_from_another_browser_is_still_theft(api, user):
+    from apps.audit.models import SuspiciousActivity
+
+    before, _ = _lost_reply(api, user)
+
+    thief = type(api)(HTTP_USER_AGENT="Thief/2.0")
+    assert thief.post("/api/v1/auth/refresh/", {"refresh": before},
+                      format="json").status_code == 401
+    user.refresh_from_db()
+    assert user.token_version == 1
+    assert SuspiciousActivity.objects.filter(
+        kind=SuspiciousActivity.Kind.TOKEN_REUSE, level="HIGH").count() == 1
+
+
+def test_once_the_replacement_is_used_the_retired_token_is_theft(api, user):
+    """Someone renewed with the replacement - so whoever still holds the
+    retired token is not a browser that missed its reply."""
+    from apps.audit.models import SuspiciousActivity
+
+    before, replacement = _lost_reply(api, user)
+    other = type(api)()
+    assert other.post("/api/v1/auth/refresh/", {"refresh": replacement},
+                      format="json").status_code == 200
+
+    assert api.post("/api/v1/auth/refresh/", {"refresh": before},
+                    format="json").status_code == 401
+    user.refresh_from_db()
+    assert user.token_version == 1
+    assert SuspiciousActivity.objects.filter(
+        kind=SuspiciousActivity.Kind.TOKEN_REUSE).count() == 1
+
+
+def test_recovery_ends_with_its_window(api, user):
+    from django.core.cache import cache
+
+    _lost_reply(api, user)
+    cache.clear()  # the rotation note has expired
+
+    assert api.post("/api/v1/auth/refresh/", {}, format="json").status_code == 401
+    user.refresh_from_db()
+    assert user.token_version == 1

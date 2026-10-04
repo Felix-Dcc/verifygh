@@ -256,6 +256,95 @@ def blacklist_refresh_token(raw_token: str | None) -> bool:
 #: window is refused without tearing down every session.
 REUSE_GRACE_SECONDS = 30
 
+#: How long a rotation is remembered so a lost reply can be recovered. A
+#: renewal that takes seconds on mobile data is often abandoned - the customer
+#: taps on, the browser drops the reply and its new cookies, and the server has
+#: already retired the token the browser still holds. Every later page then
+#: presents that retired token, which looked like theft and signed the customer
+#: out of everything.
+ROTATION_RECOVERY_SECONDS = 600
+
+
+def _rotation_key(jti: str) -> str:
+    return f"refresh-rotated:{jti}"
+
+
+def client_fingerprint(request) -> str:
+    """Browser and network of a request - enough to tell "the same browser
+    asking again" from someone else holding a copied token."""
+    import hashlib
+
+    from apps.common.middleware import get_client_ip
+
+    user_agent = request.META.get("HTTP_USER_AGENT", "")[:300]
+    return hashlib.sha256(f"{user_agent}|{get_client_ip(request) or ''}".encode()).hexdigest()
+
+
+def remember_rotation(old: RefreshToken, new_refresh: str, request) -> None:
+    """Note which token replaced `old`, and for whom, for ROTATION_RECOVERY_SECONDS."""
+    from django.core.cache import cache
+    from rest_framework_simplejwt.settings import api_settings
+    from rest_framework_simplejwt.state import token_backend
+
+    try:
+        successor = token_backend.decode(new_refresh, verify=True)[api_settings.JTI_CLAIM]
+        cache.set(_rotation_key(old[api_settings.JTI_CLAIM]),
+                  {"successor": successor, "client": client_fingerprint(request)},
+                  ROTATION_RECOVERY_SECONDS)
+    except Exception:
+        # Losing the note only means a lost reply cannot be recovered.
+        logger.warning("refresh_rotation_note_failed")
+
+
+def recover_lost_rotation(raw_token: str | None, request):
+    """(user, successor refresh token) when a retired token is the same browser
+    whose renewal reply never arrived; None otherwise.
+
+    Only when, within ROTATION_RECOVERY_SECONDS of the rotation: the same
+    browser and network ask, and the replacement has not been used since - a
+    used replacement means someone else had this token, which stays theft.
+    """
+    if not raw_token:
+        return None
+    try:
+        from django.core.cache import cache
+        from rest_framework_simplejwt.settings import api_settings
+        from rest_framework_simplejwt.state import token_backend
+        from rest_framework_simplejwt.token_blacklist.models import (
+            BlacklistedToken,
+            OutstandingToken,
+        )
+
+        payload = token_backend.decode(raw_token, verify=True)
+        if payload.get(api_settings.TOKEN_TYPE_CLAIM) != "refresh":
+            return None
+        note = cache.get(_rotation_key(payload.get(api_settings.JTI_CLAIM)))
+        if not note or note.get("client") != client_fingerprint(request):
+            return None
+        successor = (OutstandingToken.objects.select_related("user")
+                     .filter(jti=note.get("successor")).first())
+        if successor is None or successor.user is None:
+            return None
+        if BlacklistedToken.objects.filter(token=successor).exists():
+            return None  # the replacement was used or revoked since
+        user = successor.user
+        presented = payload.get(settings.TOKEN_VERSION_CLAIM)
+        if presented is None or int(presented) != int(user.token_version):
+            return None
+        if user.is_suspended or not user.is_active:
+            return None
+        return user, successor.token
+    except Exception:
+        return None
+
+
+def access_for(user, refresh_token: str) -> str:
+    """A fresh access token from an existing refresh token, with our claims."""
+    access = RefreshToken(refresh_token).access_token
+    access["role"] = user.role
+    access[settings.TOKEN_VERSION_CLAIM] = int(user.token_version)
+    return str(access)
+
 
 def rotate_refresh_token(refresh: RefreshToken) -> bool:
     """Blacklist `refresh` as part of rotating it. True only for the one caller
