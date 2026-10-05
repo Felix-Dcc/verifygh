@@ -256,13 +256,14 @@ def blacklist_refresh_token(raw_token: str | None) -> bool:
 #: window is refused without tearing down every session.
 REUSE_GRACE_SECONDS = 30
 
-#: How long a rotation is remembered so a lost reply can be recovered. A
-#: renewal that takes seconds on mobile data is often abandoned - the customer
-#: taps on, the browser drops the reply and its new cookies, and the server has
-#: already retired the token the browser still holds. Every later page then
-#: presents that retired token, which looked like theft and signed the customer
-#: out of everything.
-ROTATION_RECOVERY_SECONDS = 600
+#: How long a rotation is remembered so a lost reply can be recovered: the
+#: retired token's own lifetime. A renewal that takes seconds on mobile data is
+#: often abandoned - the customer taps on, the browser drops the reply and its
+#: new cookies, and the server has already retired the token the browser still
+#: holds. That browser comes back with it whenever the customer next visits -
+#: 41 minutes later in one case on 5 Oct, after a 10-minute window had closed -
+#: which looked like theft and signed the customer out of everything.
+ROTATION_RECOVERY_SECONDS = int(settings.SIMPLE_JWT["REFRESH_TOKEN_LIFETIME"].total_seconds())
 
 
 def _rotation_key(jti: str) -> str:
@@ -270,14 +271,18 @@ def _rotation_key(jti: str) -> str:
 
 
 def client_fingerprint(request) -> str:
-    """Browser and network of a request - enough to tell "the same browser
-    asking again" from someone else holding a copied token."""
+    """The browser behind a request, to tell "the same browser asking again"
+    from someone else holding a copied token.
+
+    The browser only, not the network: a phone's address changes as it moves
+    between mobile towers and Wi-Fi, and the customer coming back an hour later
+    is still the same browser. What actually separates a thief is the
+    replacement token - see recover_lost_rotation.
+    """
     import hashlib
 
-    from apps.common.middleware import get_client_ip
-
     user_agent = request.META.get("HTTP_USER_AGENT", "")[:300]
-    return hashlib.sha256(f"{user_agent}|{get_client_ip(request) or ''}".encode()).hexdigest()
+    return hashlib.sha256(user_agent.encode()).hexdigest()
 
 
 def remember_rotation(old: RefreshToken, new_refresh: str, request) -> None:
@@ -297,12 +302,15 @@ def remember_rotation(old: RefreshToken, new_refresh: str, request) -> None:
 
 
 def recover_lost_rotation(raw_token: str | None, request):
-    """(user, successor refresh token) when a retired token is the same browser
-    whose renewal reply never arrived; None otherwise.
+    """(user, successor OutstandingToken, seconds since the rotation) when a
+    retired token is the same browser whose renewal reply never arrived; None
+    otherwise.
 
-    Only when, within ROTATION_RECOVERY_SECONDS of the rotation: the same
-    browser and network ask, and the replacement has not been used since - a
-    used replacement means someone else had this token, which stays theft.
+    Only when, within ROTATION_RECOVERY_SECONDS of the rotation, the same
+    browser asks and the replacement has not been used since. A used
+    replacement means someone else had this token, which stays theft. What the
+    caller does with an unused one decides whether a same-browser thief is
+    still caught - see recover_session.
     """
     if not raw_token:
         return None
@@ -333,9 +341,44 @@ def recover_lost_rotation(raw_token: str | None, request):
             return None
         if user.is_suspended or not user.is_active:
             return None
-        return user, successor.token
+        # Measured from when the presented token was retired - the same clock
+        # the two-tab race grace in detect_refresh_token_reuse uses.
+        from django.utils import timezone
+
+        retired = (BlacklistedToken.objects.filter(token__jti=payload.get(api_settings.JTI_CLAIM))
+                   .values_list("blacklisted_at", flat=True).first())
+        age = (timezone.now() - retired).total_seconds() if retired else 0.0
+        return user, successor, max(0.0, age)
     except Exception:
         return None
+
+
+def recover_session(raw_token: str | None, request):
+    """(user, (access, refresh)) for a browser whose renewal reply was lost.
+
+    Within REUSE_GRACE_SECONDS it is two tabs racing, and the loser gets the
+    replacement the winner already has. Later it is a lost reply - or a thief
+    who renewed first and holds the replacement - so the replacement is
+    revoked and a new pair issued. A lost reply loses nothing (that browser
+    never had the replacement); a thief's next renewal presents a revoked
+    token and is caught as theft. Handing the same replacement over instead
+    would let a thief and the customer take turns renewing forever, unseen.
+    """
+    from rest_framework_simplejwt.token_blacklist.models import BlacklistedToken
+
+    recovered = recover_lost_rotation(raw_token, request)
+    if recovered is None:
+        return None
+    user, successor, age = recovered
+    if age < REUSE_GRACE_SECONDS:
+        return user, (access_for(user, successor.token), successor.token)
+    BlacklistedToken.objects.get_or_create(token=successor)
+    tokens = issue_tokens(user)
+    try:
+        remember_rotation(RefreshToken(raw_token, verify=False), tokens[1], request)
+    except Exception:
+        logger.warning("refresh_rotation_note_failed")
+    return user, tokens
 
 
 def access_for(user, refresh_token: str) -> str:

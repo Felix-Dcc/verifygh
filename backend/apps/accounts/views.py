@@ -18,13 +18,12 @@ from rest_framework_simplejwt.tokens import RefreshToken
 
 from apps.accounts import google, services, turnstile
 from apps.accounts.authentication import (
-    access_for,
     blacklist_refresh_token,
     revoke_access_token,
     clear_auth_cookies,
     detect_refresh_token_reuse,
     issue_tokens,
-    recover_lost_rotation,
+    recover_session,
     remember_rotation,
     rotate_refresh_token,
     set_auth_cookies,
@@ -204,11 +203,11 @@ class RefreshView(APIView):
         except (TokenError, KeyError, User.DoesNotExist) as exc:
             # The same browser whose last renewal reply was lost: send it the
             # replacement it never received, rather than signing it out.
-            recovered = recover_lost_rotation(raw, request)
+            recovered = recover_session(raw, request)
             if recovered is not None:
-                user, successor = recovered
+                user, tokens = recovered
                 logger.info("refresh_rotation_recovered", extra={"user_id": str(user.pk)})
-                return _auth_response(user, tokens=(access_for(user, successor), successor))
+                return _auth_response(user, tokens=tokens)
             _handle_possible_reuse(request, raw)
             raise AuthenticationRequired("Your session has expired. Please sign in again.") from exc
 

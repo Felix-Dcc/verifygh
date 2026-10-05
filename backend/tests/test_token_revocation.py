@@ -386,11 +386,12 @@ def test_a_lost_renewal_reply_is_recovered_not_treated_as_theft(api, user):
     second one was flagged as theft and all their sessions were ended."""
     from apps.audit.models import SuspiciousActivity
 
-    _, replacement = _lost_reply(api, user)
+    before, replacement = _lost_reply(api, user)
 
     response = api.post("/api/v1/auth/refresh/", {}, format="json")
     assert response.status_code == 200
-    assert api.cookies[settings.AUTH_COOKIE_REFRESH].value == replacement
+    fresh = api.cookies[settings.AUTH_COOKIE_REFRESH].value
+    assert fresh not in (before, replacement)  # a new pair, not the lost one
     assert api.get(ME).status_code == 200
     user.refresh_from_db()
     assert user.token_version == 0
@@ -442,3 +443,49 @@ def test_recovery_ends_with_its_window(api, user):
     assert api.post("/api/v1/auth/refresh/", {}, format="json").status_code == 401
     user.refresh_from_db()
     assert user.token_version == 1
+
+
+def test_coming_back_later_on_another_network_is_still_recovered(api, user):
+    """Production, 5 Oct: the reply was lost at 20:26 and the customer came
+    back at 21:07 - after a 10-minute window, and on a phone whose address had
+    changed. Same browser, replacement never used: still them."""
+    from apps.audit.models import SuspiciousActivity
+
+    before, replacement = _lost_reply(api, user)
+    _age_blacklist_entry(before, seconds=41 * 60)
+
+    response = api.post("/api/v1/auth/refresh/", {}, format="json",
+                        REMOTE_ADDR="203.0.113.77")
+    assert response.status_code == 200
+    assert api.cookies[settings.AUTH_COOKIE_REFRESH].value not in (before, replacement)
+    assert api.get(ME).status_code == 200
+    user.refresh_from_db()
+    assert user.token_version == 0
+    assert not SuspiciousActivity.objects.filter(
+        kind=SuspiciousActivity.Kind.TOKEN_REUSE).exists()
+
+
+def test_a_thief_with_the_same_browser_is_caught_at_their_next_renewal(api, user):
+    """The thief renews first; the customer is recovered with a NEW pair and the
+    thief's replacement is revoked - so the thief's next renewal is theft."""
+    from apps.audit.models import SuspiciousActivity
+
+    login(api, user)
+    stolen = api.cookies[settings.AUTH_COOKIE_REFRESH].value
+    thief = type(api)()  # identical browser
+    assert thief.post("/api/v1/auth/refresh/", {"refresh": stolen},
+                      format="json").status_code == 200   # thief renews first
+    thiefs = thief.cookies[settings.AUTH_COOKIE_REFRESH].value
+    _age_blacklist_entry(stolen)
+
+    # The customer, still on the stolen token, keeps their session...
+    assert api.post("/api/v1/auth/refresh/", {}, format="json").status_code == 200
+    assert api.cookies[settings.AUTH_COOKIE_REFRESH].value != thiefs
+
+    # ...and the thief's replacement no longer works: renewing with it is theft.
+    _age_blacklist_entry(thiefs)
+    assert thief.post("/api/v1/auth/refresh/", {}, format="json").status_code == 401
+    user.refresh_from_db()
+    assert user.token_version == 1
+    assert SuspiciousActivity.objects.filter(
+        kind=SuspiciousActivity.Kind.TOKEN_REUSE, level="HIGH").exists()
