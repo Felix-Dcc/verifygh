@@ -74,12 +74,20 @@ export function OtpStep({
           <LockIcon className="h-6 w-6" />
         </div>
 
-        <h2 className="mt-5 text-title text-ink">Enter the code we texted you</h2>
+        <h2 className="mt-5 text-title text-ink">Enter the code we just texted you</h2>
         <p className="mt-2 max-w-sm text-sm text-ink-muted">
           To approve{" "}
           <span className="tabular font-semibold text-ink">{cedis(payment.amount)}</span>, enter
           the code sent to{" "}
-          <span className="tabular font-medium text-ink">{payment.phone_display}</span>.
+          <span className="tabular font-medium text-ink">{payment.phone_display}</span>. It can
+          take up to a minute to arrive.
+        </p>
+
+        {/* The other common slip, after the PIN: every attempt texts a new code,
+            and customers who retried kept typing the code from the last one. */}
+        <p className="mt-3 max-w-sm text-sm font-medium text-ink">
+          Use the newest message only. Each payment attempt sends a new code, and codes from
+          earlier attempts will not work.
         </p>
 
         {payment.instructions ? (
@@ -90,7 +98,7 @@ export function OtpStep({
 
         <form onSubmit={onSubmit} className="mt-6 w-full max-w-xs">
           {error ? (
-            <Alert tone="danger" title="That did not work" className="mb-4 text-left">
+            <Alert tone="danger" title="That code was not accepted" className="mb-4 text-left">
               {error}
               {attemptsLeft !== null && attemptsLeft > 0 ? (
                 <>

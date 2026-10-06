@@ -310,7 +310,10 @@ def submit_deposit_otp(*, user, reference: str, otp: str) -> Payment:
         logger.warning("deposit_otp_rejected", extra={"reference": payment.reference})
         remaining = max(MAX_OTP_ATTEMPTS - attempt, 0)
         raise ValidationFailed(
-            "That code was not accepted. Please check the message and try again."
+            # The usual cause is a code from an earlier attempt: every attempt
+            # texts a new one. Paystack only says "incorrect", so say both.
+            "That code is wrong or from an earlier attempt. Type the code from the newest "
+            "message - each attempt sends a new one - and not your Mobile Money PIN."
             if remaining
             else "That code was not accepted, and no attempts remain. "
                  "Please start a new payment.",
