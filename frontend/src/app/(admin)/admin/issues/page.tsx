@@ -418,7 +418,12 @@ function IssueDialog({
       setVerb(null);
       setReason("");
     } catch (caught) {
-      setError(caught instanceof ApiError ? caught.message : "Something went wrong.");
+      // Say what was wrong with the field, not just that something was.
+      setError(
+        caught instanceof ApiError
+          ? caught.fieldErrors.reason ?? caught.message
+          : "Something went wrong.",
+      );
     } finally {
       setBusy(false);
     }
@@ -469,9 +474,11 @@ function IssueDialog({
                   rows={3}
                   required
                   minLength={5}
+                  maxLength={2000}
                   value={reason}
                   onChange={(event) => setReason(event.target.value)}
                 />
+                <p className="mt-1 text-right text-caption text-ink-faint">{reason.length}/2000</p>
               </Field>
               <div className="flex flex-col-reverse gap-2 sm:flex-row sm:justify-end">
                 <Button variant="secondary" onClick={() => setVerb(null)} disabled={busy}>

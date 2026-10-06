@@ -215,4 +215,5 @@ class AdminIssueDetailSerializer(AdminIssueSerializer):
 
 
 class AdminIssueActionSerializer(serializers.Serializer):
-    reason = serializers.CharField(min_length=5, max_length=500)
+    #: Long enough for a provider's whole reply pasted in (Provider declined).
+    reason = serializers.CharField(min_length=5, max_length=2000)

@@ -750,3 +750,30 @@ def test_other_providers_keep_the_longer_window(customer, delivered):
     assert detail["report_needs_evidence"] is False
     ends = numbers.report_window_ends(Order.objects.get(pk=delivered.pk))
     assert ends - delivered.code_received_at == timedelta(hours=72)
+
+
+def test_a_long_pasted_provider_reply_is_accepted_whole(customer, staff, delivered, reviewing):
+    """Production, 6 Oct: a pasted TextVerified reply was over 500 characters and
+    the decline failed with a bare "information is not valid"."""
+    report_with_evidence(customer, delivered)
+    issue = VerificationIssue.objects.get(order=delivered)
+    reply = ("Hello,\n\nWe don't provide refunds if the date on the ban is the date you "
+             "received the verification.\n\n" + "More detail from support. " * 40
+             + "\n\nHappy verifying!")
+    assert 500 < len(reply) < 2000
+
+    response = act(staff, issue.reference, "provider-declined", reason=reply)
+    assert response.status_code == 200, response.data
+    issue.refresh_from_db()
+    assert issue.status == IssueStatus.REJECTED
+    assert issue.customer_reply == reply.strip()
+    seen = customer.get(f"/api/v1/orders/{delivered.reference}/").data["issue"]
+    assert "Happy verifying!" in seen["message"]
+
+
+def test_a_reply_over_the_limit_says_so(customer, staff, delivered, reviewing):
+    report_with_evidence(customer, delivered)
+    issue = VerificationIssue.objects.get(order=delivered)
+    response = act(staff, issue.reference, "provider-declined", reason="x" * 2001)
+    assert response.status_code == 400
+    assert "2000" in str(response.data)

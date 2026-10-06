@@ -593,7 +593,7 @@ def provider_declined(issue, *, admin, reason: str, request=None) -> Verificatio
     passed on to the customer as the reason."""
     if issue.status != IssueStatus.AWAITING_PROVIDER:
         raise Conflict("This report is not waiting for the provider.")
-    reply = " ".join(str(reason).split())[:500]
+    reply = str(reason).strip()[:2000]
     record_admin_action(admin=admin, action="ISSUE_PROVIDER_DECLINED", target=issue,
                         reason=reply, before={"status": issue.status},
                         after={"status": "REJECTED"}, request=request)

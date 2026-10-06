@@ -227,7 +227,7 @@ class VerificationIssue(BaseModel):
     provider_ticket_filed_at = models.DateTimeField(null=True, blank=True)
     #: The provider's answer when it declines, shown to the customer as the
     #: reason. Separate from resolution_note, which stays internal.
-    customer_reply = models.CharField(max_length=500, blank=True, default="")
+    customer_reply = models.TextField(blank=True, default="")
 
     class Meta:
         db_table = "numbers_verification_issue"
