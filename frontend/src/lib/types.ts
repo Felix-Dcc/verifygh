@@ -1161,3 +1161,28 @@ export type PricingAuditRow = {
   after: Record<string, unknown>;
   created_at: string;
 };
+
+/** Site-wide maintenance (backend/apps/common/maintenance.py). */
+export type MaintenanceMode = "OFF" | "BUYING_PAUSED" | "ALL_PAUSED";
+
+/** GET /status/ - public, read by every page for the maintenance notice. */
+export type SiteStatus = {
+  mode: MaintenanceMode;
+  buying_open: boolean;
+  deposits_open: boolean;
+  /** The customer notice; empty while open. */
+  message: string;
+  since: string | null;
+  /** Shown only - nothing reopens the site by itself. */
+  expected_back_at: string | null;
+};
+
+/** GET /admin/maintenance/ - the state behind the "Pause site" button. */
+export type AdminMaintenance = SiteStatus & {
+  reason: string;
+  custom_message: string;
+  updated_at: string | null;
+  updated_by: string;
+  preset_reasons: string[];
+  notices: Record<Exclude<MaintenanceMode, "OFF">, string>;
+};

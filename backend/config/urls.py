@@ -10,6 +10,7 @@ from rest_framework.routers import DefaultRouter
 
 from apps.adminapi import views as admin_views
 from apps.catalog import views as catalog_views
+from apps.common import views as common_views
 from apps.funding import admin_api as funding_admin
 from apps.notifications import views as notification_views
 from apps.numbers import admin_api as numbers_admin
@@ -137,6 +138,9 @@ api_v1 = [
     path("admin/overview/", admin_views.AdminOverviewView.as_view(), name="admin-overview"),
     path("admin/charts/", admin_views.AdminChartsView.as_view(), name="admin-charts"),
     path("admin/health/", admin_views.AdminSystemHealthView.as_view(), name="admin-health"),
+    path("admin/maintenance/", admin_views.AdminMaintenanceView.as_view(),
+         name="admin-maintenance"),
+    path("status/", common_views.SiteStatusView.as_view(), name="site-status"),
     path("admin/", include(admin_router.urls)),
     path("", include(router.urls)),
 ]

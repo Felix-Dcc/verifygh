@@ -6,6 +6,7 @@ import * as React from "react";
 import useSWR, { mutate as globalMutate } from "swr";
 
 import { useAuth } from "@/components/auth-provider";
+import { useSiteStatus } from "@/components/maintenance";
 import { AvailabilityLabel, TemporarilyUnavailableBadge } from "@/components/marketplace/availability";
 import { CountryFlag } from "@/components/country-flag";
 import { ServiceLogo } from "@/components/service-logo";
@@ -76,6 +77,9 @@ export function BuyDialog({
   }, [open, initialCountry]);
 
   const option = detail?.countries.find((entry) => entry.code === country);
+  // Staff have paused buying: say so before the customer taps Buy.
+  const { data: site } = useSiteStatus();
+  const sitePaused = site && !site.buying_open ? { code: "MAINTENANCE", message: site.message } : null;
   const paused = Boolean(option?.temporarily_unavailable);
   const purchasable = Boolean(
     option?.offered && option.availability !== "UNAVAILABLE" && !option.temporarily_unavailable,
@@ -163,12 +167,13 @@ export function BuyDialog({
           </ButtonLink>
         ) : (
           <DialogFooter
-            insufficient={insufficient}
+            // While buying is paused, no nudge to top up for a number they cannot buy.
+            insufficient={insufficient && !sitePaused}
             submitting={submitting}
-            disabled={!purchasable || loadingQuote || !quote || Boolean(quoteError)}
+            disabled={!purchasable || loadingQuote || !quote || Boolean(quoteError) || Boolean(sitePaused)}
             onCancel={onClose}
             onConfirm={confirm}
-            blockerCode={blocker?.code}
+            blockerCode={blocker?.code ?? sitePaused?.code}
             price={quote && purchasable ? quote.price : null}
           />
         )
@@ -318,7 +323,9 @@ export function BuyDialog({
             </Alert>
           ) : null}
 
-          {insufficient ? (
+          {sitePaused ? (
+            <BlockerNotice code={sitePaused.code} message={sitePaused.message} />
+          ) : insufficient ? (
             <Alert tone="warn" title="Not enough in your wallet">
               Add funds with Mobile Money, then come back to this number.
             </Alert>
@@ -416,8 +423,10 @@ function BlockerNotice({ code, message, email }: { code: string; message: string
     UNSUPPORTED_COUNTRY: <>Numbers are available for the United States only.</>,
     TEMPORARILY_UNAVAILABLE: <>Nothing was charged. Please try again shortly.</>,
     ACCOUNT_SUSPENDED: <>Contact support to resolve this.</>,
+    MAINTENANCE: <>Nothing was charged. Please check back shortly.</>,
   };
   const soft = [
+    "MAINTENANCE",
     "NO_AVAILABILITY",
     "PROVIDER_UNAVAILABLE",
     "PLATFORM_AT_CAPACITY",

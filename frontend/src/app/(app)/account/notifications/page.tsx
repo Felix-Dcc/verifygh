@@ -53,6 +53,7 @@ const KINDS: Record<string, Kind> = {
   // Staff alerts (apps/notifications/staff.py).
   STAFF_ORDER_FAILED: { icon: AlertIcon, tone: "danger" },
   STAFF_ISSUE_REPORTED: { icon: FlagIcon, tone: "warn" },
+  STAFF_MAINTENANCE: { icon: ShieldIcon, tone: "warn" },
 };
 
 const TONE_CLASSES: Record<Kind["tone"], string> = {

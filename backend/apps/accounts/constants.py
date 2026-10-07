@@ -37,6 +37,7 @@ class AdminPermission(models.TextChoices):
     REFERRAL_MANAGE = "REFERRAL_MANAGE", "Approve, reject and flag referrals"
     METRICS_VIEW = "METRICS_VIEW", "View dashboards and metrics"
     ISSUE_MANAGE = "ISSUE_MANAGE", "Review, reject and resolve number-issue reports"
+    MAINTENANCE_MANAGE = "MAINTENANCE_MANAGE", "Pause and reopen the site"
 
 
 _SUPPORT = {
@@ -63,6 +64,9 @@ _ADMIN = _SUPPORT | {
     # Admins can see what things cost and earn; changing prices stays with
     # super admins, who act as finance.
     AdminPermission.PRICING_VIEW,
+    # Pausing the site in an emergency: stops new orders and top-ups, never
+    # money already moving.
+    AdminPermission.MAINTENANCE_MANAGE,
 }
 
 _SUPER_ADMIN = _ADMIN | {

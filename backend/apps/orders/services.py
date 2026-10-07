@@ -136,6 +136,11 @@ def check_purchase_eligibility(user) -> None:
     Ordered cheapest-first, and each raises a distinct error code so the
     frontend can show the right call to action rather than a generic failure.
     """
+    from apps.common import maintenance
+
+    # First: while staff have paused the site, nothing else matters.
+    maintenance.require_buying_open()
+
     if user.is_suspended:
         from apps.common.errors import AccountSuspended
 

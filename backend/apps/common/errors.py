@@ -133,7 +133,7 @@ def exception_handler(exc, context):
     request_id = getattr(request, "request_id", None)
 
     if isinstance(exc, APIError):
-        if exc.status_code >= 500:
+        if exc.status_code >= 500 and not getattr(exc, "expected", False):
             logger.exception("api_error", extra={"error_code": exc.code})
         return Response(
             _envelope(exc.code, exc.message, exc.details, request_id),

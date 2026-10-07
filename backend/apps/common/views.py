@@ -29,3 +29,18 @@ class HealthView(APIView):
         payload = {"status": "ok" if database_ok else "degraded", "database": database_ok}
         code = status.HTTP_200_OK if database_ok else status.HTTP_503_SERVICE_UNAVAILABLE
         return Response(payload, status=code)
+
+
+class SiteStatusView(APIView):
+    """Public: whether buying and top-ups are open, for the maintenance banner.
+
+    Read by every page, signed in or not.
+    """
+
+    permission_classes = [AllowAny]
+    authentication_classes: list = []
+
+    def get(self, request):
+        from apps.common import maintenance
+
+        return Response(maintenance.current())

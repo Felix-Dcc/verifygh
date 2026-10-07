@@ -4,6 +4,7 @@ import * as React from "react";
 import { SWRConfig } from "swr";
 
 import { AuthProvider } from "@/components/auth-provider";
+import { MaintenanceBanner } from "@/components/maintenance";
 import { ThemeProvider } from "@/components/theme";
 import { ToastProvider } from "@/components/ui/toast";
 import { fetcher } from "@/lib/api";
@@ -24,7 +25,11 @@ export function Providers({ children }: { children: React.ReactNode }) {
     >
       <ThemeProvider>
         <ToastProvider>
-          <AuthProvider>{children}</AuthProvider>
+          <AuthProvider>
+            {/* While staff have paused the site: every customer and public page. */}
+            <MaintenanceBanner />
+            {children}
+          </AuthProvider>
         </ToastProvider>
       </ThemeProvider>
     </SWRConfig>

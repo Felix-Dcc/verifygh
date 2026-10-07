@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import uuid
 
+from django.conf import settings
 from django.db import models
 
 
@@ -44,3 +45,40 @@ class ImmutableModel(BaseModel):
                 f"{self.__class__.__name__} rows are immutable and cannot be updated."
             )
         return super().save(*args, **kwargs)
+
+
+class MaintenanceMode(models.TextChoices):
+    OFF = "OFF", "Open"
+    BUYING_PAUSED = "BUYING_PAUSED", "Buying paused"
+    ALL_PAUSED = "ALL_PAUSED", "Buying and top-ups paused"
+
+
+class MaintenanceState(TimeStampedModel):
+    """Site-wide maintenance: one row (pk=1), seeded by its migration.
+
+    Pausing closes the till - new orders and number reuse, and with ALL_PAUSED
+    new top-ups too. Nothing already under way stops: an order waiting for its
+    code is still polled and refunded if none comes, a deposit the customer is
+    approving on their phone is still credited, webhooks and the admin work.
+    See apps/common/maintenance.py.
+    """
+
+    mode = models.CharField(max_length=20, choices=MaintenanceMode.choices,
+                            default=MaintenanceMode.OFF)
+    #: Shown to customers while paused. Blank: the default notice.
+    message = models.CharField(max_length=300, blank=True)
+    #: Why staff paused it - one of the presets, or their own words.
+    reason = models.CharField(max_length=300, blank=True)
+    since = models.DateTimeField(null=True, blank=True)
+    #: Shown to customers only. Nothing reopens the site by itself.
+    expected_back_at = models.DateTimeField(null=True, blank=True)
+    updated_by = models.ForeignKey(
+        settings.AUTH_USER_MODEL, null=True, blank=True, on_delete=models.SET_NULL,
+        related_name="+",
+    )
+
+    class Meta:
+        db_table = "common_maintenance_state"
+
+    def __str__(self) -> str:
+        return f"Maintenance [{self.mode}]"

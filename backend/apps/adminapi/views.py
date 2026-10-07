@@ -1116,6 +1116,29 @@ class AdminFlagViewSet(AdminBase, mixins.ListModelMixin, viewsets.GenericViewSet
         return Response(SuspiciousActivitySerializer(entry).data)
 
 
+class AdminMaintenanceView(AdminBase, APIView):
+    """The "Pause site" button: pause buying, pause buying and top-ups, or reopen."""
+
+    required_permission = AdminPermission.METRICS_VIEW
+
+    def get(self, request):
+        from apps.common import maintenance
+
+        return Response(maintenance.report())
+
+    def post(self, request):
+        from apps.common import maintenance
+
+        self.required_permission = AdminPermission.MAINTENANCE_MANAGE
+        self.check_permissions(request)
+        return Response(maintenance.set_mode(
+            mode=request.data.get("mode"), reason=request.data.get("reason"),
+            message=request.data.get("message"),
+            expected_back_minutes=request.data.get("expected_back_minutes"),
+            actor=request.user, request=request,
+        ))
+
+
 class AdminSystemHealthView(AdminBase, APIView):
     """Is the platform actually able to trade right now?"""
 

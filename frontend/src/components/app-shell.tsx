@@ -7,6 +7,7 @@ import useSWR from "swr";
 
 import { useAuth } from "@/components/auth-provider";
 import { Logo, Logomark } from "@/components/brand";
+import { MaintenanceStrip, PauseSiteButton } from "@/components/maintenance";
 import { useReferralsEnabled } from "@/components/referral-invite";
 import {
   BellIcon,
@@ -136,6 +137,7 @@ export function AppShell({
   variant?: "user" | "admin";
 }) {
   const referrals = useReferralsEnabled();
+  const { can } = useAuth();
   const groups = React.useMemo(
     () =>
       variant === "admin"
@@ -153,6 +155,7 @@ export function AppShell({
       <Sidebar groups={groups} variant={variant} />
       <div className="lg:pl-60">
         <TopBar variant={variant} />
+        {variant === "admin" ? <MaintenanceStrip canManage={can("MAINTENANCE_MANAGE")} /> : null}
         <main id="main" className="px-4 pb-safe-nav pt-5 sm:px-6 lg:px-10 lg:pb-12 lg:pt-8">
           <div className={cn("mx-auto w-full", variant === "admin" ? "max-w-7xl" : "max-w-6xl")}>
             {children}
@@ -277,6 +280,7 @@ function SidebarLink({ item, badge }: { item: NavItem; badge?: number }) {
 /* ------------------------------------------------------------------ */
 
 function TopBar({ variant }: { variant: "user" | "admin" }) {
+  const { can } = useAuth();
   const { data: wallet, error: walletError, isLoading } = useSWR<Wallet>(
     variant === "user" ? "/wallet/" : null,
   );
@@ -338,6 +342,7 @@ function TopBar({ variant }: { variant: "user" | "admin" }) {
               </Link>
             </>
           ) : null}
+          {variant === "admin" && can("MAINTENANCE_MANAGE") ? <PauseSiteButton /> : null}
           <UserMenu variant={variant} />
         </div>
       </div>

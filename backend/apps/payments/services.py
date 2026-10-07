@@ -88,6 +88,13 @@ def deposits_blocked_reason() -> str:
     """
     from django.conf import settings as django_settings
 
+    from apps.common import maintenance
+
+    # Before the catalogue check, which can be switched off: a pause staff
+    # asked for closes the till whatever the catalogue says.
+    if notice := maintenance.deposits_notice():
+        return notice
+
     if not django_settings.VERIFYGH["REQUIRE_CATALOG_FOR_DEPOSIT"]:
         return ""
 
