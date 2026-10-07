@@ -265,6 +265,17 @@ REUSE_GRACE_SECONDS = 30
 #: which looked like theft and signed the customer out of everything.
 ROTATION_RECOVERY_SECONDS = int(settings.SIMPLE_JWT["REFRESH_TOKEN_LIFETIME"].total_seconds())
 
+#: Recoveries that revoke a session and issue a new one, per account per day.
+#: The same browser can come back with a token that has since moved on - an
+#: iPhone presented, at 18:53 on 6 Oct, the very token our 18:25 recovery had
+#: revoked, and at 04:04 on 7 Oct one it had renewed past. Both are recovered.
+#: But a thief with an identical browser could use the same path to take turns
+#: with the customer, so past this many in a day the next one is theft.
+ROTATION_RECOVERY_DAILY_LIMIT = 3
+
+#: How far a recovery follows the rotation notes to the current token.
+ROTATION_CHAIN_LIMIT = 20
+
 
 def _rotation_key(jti: str) -> str:
     return f"refresh-rotated:{jti}"
@@ -276,8 +287,8 @@ def client_fingerprint(request) -> str:
 
     The browser only, not the network: a phone's address changes as it moves
     between mobile towers and Wi-Fi, and the customer coming back an hour later
-    is still the same browser. What actually separates a thief is the
-    replacement token - see recover_lost_rotation.
+    is still the same browser. How a thief with an identical browser is still
+    caught is recover_session.
     """
     import hashlib
 
@@ -287,30 +298,75 @@ def client_fingerprint(request) -> str:
 
 def remember_rotation(old: RefreshToken, new_refresh: str, request) -> None:
     """Note which token replaced `old`, and for whom, for ROTATION_RECOVERY_SECONDS."""
-    from django.core.cache import cache
     from rest_framework_simplejwt.settings import api_settings
-    from rest_framework_simplejwt.state import token_backend
 
     try:
-        successor = token_backend.decode(new_refresh, verify=True)[api_settings.JTI_CLAIM]
-        cache.set(_rotation_key(old[api_settings.JTI_CLAIM]),
-                  {"successor": successor, "client": client_fingerprint(request)},
-                  ROTATION_RECOVERY_SECONDS)
+        _note_rotation(old[api_settings.JTI_CLAIM], new_refresh, request)
     except Exception:
         # Losing the note only means a lost reply cannot be recovered.
         logger.warning("refresh_rotation_note_failed")
 
 
-def recover_lost_rotation(raw_token: str | None, request):
-    """(user, successor OutstandingToken, seconds since the rotation) when a
-    retired token is the same browser whose renewal reply never arrived; None
-    otherwise.
+def _note_rotation(old_jti: str, new_refresh: str, request) -> None:
+    from django.core.cache import cache
+    from rest_framework_simplejwt.settings import api_settings
+    from rest_framework_simplejwt.state import token_backend
 
-    Only when, within ROTATION_RECOVERY_SECONDS of the rotation, the same
-    browser asks and the replacement has not been used since. A used
-    replacement means someone else had this token, which stays theft. What the
-    caller does with an unused one decides whether a same-browser thief is
-    still caught - see recover_session.
+    successor = token_backend.decode(new_refresh, verify=True)[api_settings.JTI_CLAIM]
+    cache.set(_rotation_key(old_jti),
+              {"successor": successor, "client": client_fingerprint(request)},
+              ROTATION_RECOVERY_SECONDS)
+
+
+def _current_token(start_jti: str):
+    """The OutstandingToken the rotation notes lead to from `start_jti`: the
+    first one not yet retired. None when the trail breaks (a note expired, a
+    token was signed out) - the session cannot be traced, so it is not
+    recovered."""
+    from django.core.cache import cache
+    from rest_framework_simplejwt.token_blacklist.models import (
+        BlacklistedToken,
+        OutstandingToken,
+    )
+
+    jti = start_jti
+    for _ in range(ROTATION_CHAIN_LIMIT):
+        note = cache.get(_rotation_key(jti))
+        if not note:
+            return None
+        token = (OutstandingToken.objects.select_related("user")
+                 .filter(jti=note.get("successor")).first())
+        if token is None or token.user is None:
+            return None
+        if not BlacklistedToken.objects.filter(token=token).exists():
+            return token
+        jti = token.jti
+    return None
+
+
+def _within_recovery_limit(user) -> bool:
+    """Count one more recovery for `user`; False once the day's limit is passed."""
+    from django.core.cache import cache
+
+    key = f"refresh-recoveries:{user.pk}"
+    try:
+        cache.add(key, 0, 24 * 3600)
+        return cache.incr(key) <= ROTATION_RECOVERY_DAILY_LIMIT
+    except Exception:
+        return False  # cannot count: no recovery, which is how it worked before
+
+
+def recover_lost_rotation(raw_token: str | None, request):
+    """(user, successor, current, seconds since the rotation) when a retired
+    token comes back from the browser that retired it; None otherwise.
+
+    `successor` is the token that directly replaced it; `current` is where the
+    session stands now, following the rotation notes - the successor itself
+    when its reply was simply lost, a later token when the browser renewed on
+    since (in another tab, or with a cookie it later lost). Only the browser
+    named in the note qualifies: a token presented by any other browser stays
+    theft. What the caller does with a same-browser match - and how a thief
+    with an identical browser is still caught - is recover_session.
     """
     if not raw_token:
         return None
@@ -333,8 +389,9 @@ def recover_lost_rotation(raw_token: str | None, request):
                      .filter(jti=note.get("successor")).first())
         if successor is None or successor.user is None:
             return None
-        if BlacklistedToken.objects.filter(token=successor).exists():
-            return None  # the replacement was used or revoked since
+        current = _current_token(payload.get(api_settings.JTI_CLAIM))
+        if current is None or current.user_id != successor.user_id:
+            return None
         user = successor.user
         presented = payload.get(settings.TOKEN_VERSION_CLAIM)
         if presented is None or int(presented) != int(user.token_version):
@@ -348,34 +405,47 @@ def recover_lost_rotation(raw_token: str | None, request):
         retired = (BlacklistedToken.objects.filter(token__jti=payload.get(api_settings.JTI_CLAIM))
                    .values_list("blacklisted_at", flat=True).first())
         age = (timezone.now() - retired).total_seconds() if retired else 0.0
-        return user, successor, max(0.0, age)
+        return user, successor, current, max(0.0, age)
     except Exception:
         return None
 
 
 def recover_session(raw_token: str | None, request):
-    """(user, (access, refresh)) for a browser whose renewal reply was lost.
+    """(user, (access, refresh)) for a browser that came back with a token
+    its own session has moved past.
 
     Within REUSE_GRACE_SECONDS it is two tabs racing, and the loser gets the
-    replacement the winner already has. Later it is a lost reply - or a thief
-    who renewed first and holds the replacement - so the replacement is
-    revoked and a new pair issued. A lost reply loses nothing (that browser
-    never had the replacement); a thief's next renewal presents a revoked
-    token and is caught as theft. Handing the same replacement over instead
-    would let a thief and the customer take turns renewing forever, unseen.
+    replacement the winner already has - if nothing has renewed since.
+
+    Later, whatever is current is revoked and a new pair issued, and both the
+    presented token and the revoked one are noted as replaced by it. So
+    whichever copy this browser holds next - the one it lost, or the one it
+    found again - leads to the live session instead of reading as theft. If
+    the other copy is a thief's, the thief loses the session now; a thief on
+    another browser is caught at its next renewal (the note names this
+    browser), and one on an identical browser can take turns with the customer
+    only ROTATION_RECOVERY_DAILY_LIMIT times a day before it is caught.
     """
+    from rest_framework_simplejwt.settings import api_settings
     from rest_framework_simplejwt.token_blacklist.models import BlacklistedToken
 
     recovered = recover_lost_rotation(raw_token, request)
     if recovered is None:
         return None
-    user, successor, age = recovered
+    user, successor, current, age = recovered
     if age < REUSE_GRACE_SECONDS:
+        if current.pk != successor.pk:
+            return None  # renewed on already: a refusal, and not theft (the race grace)
         return user, (access_for(user, successor.token), successor.token)
-    BlacklistedToken.objects.get_or_create(token=successor)
+    if not _within_recovery_limit(user):
+        logger.warning("refresh_recovery_limit_reached", extra={"user_id": str(user.pk)})
+        return None
+    BlacklistedToken.objects.get_or_create(token=current)
     tokens = issue_tokens(user)
     try:
-        remember_rotation(RefreshToken(raw_token, verify=False), tokens[1], request)
+        presented = RefreshToken(raw_token, verify=False)
+        _note_rotation(presented[api_settings.JTI_CLAIM], tokens[1], request)
+        _note_rotation(current.jti, tokens[1], request)
     except Exception:
         logger.warning("refresh_rotation_note_failed")
     return user, tokens

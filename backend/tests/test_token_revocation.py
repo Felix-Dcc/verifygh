@@ -416,22 +416,96 @@ def test_a_retired_token_from_another_browser_is_still_theft(api, user):
         kind=SuspiciousActivity.Kind.TOKEN_REUSE, level="HIGH").count() == 1
 
 
-def test_once_the_replacement_is_used_the_retired_token_is_theft(api, user):
-    """Someone renewed with the replacement - so whoever still holds the
-    retired token is not a browser that missed its reply."""
+def test_a_replacement_used_by_another_browser_is_caught_at_its_next_renewal(api, user):
+    """Another browser renewed with the replacement. The customer, whose
+    browser retired the token, keeps the session; the other browser loses its
+    copy, and its next renewal is theft."""
     from apps.audit.models import SuspiciousActivity
 
     before, replacement = _lost_reply(api, user)
-    other = type(api)()
+    other = type(api)(HTTP_USER_AGENT="Other/1.0")
     assert other.post("/api/v1/auth/refresh/", {"refresh": replacement},
                       format="json").status_code == 200
+    others = other.cookies[settings.AUTH_COOKIE_REFRESH].value
+    _age_blacklist_entry(replacement)
 
     assert api.post("/api/v1/auth/refresh/", {"refresh": before},
-                    format="json").status_code == 401
+                    format="json").status_code == 200
+    assert api.get(ME).status_code == 200
+
+    _age_blacklist_entry(others)
+    assert other.post("/api/v1/auth/refresh/", {}, format="json").status_code == 401
     user.refresh_from_db()
     assert user.token_version == 1
     assert SuspiciousActivity.objects.filter(
-        kind=SuspiciousActivity.Kind.TOKEN_REUSE).count() == 1
+        kind=SuspiciousActivity.Kind.TOKEN_REUSE, level="HIGH").count() == 1
+
+
+def test_the_same_browser_with_a_token_recovery_revoked_is_recovered(api, user):
+    """Production, 6 Oct: an iPhone renewed at 18:24, came back with the
+    older token at 18:25 (recovered, which revoked the 18:24 one), then at
+    18:53 presented the 18:24 token after all - and was flagged as theft."""
+    from apps.audit.models import SuspiciousActivity
+
+    before, replacement = _lost_reply(api, user)
+    assert api.post("/api/v1/auth/refresh/", {}, format="json").status_code == 200  # 18:25
+    api.cookies[settings.AUTH_COOKIE_REFRESH] = replacement  # 18:53: the other copy
+    _age_blacklist_entry(replacement, seconds=28 * 60)
+
+    response = api.post("/api/v1/auth/refresh/", {}, format="json")
+    assert response.status_code == 200
+    assert api.get(ME).status_code == 200
+    user.refresh_from_db()
+    assert user.token_version == 0
+    assert not SuspiciousActivity.objects.filter(
+        kind=SuspiciousActivity.Kind.TOKEN_REUSE).exists()
+    assert api.post("/api/v1/auth/refresh/", {}, format="json").status_code == 200
+
+
+def test_the_same_browser_behind_its_own_renewals_is_recovered(api, user):
+    """Production, 7 Oct: an iPhone renewed through the night, then at 04:04
+    presented a token it had already renewed past."""
+    from apps.audit.models import SuspiciousActivity
+
+    login(api, user)
+    oldest = api.cookies[settings.AUTH_COOKIE_REFRESH].value
+    assert api.post("/api/v1/auth/refresh/", {}, format="json").status_code == 200
+    middle = api.cookies[settings.AUTH_COOKIE_REFRESH].value
+    assert api.post("/api/v1/auth/refresh/", {}, format="json").status_code == 200
+    latest = api.cookies[settings.AUTH_COOKIE_REFRESH].value
+    _age_blacklist_entry(oldest, seconds=3600)
+    _age_blacklist_entry(middle, seconds=1800)
+    api.cookies[settings.AUTH_COOKIE_REFRESH] = oldest
+
+    assert api.post("/api/v1/auth/refresh/", {}, format="json").status_code == 200
+    assert api.cookies[settings.AUTH_COOKIE_REFRESH].value not in (oldest, middle, latest)
+    assert api.get(ME).status_code == 200
+    user.refresh_from_db()
+    assert user.token_version == 0
+    assert not SuspiciousActivity.objects.filter(
+        kind=SuspiciousActivity.Kind.TOKEN_REUSE).exists()
+
+    # The copy it had moved on to was revoked, and leads back to the live session.
+    api.cookies[settings.AUTH_COOKIE_REFRESH] = latest
+    _age_blacklist_entry(latest)
+    assert api.post("/api/v1/auth/refresh/", {}, format="json").status_code == 200
+
+
+def test_a_browser_that_already_renewed_on_inside_the_race_window_is_refused_quietly(
+        api, user):
+    from apps.audit.models import SuspiciousActivity
+
+    login(api, user)
+    oldest = api.cookies[settings.AUTH_COOKIE_REFRESH].value
+    api.post("/api/v1/auth/refresh/", {}, format="json")
+    api.post("/api/v1/auth/refresh/", {}, format="json")
+    stale = type(api)()
+    assert stale.post("/api/v1/auth/refresh/", {"refresh": oldest},
+                      format="json").status_code == 401
+    user.refresh_from_db()
+    assert user.token_version == 0
+    assert not SuspiciousActivity.objects.filter(
+        kind=SuspiciousActivity.Kind.TOKEN_REUSE).exists()
 
 
 def test_recovery_ends_with_its_window(api, user):
@@ -465,9 +539,11 @@ def test_coming_back_later_on_another_network_is_still_recovered(api, user):
         kind=SuspiciousActivity.Kind.TOKEN_REUSE).exists()
 
 
-def test_a_thief_with_the_same_browser_is_caught_at_their_next_renewal(api, user):
-    """The thief renews first; the customer is recovered with a NEW pair and the
-    thief's replacement is revoked - so the thief's next renewal is theft."""
+def test_a_thief_with_the_same_browser_is_caught_within_the_daily_limit(api, user):
+    """The thief renews first. Each recovery takes the session from whoever
+    held it and hands the other a new one, so a thief on an identical browser
+    and the customer take turns - only a few times a day before it is theft."""
+    from apps.accounts.authentication import ROTATION_RECOVERY_DAILY_LIMIT
     from apps.audit.models import SuspiciousActivity
 
     login(api, user)
@@ -475,16 +551,20 @@ def test_a_thief_with_the_same_browser_is_caught_at_their_next_renewal(api, user
     thief = type(api)()  # identical browser
     assert thief.post("/api/v1/auth/refresh/", {"refresh": stolen},
                       format="json").status_code == 200   # thief renews first
-    thiefs = thief.cookies[settings.AUTH_COOKIE_REFRESH].value
     _age_blacklist_entry(stolen)
 
-    # The customer, still on the stolen token, keeps their session...
-    assert api.post("/api/v1/auth/refresh/", {}, format="json").status_code == 200
-    assert api.cookies[settings.AUTH_COOKIE_REFRESH].value != thiefs
+    turns = [api, thief]
+    for turn in range(ROTATION_RECOVERY_DAILY_LIMIT + 1):
+        client = turns[turn % 2]
+        status = client.post("/api/v1/auth/refresh/", {}, format="json").status_code
+        _age_blacklist_entry(client.cookies[settings.AUTH_COOKIE_REFRESH].value)
+        for other in turns:
+            _age_blacklist_entry(other.cookies[settings.AUTH_COOKIE_REFRESH].value)
+        if turn < ROTATION_RECOVERY_DAILY_LIMIT:
+            assert status == 200, turn
+        else:
+            assert status == 401
 
-    # ...and the thief's replacement no longer works: renewing with it is theft.
-    _age_blacklist_entry(thiefs)
-    assert thief.post("/api/v1/auth/refresh/", {}, format="json").status_code == 401
     user.refresh_from_db()
     assert user.token_version == 1
     assert SuspiciousActivity.objects.filter(
