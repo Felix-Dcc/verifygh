@@ -5,11 +5,11 @@ from __future__ import annotations
 import logging
 
 from django.conf import settings
-from django.db import transaction
+from django.db import IntegrityError, transaction
 from django.utils import timezone
 
 from apps.accounts.models import LoginAttempt, SecurityToken, TokenPurpose, User, UserDevice
-from apps.common.errors import ValidationFailed
+from apps.common.errors import Conflict, ValidationFailed
 from apps.common.middleware import get_client_ip
 
 logger = logging.getLogger("verifygh.accounts")
@@ -211,6 +211,12 @@ def send_verification_email(user: User, ip: str | None = None) -> bool:
     _token, raw = SecurityToken.issue(
         user, TokenPurpose.EMAIL_VERIFICATION, hours, ip
     )
+    # Re-read after issuing: `issue` locks the user row, so this is the address
+    # as of this token. A task that loaded the user before staff corrected the
+    # address must not mail a live link to the old one.
+    user.refresh_from_db(fields=["email", "is_email_verified"])
+    if user.is_email_verified:
+        return False
     # The raw token appears in the URL and nowhere else - never in a log line,
     # never in the notification body stored in the database.
     sent = notify(
@@ -256,6 +262,81 @@ def resend_verification_email(email: str, request=None) -> None:
     # for the SMTP timeout on every call, which is exactly the shape of request
     # you do not want an anonymous caller able to make.
     dispatch_verification_email(user, ip=ip)
+
+
+EMAIL_ALREADY_VERIFIED = (
+    "This email has already been verified. Email changes are restricted to unverified accounts."
+)
+
+
+def admin_change_unverified_email(*, user: User, new_email: str, reason: str, actor,
+                                  request=None) -> User:
+    """Staff correct an address the user mistyped at registration.
+
+    Only while that address is unverified: a verified address is proven to be
+    the user's, and replacing it is account takeover, not a correction. The new
+    address starts unverified too - staff only know what the user told them.
+
+    Tokens belong to the account, not to an address, so every unused
+    verification and password-reset link is cancelled: one already mailed to
+    the wrong address would otherwise verify the new one, or reset the
+    password, for whoever owns the wrong address. Sessions end for the same
+    reason; the user signs in again with their password. A fresh link goes to
+    the new address once this commits.
+    """
+    from apps.audit.services import record_admin_action
+
+    new_email = (new_email or "").strip().lower()
+    with transaction.atomic():
+        # Locked, then re-checked: the user may verify the old address, or
+        # someone may register the new one, while staff fill in the form.
+        target = User.objects.select_for_update().get(pk=user.pk)
+        if target.is_email_verified:
+            raise Conflict(EMAIL_ALREADY_VERIFIED, code="EMAIL_ALREADY_VERIFIED")
+        previous = target.email
+        if new_email == previous.lower():
+            raise ValidationFailed(
+                "The new email is the same as the current one.",
+                details={"fields": {"new_email": ["Same as the current email."]}},
+            )
+        if User.objects.filter(email__iexact=new_email).exclude(pk=target.pk).exists():
+            raise Conflict("Another account already uses this email.", code="EMAIL_TAKEN")
+
+        cancelled = SecurityToken.objects.filter(
+            user=target, used_at__isnull=True,
+            purpose__in=[TokenPurpose.EMAIL_VERIFICATION, TokenPurpose.PASSWORD_RESET],
+        ).update(used_at=timezone.now())
+
+        target.email = new_email
+        target.is_email_verified = False
+        target.email_verified_at = None
+        try:
+            # A savepoint, so a lost race on the unique email leaves the outer
+            # transaction usable for the clean error below.
+            with transaction.atomic():
+                target.save(update_fields=["email", "is_email_verified",
+                                           "email_verified_at", "updated_at"])
+        except IntegrityError:
+            raise Conflict("Another account already uses this email.",
+                           code="EMAIL_TAKEN") from None
+
+        record_admin_action(
+            admin=actor, action="ADMIN_CHANGED_UNVERIFIED_EMAIL", target=target,
+            reason=reason, before={"email": previous, "is_email_verified": False},
+            after={"email": new_email, "is_email_verified": False,
+                   "links_cancelled": cancelled},
+            request=request,
+        )
+        target.revoke_all_sessions()
+
+        ip = get_client_ip(request) if request else None
+        transaction.on_commit(lambda: dispatch_verification_email(target, ip=ip))
+
+    logger.info("admin_changed_unverified_email", extra={
+        "user_id": str(target.pk), "admin_id": str(getattr(actor, "pk", "")),
+        "from": mask_email(previous), "to": mask_email(new_email),
+    })
+    return target
 
 
 def verify_email(raw_token: str) -> User:
@@ -322,6 +403,9 @@ def request_password_reset(email: str, request=None) -> None:
     ip = get_client_ip(request) if request else None
     hours = _reset_ttl_hours()
     _token, raw = SecurityToken.issue(user, TokenPurpose.PASSWORD_RESET, hours, ip)
+    # The address as of this token (see send_verification_email): never a live
+    # reset link to an address staff have just corrected away from.
+    user.refresh_from_db(fields=["email"])
     notify(
         user,
         event="SECURITY_ALERT",

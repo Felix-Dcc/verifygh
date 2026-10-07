@@ -39,6 +39,7 @@ from apps.adminapi.serializers import (
     AdminServiceSerializer,
     AdminUserSerializer,
     AuditLogSerializer,
+    ChangeEmailSerializer,
     ExchangeRateSerializer,
     IssueRefundSerializer,
     PriceChangeSerializer,
@@ -387,6 +388,29 @@ class AdminUserViewSet(AdminBase, mixins.ListModelMixin, mixins.RetrieveModelMix
             target.suspension_reason = ""
             target.save(update_fields=["is_suspended", "suspended_at", "suspension_reason",
                                        "updated_at"])
+        return Response(AdminUserSerializer(self._get_user()).data)
+
+    @action(detail=True, methods=["post"], url_path="change-email")
+    def change_email(self, request, pk=None):
+        """Correct an address the user mistyped. Unverified addresses only."""
+        from apps.accounts.services import admin_change_unverified_email
+
+        self.required_permission = AdminPermission.USER_EMAIL_CHANGE
+        self.check_permissions(request)
+
+        serializer = ChangeEmailSerializer(data=request.data)
+        serializer.is_valid(raise_exception=True)
+        target = self._get_user()
+
+        if target.role in (Role.ADMIN, Role.SUPER_ADMIN) and request.user.role != Role.SUPER_ADMIN:
+            raise Conflict("Only a super admin can change another admin's email.")
+        if target.pk == request.user.pk:
+            raise ValidationFailed("You cannot change your own email here.")
+
+        admin_change_unverified_email(
+            user=target, new_email=serializer.validated_data["new_email"],
+            reason=serializer.validated_data["reason"], actor=request.user, request=request,
+        )
         return Response(AdminUserSerializer(self._get_user()).data)
 
     @action(detail=True, methods=["post"], url_path="wallet-adjustment")

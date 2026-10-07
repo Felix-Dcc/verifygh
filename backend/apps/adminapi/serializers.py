@@ -44,6 +44,22 @@ class SuspendUserSerializer(serializers.Serializer):
     reason = serializers.CharField(max_length=500, min_length=5)
 
 
+class ChangeEmailSerializer(serializers.Serializer):
+    """Correcting a mistyped, unverified address. Typed twice, and audited."""
+
+    new_email = serializers.EmailField(max_length=254)
+    confirm_email = serializers.CharField(max_length=254)
+    reason = serializers.CharField(max_length=500, min_length=5)
+
+    def validate_new_email(self, value: str) -> str:
+        return value.strip().lower()
+
+    def validate(self, attrs):
+        if attrs["confirm_email"].strip().lower() != attrs["new_email"]:
+            raise serializers.ValidationError({"confirm_email": "The two emails do not match."})
+        return attrs
+
+
 class WalletAdjustmentSerializer(serializers.Serializer):
     amount = serializers.DecimalField(
         max_digits=10, decimal_places=2, min_value=Decimal("0.01")

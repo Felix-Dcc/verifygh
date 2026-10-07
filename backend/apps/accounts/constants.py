@@ -37,6 +37,7 @@ class AdminPermission(models.TextChoices):
     REFERRAL_MANAGE = "REFERRAL_MANAGE", "Approve, reject and flag referrals"
     METRICS_VIEW = "METRICS_VIEW", "View dashboards and metrics"
     ISSUE_MANAGE = "ISSUE_MANAGE", "Review, reject and resolve number-issue reports"
+    USER_EMAIL_CHANGE = "USER_EMAIL_CHANGE", "Correct a user's unverified email address"
     MAINTENANCE_MANAGE = "MAINTENANCE_MANAGE", "Pause and reopen the site"
 
 
@@ -51,6 +52,9 @@ _SUPPORT = {
 
 _ADMIN = _SUPPORT | {
     AdminPermission.USER_SUSPEND,
+    # Only ever an unverified address, and audited; still an account change,
+    # so not support.
+    AdminPermission.USER_EMAIL_CHANGE,
     AdminPermission.ORDER_CANCEL,
     AdminPermission.ORDER_REFUND,
     AdminPermission.CATALOG_MANAGE,

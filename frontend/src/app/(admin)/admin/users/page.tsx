@@ -206,6 +206,7 @@ export default function AdminUsersPage() {
         onClose={() => setSelected(null)}
         onChanged={() => mutate()}
         canSuspend={can("USER_SUSPEND")}
+        canChangeEmail={can("USER_EMAIL_CHANGE")}
         canAdjust={can("WALLET_ADJUST")}
         canViewWallet={can("WALLET_VIEW")}
       />
@@ -251,6 +252,7 @@ function UserDetailDialog({
   onClose,
   onChanged,
   canSuspend,
+  canChangeEmail,
   canAdjust,
   canViewWallet,
 }: {
@@ -258,12 +260,18 @@ function UserDetailDialog({
   onClose: () => void;
   onChanged: () => void;
   canSuspend: boolean;
+  canChangeEmail: boolean;
   canAdjust: boolean;
   canViewWallet: boolean;
 }) {
   const toast = useToast();
-  const [tab, setTab] = React.useState<"details" | "suspend" | "adjust">("details");
+  const [tab, setTab] = React.useState<"details" | "suspend" | "adjust" | "email" | "email-confirm">(
+    "details",
+  );
   const [reason, setReason] = React.useState("");
+  const [newEmail, setNewEmail] = React.useState("");
+  const [confirmEmail, setConfirmEmail] = React.useState("");
+  const [fieldErrors, setFieldErrors] = React.useState<Record<string, string>>({});
   const [amount, setAmount] = React.useState("");
   const [direction, setDirection] = React.useState<"CREDIT" | "DEBIT">("CREDIT");
   const [busy, setBusy] = React.useState(false);
@@ -278,6 +286,9 @@ function UserDetailDialog({
     setReason("");
     setAmount("");
     setError("");
+    setNewEmail("");
+    setConfirmEmail("");
+    setFieldErrors({});
   }, [user?.id]);
 
   // One key per distinct adjustment: a double-click or a retry after a network
@@ -293,6 +304,7 @@ function UserDetailDialog({
   async function run(action: () => Promise<unknown>, successMessage: string) {
     setBusy(true);
     setError("");
+    setFieldErrors({});
     try {
       await action();
       toast.success(successMessage);
@@ -300,6 +312,9 @@ function UserDetailDialog({
       onClose();
     } catch (caught) {
       setError(caught instanceof ApiError ? caught.message : "Something went wrong.");
+      const fields = caught instanceof ApiError ? caught.fieldErrors : {};
+      setFieldErrors(fields);
+      if (tab === "email-confirm" && Object.keys(fields).length) setTab("email");
     } finally {
       setBusy(false);
     }
@@ -327,10 +342,17 @@ function UserDetailDialog({
               <Detail label="Orders" value={String(user.order_count)} />
               <Detail label="Phone" value={user.phone ? localPhone(user.phone) : "Not set"} />
               <Detail label="Role" value={user.role} />
-              <Detail
-                label="Email"
-                value={user.is_email_verified ? "Confirmed" : "Not confirmed"}
-              />
+              <div className="flex items-center justify-between gap-4 px-3.5 py-2.5">
+                <dt className="text-sm text-ink-muted">Email</dt>
+                <dd className="flex min-w-0 items-center gap-2 text-sm text-ink">
+                  <span className="truncate">{user.email}</span>
+                  {user.is_email_verified ? (
+                    <Badge tone="success">Verified</Badge>
+                  ) : (
+                    <Badge tone="warn">Not verified</Badge>
+                  )}
+                </dd>
+              </div>
               <Detail label="Risk score" value={String(user.risk_score)} />
               <Detail label="Open flags" value={String(user.open_flags)} />
               <Detail
@@ -388,9 +410,18 @@ function UserDetailDialog({
                   Adjust balance
                 </Button>
               ) : null}
+              {canChangeEmail && !user.is_email_verified ? (
+                <Button variant="secondary" fullWidth onClick={() => setTab("email")}>
+                  Change email
+                </Button>
+              ) : null}
             </div>
 
-            {!canSuspend && !canAdjust ? (
+            {canChangeEmail && user.is_email_verified ? (
+              <p className="text-caption text-ink-muted">{EMAIL_LOCKED}</p>
+            ) : null}
+
+            {!canSuspend && !canAdjust && !canChangeEmail ? (
               <p className="text-caption text-ink-muted">
                 Your role can view this account but not change it.
               </p>
@@ -446,6 +477,114 @@ function UserDetailDialog({
               </Button>
             </div>
           </form>
+        ) : null}
+
+        {tab === "email" ? (
+          <form
+            onSubmit={(event) => {
+              event.preventDefault();
+              const problems = emailProblems(user.email, newEmail, confirmEmail);
+              setFieldErrors(problems);
+              setError("");
+              if (Object.keys(problems).length === 0) setTab("email-confirm");
+            }}
+            className="space-y-4"
+            noValidate
+          >
+            <Alert tone="warn" title="Unverified emails only">
+              {EMAIL_WARNING}
+            </Alert>
+
+            <Field label="Current email" htmlFor="current-email">
+              <Input id="current-email" value={user.email} readOnly disabled />
+            </Field>
+            <Field label="New email" htmlFor="new-email" required error={fieldErrors.new_email}>
+              <Input
+                id="new-email"
+                type="email"
+                inputMode="email"
+                autoComplete="off"
+                autoCapitalize="none"
+                value={newEmail}
+                onChange={(event) => setNewEmail(event.target.value)}
+                placeholder="name@example.com"
+              />
+            </Field>
+            <Field
+              label="Confirm new email"
+              htmlFor="confirm-email"
+              required
+              error={fieldErrors.confirm_email}
+            >
+              <Input
+                id="confirm-email"
+                type="email"
+                inputMode="email"
+                autoComplete="off"
+                autoCapitalize="none"
+                value={confirmEmail}
+                onChange={(event) => setConfirmEmail(event.target.value)}
+              />
+            </Field>
+            <Field
+              label="Reason"
+              htmlFor="email-reason"
+              required
+              hint="At least 5 characters. Recorded in the audit log."
+              error={fieldErrors.reason}
+            >
+              <Textarea
+                id="email-reason"
+                rows={2}
+                value={reason}
+                onChange={(event) => setReason(event.target.value)}
+                placeholder="e.g. User wrote to support: typo in their email at signup"
+              />
+            </Field>
+
+            <div className="flex flex-col-reverse gap-2 sm:flex-row sm:justify-end">
+              <Button variant="secondary" onClick={() => setTab("details")} disabled={busy}>
+                Back
+              </Button>
+              <Button type="submit" disabled={reason.trim().length < 5}>
+                Review change
+              </Button>
+            </div>
+          </form>
+        ) : null}
+
+        {tab === "email-confirm" ? (
+          <div className="space-y-4">
+            <Alert tone="warn" title="Change this email?">
+              {EMAIL_WARNING} Any links already sent to the old address stop working, and the
+              user is signed out and signs in again with the new email.
+            </Alert>
+            <dl className="divide-y divide-line rounded-xl border border-line">
+              <Detail label="From" value={user.email} />
+              <Detail label="To" value={normaliseEmail(newEmail)} />
+            </dl>
+            <div className="flex flex-col-reverse gap-2 sm:flex-row sm:justify-end">
+              <Button variant="secondary" onClick={() => setTab("email")} disabled={busy}>
+                Back
+              </Button>
+              <Button
+                loading={busy}
+                onClick={() =>
+                  run(
+                    () =>
+                      api.post(`/admin/users/${user.id}/change-email/`, {
+                        new_email: newEmail,
+                        confirm_email: confirmEmail,
+                        reason,
+                      }),
+                    "Email updated successfully. A new verification email has been sent to the new address.",
+                  )
+                }
+              >
+                Change email
+              </Button>
+            </div>
+          </div>
         ) : null}
 
         {tab === "adjust" ? (
@@ -527,6 +666,29 @@ function UserDetailDialog({
       </div>
     </Dialog>
   );
+}
+
+const EMAIL_WARNING =
+  "Only change this email if the user entered an incorrect email during registration. " +
+  "The new email will remain unverified until the user verifies it.";
+
+const EMAIL_LOCKED =
+  "This email has already been verified. Email changes are restricted to unverified accounts.";
+
+function normaliseEmail(value: string): string {
+  return value.trim().toLowerCase();
+}
+
+/** The same checks the server makes, so mistakes show before the confirm step. */
+function emailProblems(current: string, next: string, confirm: string): Record<string, string> {
+  const problems: Record<string, string> = {};
+  const value = normaliseEmail(next);
+  if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(value)) problems.new_email = "Enter a valid email address.";
+  else if (value === normaliseEmail(current)) problems.new_email = "This is already their email.";
+  if (!problems.new_email && normaliseEmail(confirm) !== value) {
+    problems.confirm_email = "The two emails do not match.";
+  }
+  return problems;
 }
 
 function Detail({ label, value }: { label: string; value: string }) {
