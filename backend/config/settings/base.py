@@ -493,6 +493,14 @@ VERIFYGH = {
     # Set to false only where an empty catalogue is expected and deposits are
     # being exercised deliberately, e.g. a staging stack on the mock provider.
     "REQUIRE_CATALOG_FOR_DEPOSIT": env_bool("REQUIRE_CATALOG_FOR_DEPOSIT", True),
+    # Manual MoMo top-ups (apps/payments/manual.py), switched on in the admin.
+    "MANUAL_DEPOSIT_NUMBER": env("MANUAL_DEPOSIT_NUMBER", ""),
+    "MANUAL_DEPOSIT_NETWORK": env("MANUAL_DEPOSIT_NETWORK", "AirtelTigo Money"),
+    "MANUAL_DEPOSIT_ACCOUNT_NAME": env("MANUAL_DEPOSIT_ACCOUNT_NAME", ""),
+    "MANUAL_DEPOSIT_USSD": env("MANUAL_DEPOSIT_USSD", "*246#"),
+    "MANUAL_DEPOSIT_MAX": env("MANUAL_DEPOSIT_MAX", "200.00"),
+    "MANUAL_DEPOSIT_DAILY_LIMIT": env("MANUAL_DEPOSIT_DAILY_LIMIT", "400.00"),
+    "MANUAL_DEPOSIT_MAX_OPEN": env_int("MANUAL_DEPOSIT_MAX_OPEN", 2),
     "MAX_ORDERS_PER_DAY": env_int("MAX_ORDERS_PER_DAY", 25),
     "MAX_DAILY_SPEND": env("MAX_DAILY_SPEND", "1500.00"),
     "MAX_FAILED_LOGINS": env_int("MAX_FAILED_LOGINS", 8),
@@ -665,6 +673,13 @@ PAYMENT_CREDENTIALS = {
         "account_number": env("MOOLRE_ACCOUNT_NUMBER", ""),
         "callback_secret": env("MOOLRE_CALLBACK_SECRET", ""),
         "base_url": env("MOOLRE_BASE_URL", "https://api.moolre.com"),
+    },
+    "sendi": {
+        # The secret key (sk_live_...) from Merchant API > API keys, and the
+        # webhook signing secret from Merchant API > Webhook.
+        "secret_key": env("SENDI_SECRET_KEY", ""),
+        "webhook_secret": env("SENDI_WEBHOOK_SECRET", ""),
+        "base_url": env("SENDI_BASE_URL", "https://mesendi.com/backend"),
     },
     "mock": {"secret_key": env("MOCK_PAYMENT_SECRET", "mock-webhook-secret")},
 }

@@ -73,6 +73,9 @@ class MaintenanceState(TimeStampedModel):
     #: Why staff paused it - one of the presets, or their own words.
     reason = models.CharField(max_length=300, blank=True)
     since = models.DateTimeField(null=True, blank=True)
+    #: Manual MoMo top-ups (apps/payments/manual.py): customers send money to
+    #: the business wallet and staff credit it after seeing it arrive.
+    manual_deposits = models.BooleanField(default=False)
     #: Shown to customers only. Nothing reopens the site by itself.
     expected_back_at = models.DateTimeField(null=True, blank=True)
     updated_by = models.ForeignKey(

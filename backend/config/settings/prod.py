@@ -198,6 +198,24 @@ if _payment_provider == "moolre":
         _problems.append("MOOLRE_BASE_URL is not the live API (https://api.moolre.com). "
                          "Set ALLOW_MOOLRE_SANDBOX=true only on a non-public staging stack.")
 
+if _payment_provider == "sendi":
+    for _name in ("SENDI_SECRET_KEY", "SENDI_WEBHOOK_SECRET"):
+        if not env(_name, ""):
+            _problems.append(f"{_name} is required when PAYMENT_PROVIDER=sendi.")
+    _sendi_key = env("SENDI_SECRET_KEY", "")
+    if _sendi_key.startswith("pk_"):
+        _problems.append("SENDI_SECRET_KEY holds a public key (pk_...), not a secret key.")
+    elif _sendi_key and not _sendi_key.startswith("sk_live_") and not env_bool(
+        "ALLOW_SENDI_TEST_KEYS", False
+    ):
+        # Test charges complete on SENDI's page without money moving: every
+        # "deposit" would be free credit.
+        _problems.append("SENDI_SECRET_KEY is not a live key (sk_live_...). "
+                         "Set ALLOW_SENDI_TEST_KEYS=true only on a non-public staging stack.")
+    _sendi_url = env("SENDI_BASE_URL", "https://mesendi.com/backend").rstrip("/")
+    if _sendi_url != "https://mesendi.com/backend" and not env_bool("ALLOW_SENDI_TEST_KEYS", False):
+        _problems.append("SENDI_BASE_URL is not the live API (https://mesendi.com/backend).")
+
 # An adapter whose endpoints are still blank cannot take a single cedi. Booting
 # with one selected would leave every deposit failing in production while the
 # app looked healthy, so refuse it here instead. This reads a plain data module:

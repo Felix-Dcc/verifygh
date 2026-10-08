@@ -23,6 +23,7 @@ import {
   cn,
 } from "@/components/ui/primitives";
 import { useToast } from "@/components/ui/toast";
+import { ManualTopUp } from "@/components/wallet/manual-top-up";
 import { OtpStep } from "@/components/wallet/otp-step";
 import { ApiError, api } from "@/lib/api";
 import { cedis, localPhone } from "@/lib/format";
@@ -39,6 +40,26 @@ export default function DepositPage() {
   } = useSWR<PaymentOptions>("/payments/options/");
   const [payment, setPayment] = React.useState<PaymentType | null>(null);
 
+  // Back from a hosted checkout (SENDI's callback_url carries our reference):
+  // pick the payment up again and wait for the provider to confirm it.
+  React.useEffect(() => {
+    const reference = new URLSearchParams(window.location.search).get("reference");
+    if (!reference || !/^[A-Za-z0-9_-]{6,64}$/.test(reference)) return;
+    api
+      .get<PaymentType>(`/payments/${reference}/`)
+      .then(setPayment)
+      .catch(() => undefined);
+  }, []);
+
+  function started(next: PaymentType) {
+    if (next.checkout_url) {
+      // Pay on the provider's page; it sends the customer back here.
+      window.location.assign(next.checkout_url);
+      return;
+    }
+    setPayment(next);
+  }
+
   return (
     <div className="mx-auto max-w-2xl">
       <PageHeader
@@ -54,7 +75,7 @@ export default function DepositPage() {
           options={options}
           failed={Boolean(optionsError) && !options}
           onRetry={() => retryOptions()}
-          onStarted={setPayment}
+          onStarted={started}
         />
       )}
     </div>
@@ -114,6 +135,8 @@ function DepositForm({
         ...(network ? { network } : {}),
       });
       onStarted(payment);
+      // Leaving for a hosted checkout: keep the button busy until the page goes.
+      if (payment.checkout_url) return;
     } catch (error) {
       if (error instanceof ApiError) {
         setFieldErrors(error.fieldErrors);
@@ -144,6 +167,11 @@ function DepositForm({
     );
   }
 
+  if (!options.deposits_enabled && options.manual?.enabled) {
+    // The gateway is paused but staff are taking transfers by hand.
+    return <ManualTopUp manual={options.manual} quickAmounts={options.quick_amounts} />;
+  }
+
   if (!options.deposits_enabled) {
     // No form at all, rather than a disabled one. A form that cannot be
     // submitted invites people to keep trying and then contact support; the
@@ -169,6 +197,7 @@ function DepositForm({
   const entered = pesewas(amount);
   const inRange = entered >= pesewas(options.min_deposit) && entered <= pesewas(options.max_deposit);
   const networkLabel = options.networks.find((item) => item.value === network)?.label;
+  const hosted = Boolean(options.hosted_checkout);
 
   return (
     <Card className="overflow-hidden">
@@ -351,15 +380,20 @@ function DepositForm({
             className="mt-5"
           >
             {submitting
-              ? "Sending the prompt"
+              ? hosted
+                ? "Opening checkout"
+                : "Sending the prompt"
               : inRange
                 ? `Pay ${cedis(entered / 100)}`
-                : "Send payment prompt"}
+                : hosted
+                  ? "Continue to payment"
+                  : "Send payment prompt"}
           </Button>
 
           <p className="mt-3 text-center text-caption text-ink-muted">
-            A prompt appears on your phone - approve it there with your PIN. VerifyGH never sees or
-            stores your Mobile Money PIN.
+            {hosted
+              ? "You'll finish paying on SENDI's secure checkout page, then come back here. VerifyGH never sees or stores your Mobile Money PIN."
+              : "A prompt appears on your phone - approve it there with your PIN. VerifyGH never sees or stores your Mobile Money PIN."}
           </p>
         </Step>
       </form>
@@ -431,6 +465,7 @@ function AwaitingApproval({
   );
 
   const status = current?.status ?? payment.status;
+  const checkoutUrl = status === "PENDING" ? (current?.checkout_url ?? payment.checkout_url ?? "") : "";
 
   React.useEffect(() => {
     if (terminal.includes(status)) return;
@@ -550,7 +585,11 @@ function AwaitingApproval({
         </div>
 
         <h2 className="mt-5 text-title text-ink">
-          {status === "PHONE_AUTH" ? "Approve on your phone" : "Starting your payment"}
+          {status === "PHONE_AUTH"
+            ? "Approve on your phone"
+            : checkoutUrl
+              ? "Finish paying on SENDI"
+              : "Confirming your payment"}
         </h2>
         <p className="mt-2 max-w-sm text-sm text-ink-muted">
           {status === "PHONE_AUTH" ? (
@@ -563,6 +602,13 @@ function AwaitingApproval({
                 {payment.network_label}
               </span>
               . Enter your Mobile Money PIN on your handset to approve it.
+            </>
+          ) : checkoutUrl ? (
+            <>
+              If you have paid{" "}
+              <span className="tabular font-semibold text-ink">{cedis(payment.amount)}</span> on
+              SENDI&apos;s page, your balance updates here as soon as SENDI confirms it. If not, open
+              the checkout again.
             </>
           ) : (
             <>
@@ -596,6 +642,12 @@ function AwaitingApproval({
         <p className="mt-4 text-caption text-ink-faint">
           Reference <span className="code">{payment.reference}</span>
         </p>
+
+        {checkoutUrl ? (
+          <Button fullWidth className="mt-6" onClick={() => window.location.assign(checkoutUrl)}>
+            Open SENDI checkout
+          </Button>
+        ) : null}
 
         <div className="mt-6 flex w-full flex-col gap-2 sm:flex-row">
           <Button variant="secondary" fullWidth loading={checking} onClick={checkNow}>

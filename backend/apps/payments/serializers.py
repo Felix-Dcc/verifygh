@@ -8,7 +8,11 @@ from rest_framework import serializers
 from apps.accounts.constants import MomoNetwork
 from apps.accounts.phone import InvalidPhoneNumber, detect_network, format_local, normalise_gh
 from apps.common.money import format_ghs
-from apps.payments.models import Payment
+from apps.payments.models import Payment, PaymentStatus
+
+
+class ManualDepositSerializer(serializers.Serializer):
+    amount = serializers.DecimalField(max_digits=10, decimal_places=2)
 
 
 class DepositSerializer(serializers.Serializer):
@@ -74,12 +78,14 @@ class DepositSerializer(serializers.Serializer):
 class PaymentSerializer(serializers.ModelSerializer):
     phone_display = serializers.SerializerMethodField()
     network_label = serializers.SerializerMethodField()
+    checkout_url = serializers.SerializerMethodField()
 
     class Meta:
         model = Payment
         fields = [
             "id",
             "reference",
+            "provider",
             "amount",
             "currency",
             "status",
@@ -87,6 +93,7 @@ class PaymentSerializer(serializers.ModelSerializer):
             "network_label",
             "phone_display",
             "instructions",
+            "checkout_url",
             "failure_reason",
             "expires_at",
             "completed_at",
@@ -99,6 +106,14 @@ class PaymentSerializer(serializers.ModelSerializer):
 
     def get_network_label(self, obj: Payment) -> str:
         return MomoNetwork(obj.network).label if obj.network else ""
+
+    def get_checkout_url(self, obj: Payment) -> str:
+        """The hosted checkout page, only while the payment is still open."""
+        from apps.payments.sendi import safe_checkout_url
+
+        if obj.status != PaymentStatus.PENDING:
+            return ""
+        return safe_checkout_url((obj.metadata or {}).get("checkout_url", ""))
 
 
 class MomoNetworkSerializer(serializers.Serializer):

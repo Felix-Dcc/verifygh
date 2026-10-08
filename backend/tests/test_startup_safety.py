@@ -64,7 +64,9 @@ SCRUB = set(SAFE) | {"DEBUG", "MOCK_PAYMENT_SECRET", "REQUIRE_POSTGRES", "DB_POO
                     "DB_CONN_MAX_AGE", "DB_SSLROOTCERT", "HUBTEL_CLIENT_ID",
                     "HUBTEL_CLIENT_SECRET", "HUBTEL_MERCHANT_ACCOUNT", "HUBTEL_BASE_URL",
                     "MOOLRE_USERNAME", "MOOLRE_PUBLIC_KEY", "MOOLRE_ACCOUNT_NUMBER",
-                    "MOOLRE_CALLBACK_SECRET", "MOOLRE_BASE_URL", "ALLOW_MOOLRE_SANDBOX"}
+                    "MOOLRE_CALLBACK_SECRET", "MOOLRE_BASE_URL", "ALLOW_MOOLRE_SANDBOX",
+                    "SENDI_SECRET_KEY", "SENDI_WEBHOOK_SECRET", "SENDI_BASE_URL",
+                    "ALLOW_SENDI_TEST_KEYS"}
 
 
 def boot(**changes) -> subprocess.CompletedProcess:
@@ -108,6 +110,12 @@ UNSAFE = [
     ("paystack public key", {"PAYSTACK_SECRET_KEY": "pk_live_" + "0" * 40}, "public key"),
     ("moolre without credentials", {"PAYMENT_PROVIDER": "moolre", "PAYSTACK_SECRET_KEY": None},
      "MOOLRE_USERNAME is required"),
+    ("sendi without credentials", {"PAYMENT_PROVIDER": "sendi", "PAYSTACK_SECRET_KEY": None},
+     "SENDI_SECRET_KEY is required"),
+    ("sendi test key", {"PAYMENT_PROVIDER": "sendi", "PAYSTACK_SECRET_KEY": None,
+                        "SENDI_SECRET_KEY": "sk_test_" + "x" * 24,
+                        "SENDI_WEBHOOK_SECRET": "w" * 32},
+     "SENDI_SECRET_KEY is not a live key"),
     # Sandbox payments succeed without money moving: every deposit free credit.
     ("moolre sandbox", {"PAYMENT_PROVIDER": "moolre", "PAYSTACK_SECRET_KEY": None,
                         "MOOLRE_USERNAME": "verifygh", "MOOLRE_PUBLIC_KEY": "p" * 32,
@@ -322,4 +330,10 @@ def test_moolre_boots_with_its_live_credentials():
     result = boot(PAYMENT_PROVIDER="moolre", PAYSTACK_SECRET_KEY=None, MOOLRE_USERNAME="verifygh",
                   MOOLRE_PUBLIC_KEY="p" * 32, MOOLRE_ACCOUNT_NUMBER="10000000001",
                   MOOLRE_CALLBACK_SECRET="s" * 36)
+    assert result.returncode == 0, result.stderr[-2000:]
+
+
+def test_sendi_boots_with_its_live_credentials():
+    result = boot(PAYMENT_PROVIDER="sendi", PAYSTACK_SECRET_KEY=None,
+                  SENDI_SECRET_KEY="sk_live_" + "x" * 24, SENDI_WEBHOOK_SECRET="w" * 32)
     assert result.returncode == 0, result.stderr[-2000:]

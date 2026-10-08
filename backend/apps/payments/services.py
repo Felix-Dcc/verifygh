@@ -69,7 +69,7 @@ UNPARSED_EVENT_TYPE = "unparsed"
 # warehouse a provider's auth headers.
 _KEPT_HEADERS = {
     "content-type", "user-agent", "x-forwarded-for", "x-request-id",
-    "x-paystack-signature", "x-mock-signature",
+    "x-paystack-signature", "x-mock-signature", "x-sendi-signature",
 }
 
 
@@ -202,9 +202,14 @@ def initiate_deposit(*, user, amount, phone: str, network: str, request=None,
     payment.provider_reference = charge.provider_reference
     payment.instructions = charge.instructions[:255]
     payment.status = _CHARGE_TO_PAYMENT.get(charge.status, PaymentStatus.PROCESSING)
-    payment.save(
-        update_fields=["provider_reference", "instructions", "status", "updated_at"]
-    )
+    fields = ["provider_reference", "instructions", "status", "updated_at"]
+    if charge.redirect_url:
+        # A hosted checkout (SENDI): where the customer goes to pay. Reread
+        # first - _note_provider_status above wrote metadata in its own query.
+        payment.refresh_from_db(fields=["metadata"])
+        payment.metadata = {**(payment.metadata or {}), "checkout_url": charge.redirect_url}
+        fields.append("metadata")
+    payment.save(update_fields=fields)
 
     record_audit(
         actor=user, action="DEPOSIT_INITIATED", target=payment, request=request,

@@ -98,6 +98,8 @@ export type PaymentStatus =
 export type Payment = {
   id: string;
   reference: string;
+  /** "manual" for a manual MoMo top-up checked by staff. */
+  provider?: string;
   amount: string;
   currency: string;
   status: PaymentStatus;
@@ -105,6 +107,8 @@ export type Payment = {
   network_label: string;
   phone_display: string;
   instructions: string;
+  /** The provider's hosted checkout page (SENDI), while the payment is open. */
+  checkout_url?: string;
   failure_reason: string;
   expires_at: string | null;
   completed_at: string | null;
@@ -130,6 +134,48 @@ export type PaymentOptions = {
   deposits_disabled_reason: string;
   /** A fee the network adds on top of the amount, if any. Empty otherwise. */
   fee_note?: string;
+  /** True when the customer pays on the provider's own checkout page. */
+  hosted_checkout?: boolean;
+  /** Manual MoMo top-ups, offered while the gateway is paused. */
+  manual?: ManualTopUpDetails;
+};
+
+export type ManualTopUpDetails = {
+  enabled: boolean;
+  /** The wallet customers send to. Empty while switched off. */
+  number: string;
+  network: string;
+  account_name: string;
+  ussd: string;
+  min: string;
+  max: string;
+};
+
+/** Admin > Manual top-ups (backend/apps/payments/admin_api.py). */
+export type ManualTopUpRow = {
+  reference: string;
+  status: PaymentStatus;
+  amount: string;
+  claimed_amount: string;
+  received_amount: string | null;
+  user_email: string;
+  sender_phone: string;
+  network: string;
+  transaction_id: string;
+  receipt_id: string;
+  failure_reason: string;
+  claimed_at: string | null;
+  created_at: string;
+  completed_at: string | null;
+  evidence: { id: string; content_type: string; size: number }[];
+};
+
+export type ManualTopUpQueue = {
+  settings: ManualTopUpDetails;
+  enabled: boolean;
+  reject_reasons: string[];
+  waiting: ManualTopUpRow[];
+  decided: ManualTopUpRow[];
 };
 
 export type CountryOption = {

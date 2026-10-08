@@ -83,6 +83,10 @@ class PaymentProvider(abc.ABC):
     #: amount, so the prompt on their phone is no surprise. "" when they do not.
     customer_fee_note: str = ""
 
+    #: True when the customer pays on the provider's own page (redirect_url)
+    #: rather than by a prompt on their phone.
+    hosted_checkout: bool = False
+
     def __init__(self, config: dict | None = None):
         self.config = config or {}
 

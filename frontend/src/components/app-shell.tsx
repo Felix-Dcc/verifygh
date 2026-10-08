@@ -92,6 +92,7 @@ const ADMIN_NAV: NavGroup[] = [
       { href: "/admin/orders", label: "Orders", icon: ReceiptIcon },
       { href: "/admin/issues", label: "Number issues", icon: FlagIcon },
       { href: "/admin/payments", label: "Payments", icon: WalletIcon },
+      { href: "/admin/manual-deposits", label: "Manual top-ups", icon: WalletIcon },
       { href: "/admin/users", label: "Users", icon: UsersIcon },
     ],
   },

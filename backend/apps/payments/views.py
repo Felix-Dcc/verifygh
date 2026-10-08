@@ -20,6 +20,7 @@ from apps.payments.models import Payment, PaymentStatus
 from apps.payments.registry import get_payment_provider, webhook_providers
 from apps.payments.serializers import (
     DepositSerializer,
+    ManualDepositSerializer,
     PaymentSerializer,
     SubmitOtpSerializer,
 )
@@ -58,6 +59,36 @@ class PaymentViewSet(mixins.ListModelMixin, mixins.RetrieveModelMixin, viewsets.
             detected_network=data.get("detected_network", ""),
         )
         return Response(PaymentSerializer(payment).data, status=status.HTTP_201_CREATED)
+
+    @action(detail=False, methods=["post"], url_path="manual",
+            throttle_classes=[DepositThrottle])
+    def manual(self, request):
+        """Start a manual MoMo top-up: the amount, and a reference to send it with."""
+        from apps.payments import manual
+
+        serializer = ManualDepositSerializer(data=request.data)
+        serializer.is_valid(raise_exception=True)
+        payment = manual.start(user=request.user, amount=serializer.validated_data["amount"],
+                               request=request)
+        return Response(PaymentSerializer(payment).data, status=status.HTTP_201_CREATED)
+
+    @action(detail=True, methods=["post"], url_path="manual-claim",
+            throttle_classes=[DepositThrottle])
+    def manual_claim(self, request, reference=None):
+        """"I have paid": the sender number, transaction ID and a screenshot.
+
+        Goes to staff for review; nothing is credited here.
+        """
+        from apps.payments import manual
+
+        payment = manual.claim(
+            user=request.user, reference=reference,
+            sender_phone=request.data.get("sender_phone", ""),
+            network=request.data.get("network", ""),
+            transaction_id=request.data.get("transaction_id", ""),
+            files=request.FILES.getlist("evidence"),
+        )
+        return Response(PaymentSerializer(payment).data)
 
     @action(detail=True, methods=["post"], url_path="otp",
             throttle_classes=[OtpSubmitThrottle])
@@ -131,6 +162,7 @@ class PaymentOptionsView(APIView):
         # So the deposit screen can explain itself instead of offering a form
         # that is guaranteed to fail on submit.
         blocked = deposits_blocked_reason()
+        from apps.payments import manual
         networks = [
             {
                 "value": str(value),
@@ -151,6 +183,8 @@ class PaymentOptionsView(APIView):
                 "deposits_enabled": not blocked,
                 "deposits_disabled_reason": blocked,
                 "fee_note": provider.customer_fee_note,
+                "hosted_checkout": provider.hosted_checkout,
+                "manual": manual.details(),
             }
         )
 

@@ -125,6 +125,13 @@ class Payment(BaseModel):
                 check=models.Q(credited_at__isnull=True) | models.Q(status="SUCCESS"),
                 name="payment_credited_only_when_successful",
             ),
+            # A manual top-up is settled by the transaction ID staff read on
+            # the receiving wallet. One incoming transfer, one credit - ever.
+            models.UniqueConstraint(
+                fields=["provider_reference"],
+                condition=models.Q(provider="manual") & ~models.Q(provider_reference=""),
+                name="payment_manual_receipt_unique",
+            ),
         ]
 
     def __str__(self) -> str:
@@ -187,3 +194,26 @@ class PaymentWebhookEvent(ImmutableModel):
         PaymentWebhookEvent.objects.filter(pk=self.pk).update(
             processed=not error, processing_error=error[:2000]
         )
+
+
+class PaymentEvidence(BaseModel):
+    """A screenshot a customer attached to a manual top-up claim.
+
+    Supporting evidence for staff, never proof: a credit needs the money seen
+    on the receiving wallet. Kept in the database (there is no persistent
+    disk), served only to staff with headers that keep it an image.
+    """
+
+    payment = models.ForeignKey(Payment, on_delete=models.CASCADE, related_name="evidence")
+    data = models.BinaryField(editable=False)
+    content_type = models.CharField(max_length=20)
+    size = models.PositiveIntegerField()
+    #: The same screenshot sent for two claims is the first thing to catch.
+    sha256 = models.CharField(max_length=64, db_index=True)
+
+    class Meta:
+        db_table = "payments_payment_evidence"
+        ordering = ["created_at"]
+
+    def __str__(self) -> str:
+        return f"Evidence for {self.payment_id}"

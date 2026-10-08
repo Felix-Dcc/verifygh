@@ -15,6 +15,7 @@ from apps.funding import admin_api as funding_admin
 from apps.notifications import views as notification_views
 from apps.numbers import admin_api as numbers_admin
 from apps.orders import views as order_views
+from apps.payments import admin_api as manual_admin
 from apps.payments import views as payment_views
 from apps.pricing import admin_api as pricing_admin
 from apps.referrals import admin_api as referral_admin
@@ -138,6 +139,16 @@ api_v1 = [
     path("admin/overview/", admin_views.AdminOverviewView.as_view(), name="admin-overview"),
     path("admin/charts/", admin_views.AdminChartsView.as_view(), name="admin-charts"),
     path("admin/health/", admin_views.AdminSystemHealthView.as_view(), name="admin-health"),
+    path("admin/manual-deposits/", manual_admin.ManualDepositsView.as_view(),
+         name="admin-manual-deposits"),
+    path("admin/manual-deposits/settings/", manual_admin.ManualDepositSettingsView.as_view(),
+         name="admin-manual-deposits-settings"),
+    path("admin/manual-deposits/<str:reference>/approve/",
+         manual_admin.ManualDepositApproveView.as_view(), name="admin-manual-deposit-approve"),
+    path("admin/manual-deposits/<str:reference>/reject/",
+         manual_admin.ManualDepositRejectView.as_view(), name="admin-manual-deposit-reject"),
+    path("admin/manual-deposits/<str:reference>/evidence/<uuid:evidence_id>/",
+         manual_admin.ManualDepositEvidenceView.as_view(), name="admin-manual-deposit-evidence"),
     path("admin/maintenance/", admin_views.AdminMaintenanceView.as_view(),
          name="admin-maintenance"),
     path("status/", common_views.SiteStatusView.as_view(), name="site-status"),
