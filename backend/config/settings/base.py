@@ -655,6 +655,17 @@ PAYMENT_CREDENTIALS = {
         "merchant_account": env("HUBTEL_MERCHANT_ACCOUNT", ""),
         "base_url": env("HUBTEL_BASE_URL", ""),
     },
+    "moolre": {
+        # The username shown in the Moolre dashboard (X-API-USER) and the
+        # public key of the wallet's API service (X-API-PUBKEY). Payments and
+        # status checks need only these; the private key is never used here.
+        "username": env("MOOLRE_USERNAME", ""),
+        "public_key": env("MOOLRE_PUBLIC_KEY", ""),
+        # The wallet the money lands in, and its callback secret.
+        "account_number": env("MOOLRE_ACCOUNT_NUMBER", ""),
+        "callback_secret": env("MOOLRE_CALLBACK_SECRET", ""),
+        "base_url": env("MOOLRE_BASE_URL", "https://api.moolre.com"),
+    },
     "mock": {"secret_key": env("MOCK_PAYMENT_SECRET", "mock-webhook-secret")},
 }
 

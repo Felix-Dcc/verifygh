@@ -79,6 +79,10 @@ class PaymentProvider(abc.ABC):
     #: Networks this provider can collect from, as MomoNetwork values.
     supported_networks: tuple[str, ...] = ()
 
+    #: Shown on the deposit form when the payer pays a fee on top of the
+    #: amount, so the prompt on their phone is no surprise. "" when they do not.
+    customer_fee_note: str = ""
+
     def __init__(self, config: dict | None = None):
         self.config = config or {}
 

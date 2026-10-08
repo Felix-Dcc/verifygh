@@ -62,7 +62,9 @@ SCRUB = set(SAFE) | {"DEBUG", "MOCK_PAYMENT_SECRET", "REQUIRE_POSTGRES", "DB_POO
                     "RESEND_API_KEY", "SUPPORT_EMAIL",
                     "REQUIRE_EMAIL_VERIFICATION_FOR_PURCHASE",
                     "DB_CONN_MAX_AGE", "DB_SSLROOTCERT", "HUBTEL_CLIENT_ID",
-                    "HUBTEL_CLIENT_SECRET", "HUBTEL_MERCHANT_ACCOUNT", "HUBTEL_BASE_URL"}
+                    "HUBTEL_CLIENT_SECRET", "HUBTEL_MERCHANT_ACCOUNT", "HUBTEL_BASE_URL",
+                    "MOOLRE_USERNAME", "MOOLRE_PUBLIC_KEY", "MOOLRE_ACCOUNT_NUMBER",
+                    "MOOLRE_CALLBACK_SECRET", "MOOLRE_BASE_URL", "ALLOW_MOOLRE_SANDBOX"}
 
 
 def boot(**changes) -> subprocess.CompletedProcess:
@@ -104,6 +106,14 @@ UNSAFE = [
     ("paystack without key", {"PAYSTACK_SECRET_KEY": None}, "PAYSTACK_SECRET_KEY is required"),
     ("paystack test key", {"PAYSTACK_SECRET_KEY": "sk_test_" + "0" * 40}, "not a live key"),
     ("paystack public key", {"PAYSTACK_SECRET_KEY": "pk_live_" + "0" * 40}, "public key"),
+    ("moolre without credentials", {"PAYMENT_PROVIDER": "moolre", "PAYSTACK_SECRET_KEY": None},
+     "MOOLRE_USERNAME is required"),
+    # Sandbox payments succeed without money moving: every deposit free credit.
+    ("moolre sandbox", {"PAYMENT_PROVIDER": "moolre", "PAYSTACK_SECRET_KEY": None,
+                        "MOOLRE_USERNAME": "verifygh", "MOOLRE_PUBLIC_KEY": "p" * 32,
+                        "MOOLRE_ACCOUNT_NUMBER": "10000000001", "MOOLRE_CALLBACK_SECRET": "s" * 36,
+                        "MOOLRE_BASE_URL": "https://sandbox.moolre.com"},
+     "not the live API"),
     ("mock webhook route", {"WEBHOOK_PROVIDERS": "mock"}, "must not include 'mock'"),
     ("mock verification", {"VERIFICATION_PROVIDER": "mock"}, "simulated numbers"),
     # The primary provider without its credentials fails at boot - never at the
@@ -306,3 +316,10 @@ def test_the_health_endpoint_is_exempt_from_the_https_redirect():
     assert any(re.match(pattern, "health/") for pattern in patterns), (
         f"no exemption matches the health endpoint: {patterns}"
     )
+
+
+def test_moolre_boots_with_its_live_credentials():
+    result = boot(PAYMENT_PROVIDER="moolre", PAYSTACK_SECRET_KEY=None, MOOLRE_USERNAME="verifygh",
+                  MOOLRE_PUBLIC_KEY="p" * 32, MOOLRE_ACCOUNT_NUMBER="10000000001",
+                  MOOLRE_CALLBACK_SECRET="s" * 36)
+    assert result.returncode == 0, result.stderr[-2000:]

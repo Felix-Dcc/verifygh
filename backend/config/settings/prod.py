@@ -186,6 +186,18 @@ if _payment_provider == "paystack":
         _problems.append("PAYSTACK_SECRET_KEY is not a live key (sk_live_...). "
                          "Set ALLOW_PAYSTACK_TEST_KEYS=true only on a non-public staging stack.")
 
+if _payment_provider == "moolre":
+    for _name in ("MOOLRE_USERNAME", "MOOLRE_PUBLIC_KEY", "MOOLRE_ACCOUNT_NUMBER",
+                  "MOOLRE_CALLBACK_SECRET"):
+        if not env(_name, ""):
+            _problems.append(f"{_name} is required when PAYMENT_PROVIDER=moolre.")
+    # Sandbox payments succeed without any money moving: in production every
+    # "deposit" would be free credit.
+    if env("MOOLRE_BASE_URL", "https://api.moolre.com").rstrip("/") != "https://api.moolre.com" \
+            and not env_bool("ALLOW_MOOLRE_SANDBOX", False):
+        _problems.append("MOOLRE_BASE_URL is not the live API (https://api.moolre.com). "
+                         "Set ALLOW_MOOLRE_SANDBOX=true only on a non-public staging stack.")
+
 # An adapter whose endpoints are still blank cannot take a single cedi. Booting
 # with one selected would leave every deposit failing in production while the
 # app looked healthy, so refuse it here instead. This reads a plain data module:

@@ -128,6 +128,8 @@ export type PaymentOptions = {
   deposits_enabled: boolean;
   /** Shown to the user when deposits_enabled is false. Empty otherwise. */
   deposits_disabled_reason: string;
+  /** A fee the network adds on top of the amount, if any. Empty otherwise. */
+  fee_note?: string;
 };
 
 export type CountryOption = {

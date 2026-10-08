@@ -186,7 +186,9 @@ function DepositForm({
             label="Amount to add"
             htmlFor="amount"
             error={fieldErrors.amount}
-            hint={`Between ${cedis(options.min_deposit)} and ${cedis(options.max_deposit)} per payment.`}
+            hint={`Between ${cedis(options.min_deposit)} and ${cedis(options.max_deposit)} per payment.${
+              options.fee_note ? ` ${options.fee_note}` : ""
+            }`}
             required
           >
             <Input

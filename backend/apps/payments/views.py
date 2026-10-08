@@ -150,6 +150,7 @@ class PaymentOptionsView(APIView):
                 "quick_amounts": ["10.00", "20.00", "50.00", "100.00", "200.00"],
                 "deposits_enabled": not blocked,
                 "deposits_disabled_reason": blocked,
+                "fee_note": provider.customer_fee_note,
             }
         )
 
