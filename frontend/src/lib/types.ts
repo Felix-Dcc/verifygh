@@ -1163,7 +1163,7 @@ export type PricingAuditRow = {
 };
 
 /** Site-wide maintenance (backend/apps/common/maintenance.py). */
-export type MaintenanceMode = "OFF" | "BUYING_PAUSED" | "ALL_PAUSED";
+export type MaintenanceMode = "OFF" | "BUYING_PAUSED" | "DEPOSITS_PAUSED" | "ALL_PAUSED";
 
 /** GET /status/ - public, read by every page for the maintenance notice. */
 export type SiteStatus = {

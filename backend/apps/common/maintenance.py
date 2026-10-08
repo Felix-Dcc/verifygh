@@ -52,6 +52,10 @@ BUYING_NOTICE = (
     "will be charged. Open orders still finish or are refunded automatically."
 )
 ALL_NOTICE = BUYING_NOTICE + " Top-ups are paused too."
+DEPOSITS_NOTICE = (
+    "Top-ups are paused for a short while. Your balance is safe, and you can still buy "
+    "numbers with it."
+)
 
 #: How far ahead "expected back" may be shown.
 EXPECTED_BACK_MAX_MINUTES = 24 * 60
@@ -75,11 +79,12 @@ def _answer(state) -> dict:
     mode = _modes()
     current = state.mode if state is not None else mode.OFF
     paused = current != mode.OFF
-    default = ALL_NOTICE if current == mode.ALL_PAUSED else BUYING_NOTICE
+    default = {mode.ALL_PAUSED: ALL_NOTICE,
+               mode.DEPOSITS_PAUSED: DEPOSITS_NOTICE}.get(current, BUYING_NOTICE)
     return {
         "mode": str(current),
-        "buying_open": not paused,
-        "deposits_open": current != mode.ALL_PAUSED,
+        "buying_open": current not in (mode.BUYING_PAUSED, mode.ALL_PAUSED),
+        "deposits_open": current not in (mode.DEPOSITS_PAUSED, mode.ALL_PAUSED),
         "message": ((state.message or default) if paused else ""),
         "since": state.since.isoformat() if paused and state.since else None,
         "expected_back_at": (state.expected_back_at.isoformat()
@@ -131,7 +136,8 @@ def report() -> dict:
         "updated_at": state.updated_at.isoformat() if state else None,
         "updated_by": (getattr(state.updated_by, "email", "") or "") if state else "",
         "preset_reasons": list(PRESET_REASONS),
-        "notices": {"BUYING_PAUSED": BUYING_NOTICE, "ALL_PAUSED": ALL_NOTICE},
+        "notices": {"BUYING_PAUSED": BUYING_NOTICE, "DEPOSITS_PAUSED": DEPOSITS_NOTICE,
+                    "ALL_PAUSED": ALL_NOTICE},
     }
 
 
@@ -195,8 +201,9 @@ def set_mode(*, mode, reason, actor, message="", expected_back_minutes=None,
 
         who = getattr(actor, "email", "") or "staff"
         if paused:
-            title = ("Site paused: buying and top-ups" if mode == modes.ALL_PAUSED
-                     else "Site paused: buying")
+            title = {modes.ALL_PAUSED: "Site paused: buying and top-ups",
+                     modes.DEPOSITS_PAUSED: "Site paused: top-ups"}.get(mode,
+                                                                     "Site paused: buying")
             body = (f"{who} paused the site: {reason}. Customers see the maintenance notice "
                     "until someone reopens it in the admin.")
         else:

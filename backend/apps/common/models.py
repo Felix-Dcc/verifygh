@@ -50,6 +50,9 @@ class ImmutableModel(BaseModel):
 class MaintenanceMode(models.TextChoices):
     OFF = "OFF", "Open"
     BUYING_PAUSED = "BUYING_PAUSED", "Buying paused"
+    #: The payment provider is down, the number provider is fine: customers
+    #: keep buying with the balance they have (8 Oct 2026, Paystack disabled).
+    DEPOSITS_PAUSED = "DEPOSITS_PAUSED", "Top-ups paused"
     ALL_PAUSED = "ALL_PAUSED", "Buying and top-ups paused"
 
 

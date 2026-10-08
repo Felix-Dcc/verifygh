@@ -73,11 +73,23 @@ const LEVELS: { mode: Exclude<MaintenanceMode, "OFF">; title: string; detail: st
     detail: "No new orders. Top-ups stay open.",
   },
   {
+    mode: "DEPOSITS_PAUSED",
+    title: "Pause top-ups",
+    detail: "No new deposits. Customers keep buying with their balance.",
+  },
+  {
     mode: "ALL_PAUSED",
     title: "Pause buying and top-ups",
     detail: "No new orders and no new deposits.",
   },
 ];
+
+const PAUSED_LABEL: Record<MaintenanceMode, string> = {
+  OFF: "Site is live",
+  BUYING_PAUSED: "Buying paused",
+  DEPOSITS_PAUSED: "Top-ups paused",
+  ALL_PAUSED: "Buying and top-ups paused",
+};
 
 const BACK_IN: { label: string; minutes: number | null }[] = [
   { label: "Not sure", minutes: null },
@@ -112,7 +124,7 @@ export function MaintenanceStrip({ canManage }: { canManage: boolean }) {
     <div role="status" className="border-b border-danger-200 bg-danger-50 px-4 py-2 text-danger-700 sm:px-6 lg:px-10">
       <div className="mx-auto flex max-w-7xl flex-wrap items-center justify-between gap-2">
         <p className="text-sm font-medium">
-          {data.mode === "ALL_PAUSED" ? "Buying and top-ups paused" : "Buying paused"}
+          {PAUSED_LABEL[data.mode]}
           {data.since ? ` since ${clock(data.since)}` : ""}
           {data.expected_back_at ? ` · customers told ${clock(data.expected_back_at)}` : ""}
         </p>
@@ -185,7 +197,7 @@ function PauseSheet({ onClose }: { onClose: () => void }) {
         : { mode: next, reason: chosenReason, expected_back_minutes: backIn });
       await refreshEverywhere();
       toast.success(next === "OFF" ? "Site is live again"
-        : next === "ALL_PAUSED" ? "Buying and top-ups paused" : "Buying paused");
+        : PAUSED_LABEL[next]);
       onClose();
     } catch (error) {
       toast.error("Could not change it", error instanceof ApiError ? error.message : "Try again.");
@@ -226,7 +238,7 @@ function PauseSheet({ onClose }: { onClose: () => void }) {
       <div className="space-y-5">
         <fieldset>
           <legend className="text-sm font-medium text-ink">What to pause</legend>
-          <div className="mt-2 grid gap-2 sm:grid-cols-2">
+          <div className="mt-2 grid gap-2">
             {LEVELS.map((level) => (
               <label
                 key={level.mode}

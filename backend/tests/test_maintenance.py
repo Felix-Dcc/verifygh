@@ -153,7 +153,7 @@ def test_customers_cannot_press_it(user, auth):
 def test_the_admin_report_carries_the_presets(admin_user, auth):
     data = auth(admin_user, ADMIN_PASSWORD).get(ADMIN).data
     assert data["preset_reasons"] == list(maintenance.PRESET_REASONS)
-    assert set(data["notices"]) == {"BUYING_PAUSED", "ALL_PAUSED"}
+    assert set(data["notices"]) == {"BUYING_PAUSED", "DEPOSITS_PAUSED", "ALL_PAUSED"}
 
 
 # -- what it stops ------------------------------------------------------------
@@ -190,6 +190,28 @@ def test_pausing_everything_closes_top_ups_whatever_the_catalogue_says(user, cat
         initiate_deposit(user=user, amount=Decimal("20.00"), phone="+233241234567",
                          network="MTN")
     assert raised.value.code == "DEPOSITS_PAUSED"
+
+
+def test_pausing_top_ups_keeps_buying_open(user, auth, catalog, funded_wallet, settings):
+    """8 Oct 2026: the payment provider disabled the business; the number
+    provider was fine, and customers had balances to spend."""
+    settings.VERIFYGH = {**settings.VERIFYGH, "REQUIRE_CATALOG_FOR_DEPOSIT": False}
+    verification_mock.force_scenario("HAPPY")
+    funded_wallet(user, "200.00")
+    set_state(MaintenanceMode.DEPOSITS_PAUSED)
+
+    status = maintenance.current()
+    assert status["buying_open"] is True and status["deposits_open"] is False
+    assert status["message"] == maintenance.DEPOSITS_NOTICE
+    assert deposits_blocked_reason() == maintenance.DEPOSITS_NOTICE
+    with pytest.raises(ServiceUnavailable):
+        initiate_deposit(user=user, amount=Decimal("20.00"), phone="+233241234567",
+                         network="MTN")
+
+    client = auth(user)
+    assert client.get("/api/v1/orders/eligibility/").data["eligible"] is True
+    with _on_commit(execute=True):
+        assert buy(client).status_code == 201
 
 
 def test_the_deposit_screen_is_told(api, catalog):
