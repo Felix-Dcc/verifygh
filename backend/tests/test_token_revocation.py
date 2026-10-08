@@ -569,3 +569,74 @@ def test_a_thief_with_the_same_browser_is_caught_within_the_daily_limit(api, use
     assert user.token_version == 1
     assert SuspiciousActivity.objects.filter(
         kind=SuspiciousActivity.Kind.TOKEN_REUSE, level="HIGH").exists()
+
+
+SAFARI_26_4 = ("Mozilla/5.0 (iPhone; CPU iPhone OS 18_7 like Mac OS X) AppleWebKit/605.1.15 "
+               "(KHTML, like Gecko) Version/26.4 Mobile/15E148 Safari/604.1")
+SAFARI_26_6 = SAFARI_26_4.replace("Version/26.4", "Version/26.6").replace("18_7", "18_8")
+CHROME_IOS = ("Mozilla/5.0 (iPhone; CPU iPhone OS 18_7 like Mac OS X) AppleWebKit/605.1.15 "
+              "(KHTML, like Gecko) CriOS/152.0.7977.64 Mobile/15E148 Safari/604.1")
+
+
+def test_a_browser_that_updated_since_its_last_renewal_is_still_recovered(api, user):
+    """Production, 8 Oct: an iPhone came back a week later with Safari updated,
+    and its own session was flagged as theft."""
+    from apps.audit.models import SuspiciousActivity
+
+    phone = type(api)(HTTP_USER_AGENT=SAFARI_26_4)
+    login(phone, user)
+    before = phone.cookies[settings.AUTH_COOKIE_REFRESH].value
+    assert phone.post("/api/v1/auth/refresh/", {}, format="json").status_code == 200
+    phone.cookies[settings.AUTH_COOKIE_REFRESH] = before  # the renewal's reply was lost
+    _age_blacklist_entry(before, seconds=7 * 24 * 3600)
+
+    updated = type(api)(HTTP_USER_AGENT=SAFARI_26_6)
+    updated.cookies[settings.AUTH_COOKIE_REFRESH] = before
+    assert updated.post("/api/v1/auth/refresh/", {}, format="json").status_code == 200
+    user.refresh_from_db()
+    assert user.token_version == 0
+    assert not SuspiciousActivity.objects.filter(
+        kind=SuspiciousActivity.Kind.TOKEN_REUSE).exists()
+
+
+def test_another_browser_on_the_same_phone_is_still_theft(api, user):
+    from apps.audit.models import SuspiciousActivity
+
+    phone = type(api)(HTTP_USER_AGENT=SAFARI_26_4)
+    login(phone, user)
+    before = phone.cookies[settings.AUTH_COOKIE_REFRESH].value
+    assert phone.post("/api/v1/auth/refresh/", {}, format="json").status_code == 200
+    _age_blacklist_entry(before)
+
+    other = type(api)(HTTP_USER_AGENT=CHROME_IOS)
+    assert other.post("/api/v1/auth/refresh/", {"refresh": before},
+                      format="json").status_code == 401
+    user.refresh_from_db()
+    assert user.token_version == 1
+    assert SuspiciousActivity.objects.filter(
+        kind=SuspiciousActivity.Kind.TOKEN_REUSE, level="HIGH").exists()
+
+
+def test_a_session_noted_before_the_change_is_still_recovered(api, user):
+    """Notes written before 8 Oct hold the full user agent's hash."""
+    import hashlib
+
+    from django.core.cache import cache
+    from rest_framework_simplejwt.settings import api_settings
+    from rest_framework_simplejwt.state import token_backend
+
+    phone = type(api)(HTTP_USER_AGENT=SAFARI_26_4)
+    login(phone, user)
+    before = phone.cookies[settings.AUTH_COOKIE_REFRESH].value
+    assert phone.post("/api/v1/auth/refresh/", {}, format="json").status_code == 200
+    jti = token_backend.decode(before, verify=True)[api_settings.JTI_CLAIM]
+    key = f"refresh-rotated:{jti}"
+    note = cache.get(key)
+    note["client"] = hashlib.sha256(SAFARI_26_4.encode()).hexdigest()  # the old scheme
+    cache.set(key, note, 3600)
+    phone.cookies[settings.AUTH_COOKIE_REFRESH] = before
+    _age_blacklist_entry(before)
+
+    assert phone.post("/api/v1/auth/refresh/", {}, format="json").status_code == 200
+    user.refresh_from_db()
+    assert user.token_version == 0

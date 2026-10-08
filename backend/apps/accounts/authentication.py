@@ -34,6 +34,7 @@ from __future__ import annotations
 
 import hmac
 import logging
+import re
 import secrets
 
 from django.conf import settings
@@ -289,7 +290,30 @@ def client_fingerprint(request) -> str:
     between mobile towers and Wi-Fi, and the customer coming back an hour later
     is still the same browser. How a thief with an identical browser is still
     caught is recover_session.
+
+    Version numbers are left out. Production, 8 Oct: an iPhone came back a week
+    after its last renewal - Safari had updated in between, so the full user
+    agent no longer matched and its own session read as theft. Safari 26.4 and
+    26.6 are the same browser; Safari and Chrome, or an iPhone and an Android
+    phone, still are not.
     """
+    import hashlib
+
+    return hashlib.sha256(_browser_family(request).encode()).hexdigest()
+
+
+def _browser_family(request) -> str:
+    """The user agent with every version number replaced: `iPhone OS 18_7`,
+    `Version/26.4` and `Chrome/152.0.7977.64` become `iPhone OS #`, `Version/#`
+    and `Chrome/#`."""
+    user_agent = request.META.get("HTTP_USER_AGENT", "")[:300]
+    return re.sub(r"\d+(?:[._]\d+)*", "#", user_agent)
+
+
+def _legacy_client_fingerprint(request) -> str:
+    """The full user agent, as notes written before 8 Oct recorded it. Still
+    accepted: it is the stricter match, so it can never let in a browser the
+    current one would refuse."""
     import hashlib
 
     user_agent = request.META.get("HTTP_USER_AGENT", "")[:300]
@@ -383,7 +407,8 @@ def recover_lost_rotation(raw_token: str | None, request):
         if payload.get(api_settings.TOKEN_TYPE_CLAIM) != "refresh":
             return None
         note = cache.get(_rotation_key(payload.get(api_settings.JTI_CLAIM)))
-        if not note or note.get("client") != client_fingerprint(request):
+        if not note or note.get("client") not in (client_fingerprint(request),
+                                                  _legacy_client_fingerprint(request)):
             return None
         successor = (OutstandingToken.objects.select_related("user")
                      .filter(jti=note.get("successor")).first())
