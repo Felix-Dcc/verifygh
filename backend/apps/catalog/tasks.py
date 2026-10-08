@@ -13,3 +13,11 @@ logger = logging.getLogger("verifygh.catalog")
 def sync_provider_catalog(adapter_key: str | None = None) -> dict:
     """Refresh services, countries, costs and availability from the provider."""
     return sync_catalog(adapter_key)
+
+
+@shared_task(name="apps.catalog.tasks.recheck_stock")
+def recheck_stock() -> dict:
+    """Ask again about offerings shown out of stock, so they return by themselves."""
+    from apps.catalog.stock import recheck_out_of_stock
+
+    return recheck_out_of_stock()

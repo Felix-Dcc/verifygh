@@ -36,7 +36,7 @@ export function AvailabilityLabel({
 }) {
   const text =
     availability === "UNAVAILABLE"
-      ? "Unavailable"
+      ? "Out of stock"
       : availability === "LIMITED"
         ? count
           ? `${count} left`

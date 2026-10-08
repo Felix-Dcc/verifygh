@@ -203,8 +203,9 @@ class RateLimitedProvider(VerificationProvider):
             )
             record_call(self.key, name, elapsed_ms, failure)
 
-    def get_services(self, *, priority=None, time_budget=None):
-        return self._call("get_services", priority=priority, time_budget=time_budget)
+    def get_services(self, *, priority=None, time_budget=None, skip=None):
+        return self._call("get_services", priority=priority, time_budget=time_budget,
+                          skip=skip)
 
     def get_countries(self):
         return self._call("get_countries")

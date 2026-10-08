@@ -35,6 +35,11 @@ app.conf.beat_schedule = {
         "task": "apps.pricing.tasks.refresh_exchange_rate",
         "schedule": crontab(minute=0, hour="*/6"),
     },
+    # Out-of-stock offerings only: returning stock shows within two minutes.
+    "recheck-stock": {
+        "task": "apps.catalog.tasks.recheck_stock",
+        "schedule": 120.0,
+    },
     "sync-provider-catalog": {
         "task": "apps.catalog.tasks.sync_provider_catalog",
         "schedule": crontab(minute=15, hour="*/3"),

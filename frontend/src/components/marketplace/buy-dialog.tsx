@@ -81,8 +81,11 @@ export function BuyDialog({
   const { data: site } = useSiteStatus();
   const sitePaused = site && !site.buying_open ? { code: "MAINTENANCE", message: site.message } : null;
   const paused = Boolean(option?.temporarily_unavailable);
+  // The provider did not answer the stock check. Not "out of stock": we do
+  // not know, so the customer is told the provider is not responding.
+  const stockError = Boolean(option?.stock_error);
   const purchasable = Boolean(
-    option?.offered && option.availability !== "UNAVAILABLE" && !option.temporarily_unavailable,
+    option?.offered && option.availability !== "UNAVAILABLE" && !option.temporarily_unavailable && !stockError,
   );
 
   React.useEffect(() => {
@@ -234,11 +237,13 @@ export function BuyDialog({
                       <span className="tabular mt-0.5 text-caption text-ink-muted">
                         {entry.temporarily_unavailable
                           ? "Temporarily unavailable"
-                          : unavailable
-                            ? entry.offered
-                              ? "Unavailable right now"
-                              : "Not offered"
-                            : cedis(entry.price)}
+                          : entry.stock_error
+                            ? "Couldn't check stock"
+                            : unavailable
+                              ? entry.offered
+                                ? "Out of stock"
+                                : "Not offered"
+                              : cedis(entry.price)}
                       </span>
                     </button>
                   );
@@ -270,6 +275,8 @@ export function BuyDialog({
                   value:
                     option && paused ? (
                       <TemporarilyUnavailableBadge />
+                    ) : option && stockError ? (
+                      <span className="text-caption text-warn-700">Couldn&apos;t check stock</span>
                     ) : option ? (
                       <AvailabilityLabel
                         availability={option.offered ? option.availability : "UNAVAILABLE"}
@@ -316,6 +323,13 @@ export function BuyDialog({
               ]}
             />
           </div>
+
+          {stockError ? (
+            <Alert tone="warn" title="We couldn't check stock right now">
+              Our number provider isn&apos;t responding. Nothing was charged - please try again in a
+              moment.
+            </Alert>
+          ) : null}
 
           {quoteError ? (
             <Alert tone="danger" title="We couldn't price this number">

@@ -405,6 +405,9 @@ class FakeClock:
     def monotonic(self):
         return self.now
 
+    def time(self):
+        return 1_800_000_000.0 + self.now
+
     def sleep(self, seconds):
         self.slept.append(seconds)
         self.now += seconds
@@ -415,6 +418,7 @@ def clock(monkeypatch):
     fake = FakeClock()
     monkeypatch.setattr(tv_module.time, "monotonic", fake.monotonic)
     monkeypatch.setattr(tv_module.time, "sleep", fake.sleep)
+    monkeypatch.setattr(tv_module.time, "time", fake.time)
     return fake
 
 
@@ -423,7 +427,7 @@ def _catalogue(tv, names, extra=()):
         200, [{"serviceName": n, "capability": "Sms"} for n in names] + list(extra))
 
 
-def test_a_rate_limit_is_waited_out_with_backoff_not_given_up(tv, settings, clock):
+def test_a_rate_limit_is_waited_out_not_retried_into(tv, settings, clock):
     settings.VERIFYGH = {**settings.VERIFYGH, "PROVIDER_CATALOG_LIMIT": 0}
     _catalogue(tv, [f"svc{i}" for i in range(5)],
                extra=[{"serviceName": "voiceonly", "capability": "voice"}])
@@ -439,9 +443,16 @@ def test_a_rate_limit_is_waited_out_with_backoff_not_given_up(tv, settings, cloc
 
     priced = tv_module.TextVerifiedProvider().get_services()
 
-    # Every service priced despite three 429s; the waits grew, as documented.
+    # Every service priced despite three 429s. Each 429 paused background work
+    # for the throttle window and doubled the pace, so the next call was not
+    # fired straight back into the limit.
+    from apps.verification import pacing
+
     assert [s.code for s in priced] == ["svc0", "svc1", "svc2", "svc3", "svc4"]
-    assert len(clock.slept) == 3 and clock.slept[0] < clock.slept[1] < clock.slept[2]
+    pricing_calls = [c for c in tv["calls"] if c["path"] == "/api/pub/v2/pricing/verifications"]
+    assert len(pricing_calls) == 5 + 3
+    assert sum(1 for s in clock.slept if s == 1) >= 3 * pacing.THROTTLE_SECONDS - 3
+    assert pacing.interval("textverified") > pacing.START_INTERVAL
     # Voice-only services are never priced: we sell SMS verifications.
     assert all(c["json"]["serviceName"] != "voiceonly" for c in tv["calls"]
                if c["path"] == "/api/pub/v2/pricing/verifications")
@@ -463,6 +474,19 @@ def test_the_time_budget_stops_the_sync_and_the_next_one_resumes(tv, settings, c
 
     assert [s.code for s in first] == ["svc0", "svc1", "svc2"]
     assert [s.code for s in second] == ["svc3", "svc4", "svc0"]
+
+
+def test_prices_fetched_recently_are_not_fetched_again(tv, settings, clock):
+    settings.VERIFYGH = {**settings.VERIFYGH, "PROVIDER_CATALOG_LIMIT": 0}
+    _catalogue(tv, ["svc0", "svc1", "svc2"])
+    tv["routes"][("POST", "/api/pub/v2/pricing/verifications")] = (
+        lambda body, params: Reply(200, {"serviceName": body["serviceName"], "price": 0.4}))
+
+    priced = tv_module.TextVerifiedProvider().get_services(skip={"svc1"})
+
+    assert [s.code for s in priced] == ["svc0", "svc2"]
+    assert all(c["json"]["serviceName"] != "svc1" for c in tv["calls"]
+               if c["path"] == "/api/pub/v2/pricing/verifications")
 
 
 def test_services_customers_buy_are_priced_first(tv, settings, clock):

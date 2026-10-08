@@ -14,7 +14,9 @@ trademarks.
 from __future__ import annotations
 
 import logging
+from datetime import timedelta
 
+from django.conf import settings
 from django.core.cache import cache
 from django.utils import timezone
 
@@ -235,10 +237,19 @@ def sync_catalog(adapter_key: str | None = None, *, time_budget: float | None = 
         summary["errors"].append(f"{provider_row.name} is disabled; nothing was synced.")
         return summary
 
+    # Prices fetched within the window still stand: no call is spent on them.
+    fresh_minutes = int(settings.VERIFYGH.get("CATALOG_PRICE_FRESH_MINUTES", 150))
+    fresh = set()
+    if fresh_minutes > 0:
+        fresh = {code.lower() for code in ProviderService.objects.filter(
+            provider=provider_row, cost_source="PROVIDER_API",
+            last_synced_at__gte=timezone.now() - timedelta(minutes=fresh_minutes),
+        ).values_list("provider_service_code", flat=True) if code}
+
     try:
         provider_countries = provider_client.get_countries()
         provider_services = provider_client.get_services(
-            priority=priority_service_codes(), time_budget=time_budget)
+            priority=priority_service_codes(), time_budget=time_budget, skip=fresh)
     except Exception as exc:
         message = f"{exc.__class__.__name__}: {exc}"
         logger.exception("catalog_sync_failed", extra={"provider": provider_client.key})
@@ -301,6 +312,8 @@ def sync_catalog(adapter_key: str | None = None, *, time_budget: float | None = 
             service_rows[slug] = service
             summary["services"] += 1 if created else 0
 
+    new_offerings: list = []
+    changed_costs: list = []
     for dto in provider_services:
         slug = dto.code.lower()
         code = dto.country_code.upper()
@@ -323,8 +336,8 @@ def sync_catalog(adapter_key: str | None = None, *, time_budget: float | None = 
                 "cost_amount": dto.cost,
                 "cost_currency": dto.currency,
                 "cost_source": "PROVIDER_API" if cost_known else "NOT_SYNCED",
-                "is_available": dto.available,
-                "available_count": dto.available_count,
+                **({"is_available": dto.available, "available_count": dto.available_count}
+                   if dto.reports_stock else {}),
                 "supports_sms": dto.supports_sms,
                 "supports_voice": dto.supports_voice,
                 "ttl_minutes": dto.ttl_minutes,
@@ -332,10 +345,13 @@ def sync_catalog(adapter_key: str | None = None, *, time_budget: float | None = 
             },
         )
         summary["offerings"] += 1
+        if created:
+            new_offerings.append(offering.pk)
         if cost_known and (previous is None or previous[0] != dto.cost
                            or previous[1] != dto.currency):
             _record_cost_change(offering, previous, dto)
             summary["cost_changes"] = summary.get("cost_changes", 0) + 1
+            changed_costs.append(offering.pk)
         if not dto.available:
             summary["unavailable"] += 1
 
@@ -343,20 +359,27 @@ def sync_catalog(adapter_key: str | None = None, *, time_budget: float | None = 
         last_synced_at=timezone.now(), last_sync_error=""
     )
 
-    # The marketplace response is cached; a sync must invalidate it.
-    from apps.catalog import marketplace
-    from apps.catalog.views import MARKETPLACE_CACHE_KEY
+    summary["fresh_skipped"] = len(fresh)
+    touched = changed_costs + new_offerings
+    summary["price_changes"] = 0
+    if touched or summary["services"] or summary["countries"]:
+        # The marketplace response is cached; a sync that changed it must
+        # invalidate it. One that changed nothing leaves the cache warm.
+        from apps.catalog import marketplace
+        from apps.catalog.views import MARKETPLACE_CACHE_KEY
 
-    cache.delete(MARKETPLACE_CACHE_KEY)
-    marketplace.invalidate()
+        cache.delete(MARKETPLACE_CACHE_KEY)
+        marketplace.invalidate()
+    if touched:
+        # A provider price change is a customer price change: write it down.
+        # Only the offerings whose cost moved (or that are new) are repriced.
+        from apps.pricing.history import refresh_offering_prices
+        from apps.pricing.models import PriceChangeSource
 
-    # A provider price change is a customer price change: write it down.
-    from apps.pricing.history import refresh_offering_prices
-    from apps.pricing.models import PriceChangeSource
-
-    summary["price_changes"] = refresh_offering_prices(
-        source=PriceChangeSource.PROVIDER_COST, reason="Catalogue sync"
-    )["changed"]
+        summary["price_changes"] = refresh_offering_prices(
+            source=PriceChangeSource.PROVIDER_COST, reason="Catalogue sync",
+            offering_ids=touched,
+        )["changed"]
 
     logger.info("catalog_synced", extra=summary)
     return summary

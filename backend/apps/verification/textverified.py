@@ -43,7 +43,6 @@ import hashlib
 import hmac
 import json
 import logging
-import random
 import re
 import time
 from datetime import UTC, datetime, timedelta
@@ -54,6 +53,7 @@ from django.conf import settings
 from django.core.cache import cache
 
 from apps.common.errors import ProviderError, ServiceUnavailable
+from apps.verification import pacing
 from apps.verification.base import (
     AvailabilityDTO,
     BalanceDTO,
@@ -77,11 +77,6 @@ TOKEN_REFRESH_MARGIN = 60
 #: with a time limit, so it prices what it can in this window and resumes next
 #: time. Callers inside a web request pass a shorter budget.
 SYNC_TIME_BUDGET_SECONDS = 60
-
-#: Backoff after a 429, as the docs advise: "wait and retry with exponential
-#: backoff and jitter". Starts here, doubles, never exceeds the cap.
-RATE_LIMIT_BACKOFF_START = 1.0
-RATE_LIMIT_BACKOFF_CAP = 16.0
 
 #: At most this many priority services are priced ahead of the rotation.
 PRIORITY_LIMIT = 60
@@ -278,6 +273,8 @@ class TextVerifiedProvider(VerificationProvider):
             # may change, so the caller (the next beat tick, the customer's
             # retry) is the backoff.
             logger.warning("textverified_rate_limited")
+            # Background work (sync, stock rechecks) stands aside for customers.
+            pacing.note_throttled(self.key)
             busy = ServiceUnavailable(
                 "The verification provider is busy. Please try again shortly.",
                 code="PROVIDER_RATE_LIMITED",
@@ -341,7 +338,8 @@ class TextVerifiedProvider(VerificationProvider):
     # -- catalog ---------------------------------------------------------
 
     def get_services(self, *, priority: list[str] | None = None,
-                     time_budget: float | None = None) -> list[ProviderServiceDTO]:
+                     time_budget: float | None = None,
+                     skip: set[str] | None = None) -> list[ProviderServiceDTO]:
         """Every service we can price, a slice per sync.
 
         The service list is one documented call; each price is another
@@ -354,8 +352,12 @@ class TextVerifiedProvider(VerificationProvider):
         * then continues through the rest from where the last sync stopped;
         * stops at PROVIDER_CATALOG_LIMIT services (0 = no count limit) or
           when `time_budget` seconds are spent;
-        * after a 429, waits with exponential backoff and jitter and retries,
-          as the docs advise, instead of giving up.
+        * skips services in `skip` (lowercased names priced recently): their
+          price stands, and the call is saved for one that needs it;
+        * paces its calls through apps/verification/pacing.py: an interval
+          learned across runs, doubled after a 429 and eased after successes,
+          and a pause whenever any call - a customer's included - was just
+          throttled, so the sync never bursts into the rate limit.
 
         Services not priced this time are not returned, so the catalogue keeps
         their last known price instead of dropping them. A service that cannot
@@ -386,8 +388,12 @@ class TextVerifiedProvider(VerificationProvider):
                 first.append(match)
             if len(first) >= PRIORITY_LIMIT:
                 break
+        fresh = {code.lower() for code in skip or ()}
+        skipped_fresh = sum(1 for name, _ in entries if name.lower() in fresh)
+        first = [entry for entry in first if entry[0].lower() not in fresh]
         chosen = set(first)
-        rest = [entry for entry in entries if entry not in chosen]
+        rest = [entry for entry in entries
+                if entry not in chosen and entry[0].lower() not in fresh]
         start = int(cache.get(PRICING_CURSOR_KEY) or 0) % len(rest) if rest else 0
         queue = first + rest[start:] + rest[:start]
 
@@ -398,11 +404,13 @@ class TextVerifiedProvider(VerificationProvider):
 
         services: list[ProviderServiceDTO] = []
         skipped = attempted = rate_limited = 0
-        backoff = RATE_LIMIT_BACKOFF_START
         stopped = ""
         while attempted < budget:
-            remaining = deadline - time.monotonic()
-            if remaining <= 0:
+            # Paced, and aside while anyone is being throttled: a 429 below
+            # doubles the interval and starts a pause, so it is waited out
+            # here rather than retried into.
+            if not pacing.wait_turn(self.key, deadline, clock=time.monotonic,
+                                    sleep=time.sleep):
                 stopped = "time_budget"
                 break
             name, description = queue[attempted]
@@ -410,15 +418,12 @@ class TextVerifiedProvider(VerificationProvider):
                 cost = self.get_pricing(name, "US")
             except ServiceUnavailable:
                 rate_limited += 1
-                wait = min(backoff + random.uniform(0, backoff / 2), remaining)
-                backoff = min(backoff * 2, RATE_LIMIT_BACKOFF_CAP)
-                time.sleep(wait)
                 continue
             except ProviderError:
                 attempted += 1
                 skipped += 1
                 continue
-            backoff = RATE_LIMIT_BACKOFF_START
+            pacing.note_ok(self.key)
             attempted += 1
             services.append(
                 ProviderServiceDTO(
@@ -430,6 +435,7 @@ class TextVerifiedProvider(VerificationProvider):
                     supports_sms=True,
                     supports_voice=False,
                     ttl_minutes=int(settings.VERIFYGH["ORDER_TTL_MINUTES"]),
+                    reports_stock=False,
                 )
             )
 
@@ -439,7 +445,8 @@ class TextVerifiedProvider(VerificationProvider):
         if rest:
             cache.set(PRICING_CURSOR_KEY, (start + rotated) % len(rest), None)
         logger.info("textverified_services_synced", extra={
-            "listed": len(services), "skipped": skipped, "catalogue": len(entries),
+            "listed": len(services), "skipped": skipped, "fresh": skipped_fresh,
+            "catalogue": len(entries), "interval": round(pacing.interval(self.key), 2),
             "priority": len(first), "rate_limited": rate_limited,
             "stopped": stopped or "complete",
         })

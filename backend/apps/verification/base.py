@@ -52,6 +52,9 @@ class ProviderServiceDTO:
     available: bool = True
     available_count: int | None = None
     ttl_minutes: int = 20
+    #: False when the catalogue carries no stock (TextVerified's service list
+    #: is prices only): the sync then leaves stock to apps/catalog/stock.py.
+    reports_stock: bool = True
 
 
 @dataclass(frozen=True)
@@ -142,7 +145,8 @@ class VerificationProvider(abc.ABC):
 
     @abc.abstractmethod
     def get_services(self, *, priority: list[str] | None = None,
-                     time_budget: float | None = None) -> list[ProviderServiceDTO]:
+                     time_budget: float | None = None,
+                     skip: set[str] | None = None) -> list[ProviderServiceDTO]:
         """Every (service, country) offering the provider exposes to us.
 
         Adapters whose catalogue is priced one call at a time may return only

@@ -415,6 +415,8 @@ export type MarketServiceDetail = {
     availability: Availability;
     available_count?: number | null;
     temporarily_unavailable?: boolean;
+    /** The provider did not answer the stock check: not the same as out of stock. */
+    stock_error?: boolean;
   })[];
 };
 

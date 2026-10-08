@@ -134,7 +134,8 @@ class MockVerificationProvider(VerificationProvider):
     def get_countries(self) -> list[ProviderCountryDTO]:
         return list(MOCK_COUNTRIES)
 
-    def get_services(self, *, priority=None, time_budget=None) -> list[ProviderServiceDTO]:
+    def get_services(self, *, priority=None, time_budget=None,
+                     skip=None) -> list[ProviderServiceDTO]:
         offerings: list[ProviderServiceDTO] = []
         for country in MOCK_COUNTRIES:
             for code, name, cost, sms, voice in MOCK_SERVICES:

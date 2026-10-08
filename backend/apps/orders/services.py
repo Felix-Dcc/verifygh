@@ -335,28 +335,18 @@ def confirm_live_availability(offering: ProviderService) -> None:
     the same refusal after charging would cost them a refund round trip. The
     answer also refreshes the catalogue row, so the marketplace catches up.
     """
-    if not settings.VERIFYGH.get("CHECK_LIVE_AVAILABILITY", True):
-        return
-    provider = get_provider(offering.provider.adapter_key)
-    try:
-        live = provider.get_availability(
-            offering.provider_service_code or offering.service.slug, offering.country.code
-        )
-    except (ProviderError, ServiceUnavailable):
+    from apps.catalog import stock
+
+    # Always fresh: a cached answer is for the listing, never for a purchase.
+    live = stock.check(offering, max_age=0)
+    if live.state == stock.ERROR:
         logger.warning("live_availability_check_failed", extra={"offering": str(offering.pk)})
         raise ServiceUnavailable(
             "Our number provider is not responding right now. Nothing was charged - "
             "please try again in a moment.",
             code="PROVIDER_UNAVAILABLE",
         )
-
-    ProviderService.objects.filter(pk=offering.pk).update(
-        is_available=live.available, available_count=live.count
-    )
-    if not live.available:
-        from apps.catalog import marketplace
-
-        marketplace.invalidate()
+    if not live.in_stock:
         raise ServiceUnavailable(
             "No numbers are available for that service and country right now. "
             "Nothing was charged.",
@@ -644,6 +634,19 @@ def fulfil_order(order: Order) -> Order:
                         else f"The call to {order.provider.name} failed "
                              f"({exc.__class__.__name__}).")
         if provider_code.lower() == "unavailable":
+            # Refused for stock although the inventory check said yes. Believe
+            # the refusal, so the next customer is turned away before paying.
+            try:
+                from apps.catalog import stock
+
+                offering = ProviderService.objects.select_related(
+                    "provider", "service", "country").filter(
+                    provider=order.provider, service=order.service, country=order.country,
+                ).first()
+                if offering is not None:
+                    stock.note_refused(offering)
+            except Exception:
+                logger.exception("stock_refusal_note_failed")
             return fail_order(order, reason=(
                 f"No {order.service.name} number was available just then. Your money is back "
                 "in your wallet - try again in a few minutes."

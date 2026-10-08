@@ -356,10 +356,17 @@ class MarketplaceViewSet(viewsets.ViewSet):
         service = Service.objects.filter(slug=slug, is_enabled=True).first()
         if service is None:
             raise NotFound("We do not offer that service.")
+        from apps.catalog import stock
+
         options = []
         for country in mp.marketplace_countries():
+            # Asks the provider at most once per STOCK_CACHE_SECONDS; a change
+            # rebuilds the rows read just below.
+            offering = stock.preferred_offering(service, country.code)
+            live = stock.check(offering) if offering is not None else None
             row = next((r for r in mp.country_rows(country.code) if r["slug"] == slug), None)
             options.append({
+                "stock_error": bool(live and live.state == stock.ERROR),
                 "code": country.code, "name": country.name, "flag_emoji": country.flag_emoji,
                 "dial_code": country.dial_code,
                 **({"offered": True, "price": row["price"], "currency": row["currency"],

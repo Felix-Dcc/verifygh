@@ -524,6 +524,9 @@ VERIFYGH = {
     # 0 means no ceiling. TextVerified also stops at a 60-second budget or its
     # first 429 and resumes where it left off on the next sync.
     "PROVIDER_CATALOG_LIMIT": env_int("PROVIDER_CATALOG_LIMIT", 60),
+    # A price fetched this recently is not fetched again by the next sync: the
+    # call goes to a service whose price is older. 0 reprices everything.
+    "CATALOG_PRICE_FRESH_MINUTES": env_int("CATALOG_PRICE_FRESH_MINUTES", 150),
     # Which countries fill the bounded catalogue first. Without this the order
     # is whatever the provider happens to return, and the limit decides the
     # shop window by accident.
