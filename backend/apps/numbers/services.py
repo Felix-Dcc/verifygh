@@ -360,7 +360,9 @@ def report_issue(order, *, user, reason: str, details: str = "",
         )
 
     provider_reviews = provider_reviews_reports(order.provider.adapter_key)
-    screenshots = read_evidence(evidence or [], required=provider_reviews)
+    # Every report, whichever provider: the screenshot is what a provider (and
+    # staff) decide on, and TextVerified will not open a ticket without one.
+    screenshots = read_evidence(evidence or [], required=True, formats=REPORT_IMAGE_TYPES)
 
     ip = (get_client_ip(request) if request else None) or None
     details = " ".join(str(details or "").split())[:500]
@@ -455,7 +457,17 @@ def report_issue(order, *, user, reason: str, details: str = "",
 _IMAGE_TYPES = (
     (b"\x89PNG\r\n\x1a\n", "image/png"),
     (b"\xff\xd8\xff", "image/jpeg"),
+    (b"GIF87a", "image/gif"),
+    (b"GIF89a", "image/gif"),
 )
+
+#: What TextVerified's support tickets accept (JPG, JPEG, PNG, GIF), so a
+#: customer's screenshot can be attached to the ticket as it is.
+REPORT_IMAGE_TYPES = frozenset({"image/png", "image/jpeg", "image/gif"})
+#: Elsewhere (manual top-up proof) WebP is fine too.
+DEFAULT_IMAGE_TYPES = frozenset({"image/png", "image/jpeg", "image/webp"})
+_TYPE_NAMES = {"image/png": "PNG", "image/jpeg": "JPG", "image/gif": "GIF",
+               "image/webp": "WebP"}
 
 
 def _image_type(data: bytes) -> str | None:
@@ -469,15 +481,16 @@ def _image_type(data: bytes) -> str | None:
     return None
 
 
-def read_evidence(files, *, required: bool) -> list[tuple[bytes, str]]:
+def read_evidence(files, *, required: bool,
+                  formats: frozenset = DEFAULT_IMAGE_TYPES) -> list[tuple[bytes, str]]:
     """Check the screenshots attached to a report: (bytes, content type) each."""
     limit = int(settings.VERIFYGH["NUMBER_ISSUE_EVIDENCE_MAX_FILES"])
     max_bytes = int(settings.VERIFYGH["NUMBER_ISSUE_EVIDENCE_MAX_BYTES"])
     files = [f for f in files if f]
     if required and not files:
         raise ValidationFailed(
-            "Attach a screenshot that shows the problem - for example, the app saying "
-            "the number is already in use."
+            "Attach a screenshot that shows the problem and your phone's time - for example, "
+            "the app saying the code is wrong or the number is already in use."
         )
     if len(files) > limit:
         raise ValidationFailed(f"Attach at most {limit} screenshots.")
@@ -491,8 +504,10 @@ def read_evidence(files, *, required: bool) -> list[tuple[bytes, str]]:
             raise ValidationFailed(
                 f"Each screenshot must be {max_bytes // (1024 * 1024)} MB or smaller.")
         content_type = _image_type(data)
-        if content_type is None:
-            raise ValidationFailed("Screenshots must be PNG, JPEG or WebP images.")
+        if content_type not in formats:
+            names = [name for kind, name in _TYPE_NAMES.items() if kind in formats]
+            raise ValidationFailed(
+                f"Screenshots must be {', '.join(names[:-1])} or {names[-1]} images.")
         out.append((data, content_type))
     return out
 

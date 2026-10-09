@@ -85,7 +85,9 @@ def deliver(order: Order) -> Order:
 
 
 def report(client, order, body=LINKED):
-    return client.post(f"/api/v1/orders/{order.reference}/report/", body, format="json")
+    # Every report carries a screenshot, as the site now requires.
+    return client.post(f"/api/v1/orders/{order.reference}/report/",
+                       {**body, "evidence": [screenshot()]}, format="multipart")
 
 
 def act(client, issue_ref, verb, reason="Checked the report against the number history"):
@@ -777,3 +779,56 @@ def test_a_reply_over_the_limit_says_so(customer, staff, delivered, reviewing):
     response = act(staff, issue.reference, "provider-declined", reason="x" * 2001)
     assert response.status_code == 400
     assert "2000" in str(response.data)
+
+
+def test_the_customer_is_told_only_what_was_actually_sent(customer, staff, delivered,
+                                                          reviewing, monkeypatch):
+    """9 Oct: TextVerified refused the API report once a code was delivered, but
+    the customer was told their report and screenshot had been sent."""
+    cls = verification_mock.MockVerificationProvider
+    monkeypatch.setattr(cls, "report_number_issue",
+                        lambda self, provider_order_id, reason: False)
+
+    response = report_with_evidence(customer, delivered)
+    issue = VerificationIssue.objects.get(order=delivered)
+    assert issue.provider_report == "REFUSED"
+    assert "reviewing your report" in response.data["message"]
+    assert "sent your report" not in response.data["message"]
+
+    # Once staff file the ticket, with the screenshot, it is true.
+    assert act(staff, issue.reference, "ticket-filed",
+               reason="TextVerified ticket #5001").status_code == 200
+    seen = customer.get(f"/api/v1/orders/{delivered.reference}/").data
+    message = (seen.get("issue") or {}).get("message", "")
+    assert "sent your report and screenshot" in message, seen.get("issue")
+
+
+def test_an_accepted_api_report_does_not_claim_the_screenshot_went_too(
+        customer, delivered, reviewing):
+    report_with_evidence(customer, delivered)
+    assert VerificationIssue.objects.get(order=delivered).provider_report == "ACCEPTED"
+    message = customer.get(f"/api/v1/orders/{delivered.reference}/").data["issue"]["message"]
+    assert "sent your report to our number provider" in message
+    assert "screenshot" not in message
+
+
+GIF = b"GIF89a" + b"\x00" * 32
+WEBP = b"RIFF\x24\x00\x00\x00WEBPVP8 " + b"\x00" * 24
+
+
+def test_every_report_needs_a_screenshot_whatever_the_provider(customer, delivered):
+    """Like TextVerified's own tickets: no screenshot, no report."""
+    response = customer.post(f"/api/v1/orders/{delivered.reference}/report/", LINKED,
+                             format="json")
+    assert response.status_code == 400
+    assert "phone's time" in response.data["error"]["message"]
+    assert not VerificationIssue.objects.exists()
+
+
+def test_report_screenshots_are_the_formats_textverified_takes(customer, delivered):
+    webp = customer.post(f"/api/v1/orders/{delivered.reference}/report/",
+                         {**LINKED, "evidence": [screenshot(WEBP, "x.webp")]}, format="multipart")
+    assert webp.status_code == 400 and "JPG or GIF" in webp.data["error"]["message"]
+    gif = customer.post(f"/api/v1/orders/{delivered.reference}/report/",
+                        {**LINKED, "evidence": [screenshot(GIF, "x.gif")]}, format="multipart")
+    assert gif.status_code == 201, gif.data

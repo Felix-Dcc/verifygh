@@ -140,8 +140,10 @@ function ReportDialog({
   const [busy, setBusy] = React.useState(false);
   const [error, setError] = React.useState("");
   const [filed, setFiled] = React.useState<OrderIssue | null>(null);
-  const needsEvidence = order.report_needs_evidence;
-  const missingEvidence = needsEvidence && files.length === 0;
+  // Every report needs a screenshot, as TextVerified's own tickets do: it is
+  // what the provider decides on. (report_needs_evidence still drives the
+  // countdown for providers that only take reports within minutes.)
+  const missingEvidence = files.length === 0;
 
   React.useEffect(() => {
     if (open) {
@@ -198,9 +200,8 @@ function ReportDialog({
               <p className="font-medium">Thanks for reporting this.</p>
               {filed.status === "AWAITING_PROVIDER" ? (
                 <>
-                  <p>We&apos;ve sent your report and screenshot to our number provider.</p>
+                  <p>{filed.message}</p>
                   <p>
-                    If they approve it, the full amount comes back to your wallet automatically.
                     {filed.decision_due_at
                       ? ` A decision is expected by ${formatDateTime(filed.decision_due_at)}.`
                       : null}
@@ -270,9 +271,7 @@ function ReportDialog({
                 Don&apos;t try to guess or reset that password - the account isn&apos;t yours. We
                 never need your password for {order.service_name} or any other service.
               </p>
-              {needsEvidence ? (
-                <EvidencePicker files={files} onChange={setFiles} disabled={busy} />
-              ) : null}
+              <EvidencePicker files={files} onChange={setFiles} disabled={busy} />
               <div className="flex flex-col-reverse gap-2 sm:flex-row sm:justify-end">
                 <Button variant="secondary" onClick={() => setReason(null)} disabled={busy}>
                   No
@@ -297,9 +296,7 @@ function ReportDialog({
                   onChange={(event) => setDetails(event.target.value)}
                 />
               </Field>
-              {needsEvidence ? (
-                <EvidencePicker files={files} onChange={setFiles} disabled={busy} />
-              ) : null}
+              <EvidencePicker files={files} onChange={setFiles} disabled={busy} />
               <div className="flex flex-col-reverse gap-2 sm:flex-row sm:justify-end">
                 <Button variant="secondary" onClick={onClose} disabled={busy}>
                   Cancel
@@ -345,12 +342,14 @@ function IssueStatusCard({ issue }: { issue: OrderIssue }) {
   );
 }
 
-const EVIDENCE_TYPES = ["image/png", "image/jpeg", "image/webp"];
+// What TextVerified's support tickets accept, so a customer's screenshot can be
+// attached to the ticket as it is.
+const EVIDENCE_TYPES = ["image/png", "image/jpeg", "image/gif"];
 const MAX_EVIDENCE = 3;
 const MAX_EVIDENCE_BYTES = 5 * 1024 * 1024;
 
-/** Up to three screenshots showing the problem - required where the provider
- *  reviews reports, because it decides on the picture. */
+/** Up to three screenshots showing the problem - required for every report,
+ *  because the provider decides on the picture. */
 function EvidencePicker({
   files,
   onChange,
@@ -370,7 +369,7 @@ function EvidencePicker({
     setProblem("");
     const ok = picked.filter((file) => {
       if (!EVIDENCE_TYPES.includes(file.type)) {
-        setProblem("Screenshots must be PNG, JPEG or WebP images.");
+        setProblem("Screenshots must be JPG, PNG or GIF images.");
         return false;
       }
       if (file.size > MAX_EVIDENCE_BYTES) {
@@ -390,8 +389,9 @@ function EvidencePicker({
         Screenshot of the problem <span className="text-danger-700">*</span>
       </p>
       <p className="text-caption text-ink-muted">
-        For example, the app asking for an existing PIN or saying the number is in use. Hide
-        anything private before you take it.
+        Show the error message (for example, the app saying the code is wrong or the number is
+        in use) and your phone&apos;s time at the top of the screen. JPG, PNG or GIF, up to 3.
+        Hide anything private before you take it.
       </p>
       {files.length ? (
         <ul className="flex flex-wrap gap-2">

@@ -3,7 +3,13 @@ from __future__ import annotations
 from rest_framework import serializers
 
 from apps.numbers import services
-from apps.numbers.models import IssueReason, IssueStatus, NumberRecord, VerificationIssue
+from apps.numbers.models import (
+    IssueReason,
+    IssueStatus,
+    NumberRecord,
+    ProviderReportStatus,
+    VerificationIssue,
+)
 
 #: What the customer sees for each status. Staff notes stay internal - they are
 #: written for colleagues, not for the customer.
@@ -28,8 +34,8 @@ class ReportIssueSerializer(serializers.Serializer):
     #: The answer to "Did the service ask for an existing password instead of
     #: letting you create an account?" - required for NUMBER_ALREADY_LINKED.
     confirmed_existing_account = serializers.BooleanField(required=False, default=False)
-    #: Screenshots supporting the claim; required where the provider reviews
-    #: reports. Checked by their bytes in services.read_evidence.
+    #: Screenshots supporting the claim; at least one on every report (JPG, PNG
+    #: or GIF). Checked by their bytes in services.read_evidence.
     evidence = serializers.ListField(child=serializers.FileField(), required=False,
                                      allow_empty=True)
 
@@ -55,6 +61,14 @@ class CustomerIssueSerializer(serializers.ModelSerializer):
         if obj.status == IssueStatus.REJECTED and obj.customer_reply:
             return ("Our number provider reviewed your report and did not approve a refund. "
                     f"Their reply: {obj.customer_reply}")
+        if obj.status == IssueStatus.AWAITING_PROVIDER and not obj.provider_ticket_filed_at:
+            # Only say it was sent once it was. TextVerified refuses API reports
+            # once a code was delivered; staff then file a ticket by hand.
+            if obj.provider_report == ProviderReportStatus.ACCEPTED:
+                return ("We've sent your report to our number provider. If they approve it, "
+                        "the full amount comes back to your wallet automatically.")
+            return ("We're reviewing your report with our number provider. If it's approved, "
+                    "the full amount comes back to your wallet automatically.")
         return CUSTOMER_STATUS_TEXT.get(obj.status, "")
 
 
