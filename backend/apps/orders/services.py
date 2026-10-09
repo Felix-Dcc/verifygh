@@ -535,25 +535,63 @@ def reuse_blocker(order: Order) -> str:
     return ""
 
 
-def reuse_number(*, user, original: Order, idempotency_key: str, request=None) -> Order:
-    """Buy another code on the same number, while the provider allows it.
+#: How long the order page trusts the provider's "can reactivate" answer.
+REACTIVATION_CHECK_SECONDS = 300
 
-    A new order, charged and refunded exactly like a purchase: the same
-    eligibility, the same authorisation and funding checks before any money
-    moves, and an automatic refund if the provider then refuses. Priced at the
-    service's normal price - the provider does not publish a reuse price in
-    advance - and the order records what the reuse actually cost us.
+
+def reactivation_price(order: Order) -> Decimal:
+    """Half of what the customer paid for the original order, rounded up to
+    the pesewa - as TextVerified prices its own reactivation (0.38 after 0.75)."""
+    from decimal import ROUND_CEILING
+
+    return (Decimal(order.price) / 2).quantize(Decimal("0.01"), rounding=ROUND_CEILING)
+
+
+def reactivation_blocker(order: Order, *, live: bool = False) -> str:
+    """Why this order's number cannot be reactivated now, or "" if it can.
+
+    Reactivation is for after the reuse window: while reuse is open, that is
+    the offer. The provider decides eligibility per verification
+    (TextVerified: `reactivate.canReactivate`); the order page reads a cached
+    answer, a purchase always asks again (`live`).
     """
+    from django.core.cache import cache
+
+    from apps.verification.registry import available_adapters, get_provider
+
+    if order.status not in REUSABLE_STATUSES:
+        return "Only a number that has received its code can be reactivated."
+    if not order.provider_order_id or not order.phone_number:
+        return "This number cannot be reactivated."
+    if order.reusable_until and order.reusable_until > timezone.now():
+        return "This number can still be used again directly."
+    provider = order.provider
+    if not (provider.is_enabled and provider.resale_authorized
+            and provider.adapter_key in available_adapters()):
+        return "This number cannot be reactivated right now."
+    client = get_provider(provider.adapter_key)
+    if not client.supports_reactivation:
+        return "This number cannot be reactivated."
+
+    key = f"order-reactivation:{order.pk}"
+    eligible = None if live else cache.get(key)
+    if eligible is None:
+        try:
+            eligible = client.can_reactivate(order.provider_order_id)
+        except (ProviderError, ServiceUnavailable):
+            return "We could not check this number right now. Please try again shortly."
+        cache.set(key, eligible, REACTIVATION_CHECK_SECONDS)
+    return "" if eligible else "Our number provider can no longer reactivate this number."
+
+
+def _another_code_on_the_number(*, user, original: Order, idempotency_key: str, request,
+                                blocker: str, code: str, metadata: dict, label: str,
+                                price: Decimal | None = None) -> Order:
+    """Shared by reuse and reactivation: a new order, charged like a purchase."""
     from apps.funding import services as funding
 
-    existing = Order.objects.filter(user=user, idempotency_key=idempotency_key).first()
-    if existing is not None:
-        return existing
-    if original.user_id != user.id:
-        raise NotFound("We could not find that order.")
-    blocker = reuse_blocker(original)
     if blocker:
-        raise Conflict(blocker, code="REUSE_NOT_AVAILABLE")
+        raise Conflict(blocker, code=code)
 
     check_purchase_eligibility(user)
 
@@ -565,21 +603,74 @@ def reuse_number(*, user, original: Order, idempotency_key: str, request=None) -
     )
     if offering is None:
         raise ServiceUnavailable(
-            "This number cannot be used again right now. Nothing was charged.",
-            code="REUSE_NOT_AVAILABLE",
-        )
+            "This number cannot be used again right now. Nothing was charged.", code=code)
     check = funding.check_funding(offering)
     if not check.ok:
         funding.purchase_blocked(offering, check)
         raise ServiceUnavailable(funding.CUSTOMER_UNAVAILABLE, code="TEMPORARILY_UNAVAILABLE")
 
     priced = quote_for_offering(offering)
+    if price is not None:
+        # A set price (reactivation): the quote keeps its costs for the record,
+        # and says why the customer price differs from the service's.
+        import dataclasses
+
+        priced = dataclasses.replace(
+            priced, customer_price=price,
+            applied={**(priced.applied or {}),
+                     "set_price": {"price": str(price), "reason": label,
+                                   "service_price": str(priced.customer_price)}})
     return _place_order(
         user=user, offering=offering, priced=priced, idempotency_key=idempotency_key,
-        request=request,
+        request=request, metadata=metadata,
+        created_detail=f"{offering.service.name} - {label} ({original.reference})",
+    )
+
+
+def reactivate_number(*, user, original: Order, idempotency_key: str, request=None) -> Order:
+    """Another code on the same number after the reuse window, where the provider allows.
+
+    TextVerified's "Reactivate". Charged like a purchase and refunded
+    automatically if the provider then refuses. Priced at half
+    what the original order cost, as TextVerified prices its own reactivation;
+    the order records what it actually cost us.
+    """
+    existing = Order.objects.filter(user=user, idempotency_key=idempotency_key).first()
+    if existing is not None:
+        return existing
+    if original.user_id != user.id:
+        raise NotFound("We could not find that order.")
+    return _another_code_on_the_number(
+        user=user, original=original, idempotency_key=idempotency_key, request=request,
+        # Asked live: a cached "yes" must not take money for a refusal.
+        blocker=reactivation_blocker(original, live=True), code="REACTIVATION_NOT_AVAILABLE",
+        metadata={"reuse_of": original.reference,
+                  "reactivate_of_provider_order_id": original.provider_order_id},
+        label="same number reactivated",
+        price=reactivation_price(original),
+    )
+
+
+def reuse_number(*, user, original: Order, idempotency_key: str, request=None) -> Order:
+    """Buy another code on the same number, while the provider allows it.
+
+    A new order, charged and refunded exactly like a purchase: the same
+    eligibility, the same authorisation and funding checks before any money
+    moves, and an automatic refund if the provider then refuses. Priced at the
+    service's normal price - the provider does not publish a reuse price in
+    advance - and the order records what the reuse actually cost us.
+    """
+    existing = Order.objects.filter(user=user, idempotency_key=idempotency_key).first()
+    if existing is not None:
+        return existing
+    if original.user_id != user.id:
+        raise NotFound("We could not find that order.")
+    return _another_code_on_the_number(
+        user=user, original=original, idempotency_key=idempotency_key, request=request,
+        blocker=reuse_blocker(original), code="REUSE_NOT_AVAILABLE",
         metadata={"reuse_of": original.reference,
                   "reuse_of_provider_order_id": original.provider_order_id},
-        created_detail=f"{offering.service.name} - same number again ({original.reference})",
+        label="same number again",
     )
 
 
@@ -593,6 +684,7 @@ def fulfil_order(order: Order) -> Order:
         return order
 
     reuse_of = (order.metadata or {}).get("reuse_of_provider_order_id", "")
+    reactivate_of = (order.metadata or {}).get("reactivate_of_provider_order_id", "")
 
     if not (order.provider.is_enabled and order.provider.resale_authorized):
         # Checked again here, not only when the order was priced: a provider can
@@ -610,6 +702,9 @@ def fulfil_order(order: Order) -> Order:
         if reuse_of:
             # The same number again, through the provider's documented reuse.
             result = provider.reuse_order(reuse_of, idempotency_key=f"vgh:{order.id}")
+        elif reactivate_of:
+            # The same number again after the reuse window: reactivation.
+            result = provider.reactivate_order(reactivate_of, idempotency_key=f"vgh:{order.id}")
         else:
             result = provider.create_order(
                 order.provider_service_code or order.service.slug,
@@ -669,7 +764,7 @@ def fulfil_order(order: Order) -> Order:
 
     redraws = 0
     # A reuse is the customer asking for this very number again: never screened out.
-    while (not reuse_of and result.phone_number
+    while (not (reuse_of or reactivate_of) and result.phone_number
            and numbers.is_excluded(order, result.phone_number)):
         numbers.turn_away(order, provider, result)
         if redraws >= int(settings.VERIFYGH["NUMBER_QUALITY_MAX_REDRAWS"]):

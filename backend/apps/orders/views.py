@@ -209,6 +209,18 @@ class OrderViewSet(
                         status=status.HTTP_201_CREATED)
 
     @action(detail=True, methods=["post"])
+    def reactivate(self, request, reference=None):
+        """Another code on this order's number after the reuse window, if the provider allows."""
+        order = services.reactivate_number(user=request.user, original=self.get_object(),
+                                           idempotency_key=from_request(request),
+                                           request=request)
+        if order.status == OrderStatus.PROCESSING:
+            transaction.on_commit(lambda: fulfil_order_task.delay(str(order.id)))
+        order.refresh_from_db()
+        return Response(OrderDetailSerializer(order, context={"request": request}).data,
+                        status=status.HTTP_201_CREATED)
+
+    @action(detail=True, methods=["post"])
     def complete(self, request, reference=None):
         order = services.complete_order(self.get_object(), actor=request.user)
         return Response(OrderDetailSerializer(order, context={"request": request}).data)

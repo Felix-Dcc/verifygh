@@ -254,6 +254,8 @@ export default function OrderDetailPage() {
                 price={order.reuse_price}
                 onClosed={() => mutate()}
               />
+            ) : order.can_reactivate && order.reactivate_price ? (
+              <ReactivateSection reference={order.reference} price={order.reactivate_price} />
             ) : null}
 
             {order.can_complete || order.can_cancel ? (
@@ -603,6 +605,46 @@ function ReuseSection({
       </div>
       <Button variant="secondary" loading={busy} onClick={reuse} className="w-full shrink-0 sm:w-auto">
         Use again for {cedis(price)}
+      </Button>
+    </div>
+  );
+}
+
+/** After the reuse window: the provider can still reactivate this number
+ *  for another code, at half the order's price. A new order, refunded
+ *  automatically if no code comes - as short as TextVerified's own button. */
+function ReactivateSection({ reference, price }: { reference: string; price: string }) {
+  const toast = useToast();
+  const router = useRouter();
+  const [busy, setBusy] = React.useState(false);
+  // One key per card, so a double tap or a retry buys once.
+  const [key] = React.useState(() =>
+    typeof crypto !== "undefined" && "randomUUID" in crypto
+      ? crypto.randomUUID()
+      : `${reference}-reactivate-${Date.now()}`,
+  );
+
+  async function reactivate() {
+    setBusy(true);
+    try {
+      const next = await api.post<Order>(`/orders/${reference}/reactivate/`, {
+        idempotency_key: key,
+      });
+      await globalMutate("/wallet/");
+      router.push(`/orders/${next.reference}`);
+    } catch (caught) {
+      toast.error(
+        "Could not reactivate the number",
+        caught instanceof ApiError ? caught.message : "Please try again.",
+      );
+      setBusy(false);
+    }
+  }
+
+  return (
+    <div className="border-t border-line px-5 py-4 sm:px-6">
+      <Button loading={busy} onClick={reactivate} fullWidth>
+        Reactivate ({cedis(price)})
       </Button>
     </div>
   );

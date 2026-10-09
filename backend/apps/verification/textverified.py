@@ -157,6 +157,9 @@ class TextVerifiedProvider(VerificationProvider):
     #: "Reuse Verification": another code on the same number, only shortly
     #: after a verification completes (the details' `reuse.reusableUntil`).
     PATH_ORDER_REUSE = "/api/pub/v2/verifications/{id}/reuse"
+    #: "Reactivate a completed verification that can no longer be reused";
+    #: eligibility is the verification's `reactivate.canReactivate`.
+    PATH_ORDER_REACTIVATE = "/api/pub/v2/verifications/{id}/reactivate"
     #: Their mechanism for "this number did not work" - the state machine has a
     #: verificationRefunded state that follows a report.
     PATH_ORDER_REFUND = "/api/pub/v2/verifications/{id}/report"
@@ -561,6 +564,32 @@ class TextVerifiedProvider(VerificationProvider):
         href = str(created.get("href") or "")
         if not href:
             raise _provider_error("The verification provider did not return the reuse.")
+        details = self._request("GET", href if href.startswith("http")
+                                else f"{self.base_url}{href}")
+        return self._order_from_details(details)
+
+    supports_reactivation = True
+
+    def can_reactivate(self, provider_order_id: str) -> bool:
+        """The verification's own `reactivate.canReactivate`, read live."""
+        self._require_configured("checking reactivation")
+        details = self._request("GET", self._url(self.PATH_ORDER_STATUS, id=provider_order_id))
+        return bool((details.get("reactivate") or {}).get("canReactivate"))
+
+    def reactivate_order(self, provider_order_id: str,
+                         idempotency_key: str) -> ProviderOrderDTO:
+        """`POST /verifications/{id}/reactivate`, then read the verification it links to.
+
+        Like reuse, the docs give it no Idempotency-Key and no price in advance
+        (only rentals have a reactivation price): the new verification's
+        `totalCost` says what it cost. A 400 means it is not eligible.
+        """
+        self._require_configured("reactivating a number")
+        created = self._request("POST", self._url(self.PATH_ORDER_REACTIVATE,
+                                                  id=provider_order_id))
+        href = str(created.get("href") or "")
+        if not href:
+            raise _provider_error("The verification provider did not return the reactivation.")
         details = self._request("GET", href if href.startswith("http")
                                 else f"{self.base_url}{href}")
         return self._order_from_details(details)

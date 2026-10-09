@@ -302,6 +302,10 @@ export type Order = OrderSummary & {
   can_reuse: boolean;
   /** What reusing would cost now; null unless can_reuse. */
   reuse_price: string | null;
+  /** After the reuse window: the provider can still reactivate this number. */
+  can_reactivate?: boolean;
+  /** What reactivating would cost now; null unless can_reactivate. */
+  reactivate_price?: string | null;
   /** Set on a reuse: the reference of the order whose number it reused. */
   reuse_of: string | null;
   events: OrderEvent[];

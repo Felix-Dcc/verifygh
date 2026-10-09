@@ -21,7 +21,7 @@ import base64
 import hashlib
 import hmac
 import json
-from decimal import Decimal
+from decimal import ROUND_CEILING, Decimal
 
 import pytest
 import requests
@@ -116,7 +116,7 @@ def authorise(provider: Provider) -> Provider:
 
 
 def verification_routes(tv, *, state="verificationPending", code=None, vid="ver_1",
-                        number="+12025550123", reusable_until=None):
+                        number="+12025550123", reusable_until=None, can_reactivate=None):
     tv["routes"][("POST", "/api/pub/v2/verifications")] = Reply(
         201, {"href": f"/api/pub/v2/verifications/{vid}", "method": "GET"})
     details = {"id": vid, "number": number, "serviceName": "tiktok", "state": state,
@@ -125,6 +125,10 @@ def verification_routes(tv, *, state="verificationPending", code=None, vid="ver_
                "reuse": {"reusableUntil": reusable_until,
                          "link": {"href": f"/api/pub/v2/verifications/{vid}/reuse",
                                   "method": "POST"}}}
+    if can_reactivate is not None:
+        details["reactivate"] = {"canReactivate": can_reactivate,
+                                 "link": {"href": f"/api/pub/v2/verifications/{vid}/reactivate",
+                                          "method": "POST"}}
     tv["routes"][("GET", f"/api/pub/v2/verifications/{vid}")] = Reply(200, details)
     sms = {"data": [{"id": "sms_1", "from": "TikTok", "to": "+12025550123",
                      "createdAt": "2026-09-29T20:00:00Z", "smsContent": f"Your code is {code}",
@@ -782,3 +786,109 @@ def test_only_the_owner_can_reuse_a_number(tv, tv_catalog, buyer, other_user, au
 
     assert response.status_code == 404
     assert reuses(tv) == []
+
+
+
+# ---------------------------------------------------------------------------
+# Reactivation: another code on the number after the reuse window
+# ---------------------------------------------------------------------------
+
+
+def reactivations(tv) -> list[dict]:
+    return [c for c in tv["calls"] if c["path"].endswith("/reactivate")]
+
+
+def _finished_order(tv, tv_catalog, buyer, auth, capture, *, can_reactivate=True):
+    """Delivered, its reuse window closed, and TextVerified's say on reactivation."""
+    original = _delivered_order(tv, tv_catalog, buyer, auth, capture, window_seconds=-5)
+    verification_routes(tv, state="verificationCompleted", code="482913",
+                        can_reactivate=can_reactivate)
+    return original
+
+
+def test_a_finished_number_is_reactivated_after_the_reuse_window(
+        tv, tv_catalog, buyer, auth, django_capture_on_commit_callbacks):
+    original = _finished_order(tv, tv_catalog, buyer, auth, django_capture_on_commit_callbacks)
+    client = auth(buyer)
+    detail = client.get(f"{ORDERS}{original.reference}/").data
+    assert detail["can_reuse"] is False
+    half = (original.price / 2).quantize(Decimal("0.01"), rounding=ROUND_CEILING)
+    assert detail["can_reactivate"] is True and detail["reactivate_price"] == str(half)
+    balance = get_or_create_wallet(buyer).balance
+
+    tv["routes"][("POST", "/api/pub/v2/verifications/ver_1/reactivate")] = Reply(
+        201, {"href": "/api/pub/v2/verifications/ver_3", "method": "GET"})
+    verification_routes(tv, vid="ver_3")  # the reactivated verification, same number
+    with django_capture_on_commit_callbacks(execute=True):
+        first = client.post(f"{ORDERS}{original.reference}/reactivate/",
+                            {"idempotency_key": "reactivate-tap-1"}, format="json")
+    with django_capture_on_commit_callbacks(execute=True):
+        again = client.post(f"{ORDERS}{original.reference}/reactivate/",
+                            {"idempotency_key": "reactivate-tap-1"}, format="json")
+
+    assert first.status_code == 201, first.data
+    assert again.data["reference"] == first.data["reference"]
+    assert len(reactivations(tv)) == 1
+    renewed = Order.objects.get(reference=first.data["reference"])
+    assert renewed.provider_order_id == "ver_3"
+    assert renewed.phone_number == original.phone_number
+    assert renewed.status == OrderStatus.WAITING_FOR_CODE
+    assert renewed.metadata["reuse_of"] == original.reference
+    assert len(creates(tv)) == 1  # no new number was bought
+    # Half what the original cost, charged once.
+    assert renewed.price == half
+    assert get_or_create_wallet(buyer).balance == balance - half
+    assert renewed.price_breakdown["applied"]["set_price"]["price"] == str(half)
+
+
+def test_a_number_the_provider_cannot_reactivate_is_not_offered_or_charged(
+        tv, tv_catalog, buyer, auth, django_capture_on_commit_callbacks):
+    original = _finished_order(tv, tv_catalog, buyer, auth, django_capture_on_commit_callbacks,
+                               can_reactivate=False)
+    client = auth(buyer)
+    balance = get_or_create_wallet(buyer).balance
+    assert client.get(f"{ORDERS}{original.reference}/").data["can_reactivate"] is False
+
+    response = client.post(f"{ORDERS}{original.reference}/reactivate/", {}, format="json")
+    assert response.status_code == 409
+    assert response.data["error"]["code"] == "REACTIVATION_NOT_AVAILABLE"
+    assert get_or_create_wallet(buyer).balance == balance
+    assert reactivations(tv) == []
+
+
+def test_a_stale_yes_on_the_order_page_is_asked_again_before_charging(
+        tv, tv_catalog, buyer, auth, django_capture_on_commit_callbacks):
+    original = _finished_order(tv, tv_catalog, buyer, auth, django_capture_on_commit_callbacks)
+    client = auth(buyer)
+    assert client.get(f"{ORDERS}{original.reference}/").data["can_reactivate"] is True  # cached
+    verification_routes(tv, state="verificationCompleted", code="482913", can_reactivate=False)
+    balance = get_or_create_wallet(buyer).balance
+
+    response = client.post(f"{ORDERS}{original.reference}/reactivate/", {}, format="json")
+    assert response.status_code == 409
+    assert get_or_create_wallet(buyer).balance == balance
+
+
+def test_a_reactivation_the_provider_refuses_is_refunded(
+        tv, tv_catalog, buyer, auth, django_capture_on_commit_callbacks):
+    original = _finished_order(tv, tv_catalog, buyer, auth, django_capture_on_commit_callbacks)
+    tv["routes"][("POST", "/api/pub/v2/verifications/ver_1/reactivate")] = Reply(
+        400, {"errorCode": "NotEligible", "errorDescription": "Cannot reactivate."})
+    balance = get_or_create_wallet(buyer).balance
+
+    with django_capture_on_commit_callbacks(execute=True):
+        response = auth(buyer).post(f"{ORDERS}{original.reference}/reactivate/", {},
+                                    format="json")
+
+    renewed = Order.objects.get(reference=response.data["reference"])
+    assert renewed.status == OrderStatus.REFUNDED
+    wallet = get_or_create_wallet(buyer)
+    assert wallet.balance == balance
+    assert verify_wallet_integrity(wallet)["ok"] is True
+
+
+def test_while_the_reuse_window_is_open_reuse_is_the_offer(
+        tv, tv_catalog, buyer, auth, django_capture_on_commit_callbacks):
+    original = _delivered_order(tv, tv_catalog, buyer, auth, django_capture_on_commit_callbacks)
+    detail = auth(buyer).get(f"{ORDERS}{original.reference}/").data
+    assert detail["can_reuse"] is True and detail["can_reactivate"] is False

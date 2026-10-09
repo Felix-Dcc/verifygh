@@ -75,6 +75,8 @@ class OrderDetailSerializer(OrderListSerializer):
     issue = serializers.SerializerMethodField()
     replacement_for = serializers.SerializerMethodField()
     can_reuse = serializers.SerializerMethodField()
+    can_reactivate = serializers.SerializerMethodField()
+    reactivate_price = serializers.SerializerMethodField()
     reuse_price = serializers.SerializerMethodField()
     reuse_of = serializers.SerializerMethodField()
 
@@ -101,6 +103,8 @@ class OrderDetailSerializer(OrderListSerializer):
             "replacement_for",
             "reusable_until",
             "can_reuse",
+            "can_reactivate",
+            "reactivate_price",
             "reuse_price",
             "reuse_of",
         ]
@@ -115,6 +119,24 @@ class OrderDetailSerializer(OrderListSerializer):
         """What reusing would cost now - the service's current price."""
         if not self.get_can_reuse(obj):
             return None
+        return self._current_price(obj)
+
+    def get_can_reactivate(self, obj: Order) -> bool:
+        from apps.orders.services import reactivation_blocker
+
+        if not self._is_owner(obj) or self.get_can_reuse(obj):
+            return False
+        return not reactivation_blocker(obj)
+
+    def get_reactivate_price(self, obj: Order) -> str | None:
+        """What reactivating costs: half what this order cost."""
+        if not self.get_can_reactivate(obj):
+            return None
+        from apps.orders.services import reactivation_price
+
+        return str(reactivation_price(obj))
+
+    def _current_price(self, obj: Order) -> str | None:
         from apps.common.errors import APIError
         from apps.orders.services import candidate_offerings
         from apps.pricing.engine import quote_for_offering

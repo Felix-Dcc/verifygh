@@ -210,6 +210,19 @@ class VerificationProvider(abc.ABC):
         """
         raise NotImplementedError(f"{self.display_name} documents no number reuse.")
 
+    #: Whether the provider documents reactivating a finished verification
+    #: once its reuse window has closed (TextVerified's "Reactivate").
+    supports_reactivation: bool = False
+
+    def can_reactivate(self, provider_order_id: str) -> bool:
+        """Whether the provider says this verification can be reactivated now."""
+        return False
+
+    def reactivate_order(self, provider_order_id: str,
+                         idempotency_key: str) -> ProviderOrderDTO:
+        """Reactivate a finished verification for another code on its number."""
+        raise NotImplementedError(f"{self.display_name} documents no reactivation.")
+
     # -- number quality ----------------------------------------------------
 
     #: Whether the provider documents a way to report a number that did not

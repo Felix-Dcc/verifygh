@@ -169,6 +169,7 @@ class RateLimitedProvider(VerificationProvider):
         self.tracks_report_refunds = inner.tracks_report_refunds
         self.supports_balance = inner.supports_balance
         self.supports_reuse = inner.supports_reuse
+        self.supports_reactivation = inner.supports_reactivation
         self.supports_account_funding = inner.supports_account_funding
         self._limiter = ProviderRateLimiter(
             inner.key, settings.VERIFYGH["PROVIDER_RATE_LIMIT_PER_MINUTE"]
@@ -251,6 +252,16 @@ class RateLimitedProvider(VerificationProvider):
         if not self._inner.supports_reuse:
             raise NotImplementedError(f"{self.display_name} documents no number reuse.")
         return self._call("reuse_order", provider_order_id, idempotency_key)
+
+    def can_reactivate(self, provider_order_id: str) -> bool:
+        if not self._inner.supports_reactivation:
+            return False
+        return bool(self._call("can_reactivate", provider_order_id))
+
+    def reactivate_order(self, provider_order_id: str, idempotency_key: str):
+        if not self._inner.supports_reactivation:
+            raise NotImplementedError(f"{self.display_name} documents no reactivation.")
+        return self._call("reactivate_order", provider_order_id, idempotency_key)
 
     def get_balance(self):
         if not self._inner.supports_balance:
