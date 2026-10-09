@@ -542,8 +542,11 @@ def test_coming_back_later_on_another_network_is_still_recovered(api, user):
 def test_a_thief_with_the_same_browser_is_caught_within_the_daily_limit(api, user):
     """The thief renews first. Each recovery takes the session from whoever
     held it and hands the other a new one, so a thief on an identical browser
-    and the customer take turns - only a few times a day before it is theft."""
-    from apps.accounts.authentication import ROTATION_RECOVERY_DAILY_LIMIT
+    and the customer take turns - only so many times a day before it is theft.
+    Both clients send the same (empty) user agent: the exact-browser limit."""
+    from apps.accounts.authentication import (
+        ROTATION_RECOVERY_EXACT_DAILY_LIMIT as ROTATION_RECOVERY_DAILY_LIMIT,
+    )
     from apps.audit.models import SuspiciousActivity
 
     login(api, user)
@@ -640,3 +643,61 @@ def test_a_session_noted_before_the_change_is_still_recovered(api, user):
     assert phone.post("/api/v1/auth/refresh/", {}, format="json").status_code == 200
     user.refresh_from_db()
     assert user.token_version == 0
+
+
+def _lose_a_renewal(phone, seconds=3600):
+    """Renew, then put the old cookie back as if the reply never arrived."""
+    before = phone.cookies[settings.AUTH_COOKIE_REFRESH].value
+    assert phone.post("/api/v1/auth/refresh/", {}, format="json").status_code == 200
+    phone.cookies[settings.AUTH_COOKIE_REFRESH] = before
+    _age_blacklist_entry(before, seconds=seconds)
+    return before
+
+
+def test_the_exact_same_iphone_is_recovered_more_than_three_times_a_day(api, user):
+    """Production, 9 Oct: an iPhone lost a fourth renewal by 09:22 and was signed
+    out as stolen, then signed straight back in with its password."""
+    from apps.accounts.authentication import ROTATION_RECOVERY_DAILY_LIMIT
+    from apps.audit.models import SuspiciousActivity
+
+    phone = type(api)(HTTP_USER_AGENT=SAFARI_26_4)
+    login(phone, user)
+    for _ in range(ROTATION_RECOVERY_DAILY_LIMIT + 3):
+        _lose_a_renewal(phone)
+        assert phone.post("/api/v1/auth/refresh/", {}, format="json").status_code == 200
+
+    user.refresh_from_db()
+    assert user.token_version == 0
+    assert not SuspiciousActivity.objects.filter(
+        kind=SuspiciousActivity.Kind.TOKEN_REUSE).exists()
+
+
+def test_a_merely_similar_browser_keeps_the_stricter_limit(api, user):
+    """Same kind of browser, different version: three a day, as before."""
+    from django.core.cache import cache
+
+    from apps.accounts.authentication import ROTATION_RECOVERY_DAILY_LIMIT
+    from apps.audit.models import SuspiciousActivity
+
+    phone = type(api)(HTTP_USER_AGENT=SAFARI_26_4)
+    login(phone, user)
+    before = _lose_a_renewal(phone)
+    cache.set(f"refresh-recoveries:{user.pk}", ROTATION_RECOVERY_DAILY_LIMIT, 24 * 3600)
+
+    similar = type(api)(HTTP_USER_AGENT=SAFARI_26_6)
+    similar.cookies[settings.AUTH_COOKIE_REFRESH] = before
+    assert similar.post("/api/v1/auth/refresh/", {}, format="json").status_code == 401
+    assert SuspiciousActivity.objects.filter(
+        kind=SuspiciousActivity.Kind.TOKEN_REUSE, level="HIGH").exists()
+
+
+def test_the_exact_browser_is_still_caught_past_its_own_limit(api, user):
+    from django.core.cache import cache
+
+    from apps.accounts.authentication import ROTATION_RECOVERY_EXACT_DAILY_LIMIT
+
+    phone = type(api)(HTTP_USER_AGENT=SAFARI_26_4)
+    login(phone, user)
+    _lose_a_renewal(phone)
+    cache.set(f"refresh-recoveries:{user.pk}", ROTATION_RECOVERY_EXACT_DAILY_LIMIT, 24 * 3600)
+    assert phone.post("/api/v1/auth/refresh/", {}, format="json").status_code == 401

@@ -274,6 +274,14 @@ ROTATION_RECOVERY_SECONDS = int(settings.SIMPLE_JWT["REFRESH_TOKEN_LIFETIME"].to
 #: with the customer, so past this many in a day the next one is theft.
 ROTATION_RECOVERY_DAILY_LIMIT = 3
 
+#: The same, when the browser is not merely the same kind but the very same
+#: user agent, versions included, that the session was renewed from. Some
+#: iPhones lose renewals far more often than three times a day: on 9 Oct one
+#: was recovered at 09:10 and, its three spent, signed out as stolen at 09:22 -
+#: then signed straight back in with its password. A thief would now need the
+#: customer's exact user agent, and is still held to this many turns a day.
+ROTATION_RECOVERY_EXACT_DAILY_LIMIT = 10
+
 #: How far a recovery follows the rotation notes to the current token.
 ROTATION_CHAIN_LIMIT = 20
 
@@ -338,7 +346,8 @@ def _note_rotation(old_jti: str, new_refresh: str, request) -> None:
 
     successor = token_backend.decode(new_refresh, verify=True)[api_settings.JTI_CLAIM]
     cache.set(_rotation_key(old_jti),
-              {"successor": successor, "client": client_fingerprint(request)},
+              {"successor": successor, "client": client_fingerprint(request),
+               "exact": _legacy_client_fingerprint(request)},
               ROTATION_RECOVERY_SECONDS)
 
 
@@ -368,21 +377,27 @@ def _current_token(start_jti: str):
     return None
 
 
-def _within_recovery_limit(user) -> bool:
-    """Count one more recovery for `user`; False once the day's limit is passed."""
+def _within_recovery_limit(user, *, exact: bool = False) -> bool:
+    """Count one more recovery for `user`; False once the day's limit is passed.
+
+    One count per account, whichever browser: a merely similar browser is
+    refused once three have been used today, the exact same one once ten have.
+    """
     from django.core.cache import cache
 
     key = f"refresh-recoveries:{user.pk}"
+    limit = ROTATION_RECOVERY_EXACT_DAILY_LIMIT if exact else ROTATION_RECOVERY_DAILY_LIMIT
     try:
         cache.add(key, 0, 24 * 3600)
-        return cache.incr(key) <= ROTATION_RECOVERY_DAILY_LIMIT
+        return cache.incr(key) <= limit
     except Exception:
         return False  # cannot count: no recovery, which is how it worked before
 
 
 def recover_lost_rotation(raw_token: str | None, request):
-    """(user, successor, current, seconds since the rotation) when a retired
-    token comes back from the browser that retired it; None otherwise.
+    """(user, successor, current, seconds since the rotation, exact) when a
+    retired token comes back from the browser that retired it; None otherwise.
+    `exact` is True when it is the very same user agent, versions included.
 
     `successor` is the token that directly replaced it; `current` is where the
     session stands now, following the rotation notes - the successor itself
@@ -430,7 +445,11 @@ def recover_lost_rotation(raw_token: str | None, request):
         retired = (BlacklistedToken.objects.filter(token__jti=payload.get(api_settings.JTI_CLAIM))
                    .values_list("blacklisted_at", flat=True).first())
         age = (timezone.now() - retired).total_seconds() if retired else 0.0
-        return user, successor, current, max(0.0, age)
+        # Notes from before 9 Oct carry no "exact"; those written before 8 Oct
+        # recorded the full user agent as "client", which is the same test.
+        exact_fp = _legacy_client_fingerprint(request)
+        exact = exact_fp in (note.get("exact"), note.get("client"))
+        return user, successor, current, max(0.0, age), exact
     except Exception:
         return None
 
@@ -449,7 +468,8 @@ def recover_session(raw_token: str | None, request):
     the other copy is a thief's, the thief loses the session now; a thief on
     another browser is caught at its next renewal (the note names this
     browser), and one on an identical browser can take turns with the customer
-    only ROTATION_RECOVERY_DAILY_LIMIT times a day before it is caught.
+    only ROTATION_RECOVERY_DAILY_LIMIT times a day before it is caught
+    (ROTATION_RECOVERY_EXACT_DAILY_LIMIT if it copies the exact user agent).
     """
     from rest_framework_simplejwt.settings import api_settings
     from rest_framework_simplejwt.token_blacklist.models import BlacklistedToken
@@ -457,13 +477,14 @@ def recover_session(raw_token: str | None, request):
     recovered = recover_lost_rotation(raw_token, request)
     if recovered is None:
         return None
-    user, successor, current, age = recovered
+    user, successor, current, age, exact = recovered
     if age < REUSE_GRACE_SECONDS:
         if current.pk != successor.pk:
             return None  # renewed on already: a refusal, and not theft (the race grace)
         return user, (access_for(user, successor.token), successor.token)
-    if not _within_recovery_limit(user):
-        logger.warning("refresh_recovery_limit_reached", extra={"user_id": str(user.pk)})
+    if not _within_recovery_limit(user, exact=exact):
+        logger.warning("refresh_recovery_limit_reached",
+                       extra={"user_id": str(user.pk), "exact_browser": exact})
         return None
     BlacklistedToken.objects.get_or_create(token=current)
     tokens = issue_tokens(user)
