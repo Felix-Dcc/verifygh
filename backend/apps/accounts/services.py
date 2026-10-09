@@ -194,6 +194,10 @@ def dispatch_verification_email(user: User, ip: str | None = None) -> None:
             )
 
 
+#: How many of the most recent verification emails still work.
+VERIFICATION_LINKS_KEPT = 3
+
+
 def send_verification_email(user: User, ip: str | None = None) -> bool:
     """Issue a fresh verification token and email the link.
 
@@ -208,8 +212,14 @@ def send_verification_email(user: User, ip: str | None = None) -> bool:
         return False
 
     hours = _email_ttl_hours()
+    # The last few links stay valid, not only the newest. Every one went to
+    # this inbox, so any of them proves the address; and Gmail threads emails
+    # with one subject, so customers who asked again tapped an older message's
+    # button and were told it was invalid (9 Oct 2026). Capped, so old emails
+    # are not a drawer of live keys; changing the address cancels them all.
     _token, raw = SecurityToken.issue(
-        user, TokenPurpose.EMAIL_VERIFICATION, hours, ip
+        user, TokenPurpose.EMAIL_VERIFICATION, hours, ip,
+        keep_recent=VERIFICATION_LINKS_KEPT,
     )
     # Re-read after issuing: `issue` locks the user row, so this is the address
     # as of this token. A task that loaded the user before staff corrected the
@@ -377,6 +387,10 @@ def verify_email(raw_token: str) -> User:
         user.is_email_verified = True
         user.email_verified_at = timezone.now()
         user.save(update_fields=["is_email_verified", "email_verified_at", "updated_at"])
+        # Its job is done: the other links still in the inbox are retired.
+        SecurityToken.objects.filter(
+            user=user, purpose=TokenPurpose.EMAIL_VERIFICATION, used_at__isnull=True,
+        ).update(used_at=timezone.now())
 
     logger.info("email_verified", extra={"user_id": str(user.id)})
 
@@ -385,6 +399,23 @@ def verify_email(raw_token: str) -> User:
 
     process_for_user(user)
     return user
+
+
+def verified_owner(raw_token: str) -> User | None:
+    """The account a verification link belongs to, if it is already verified.
+
+    A link opened a second time - on another device, by a mail scanner, or
+    after another email's link - would otherwise say "invalid" to someone
+    whose address is verified. Reveals nothing a guesser could use: it needs
+    the token itself, which only the inbox has.
+    """
+    token = SecurityToken.objects.filter(
+        token_hash=SecurityToken.hash_token(raw_token),
+        purpose=TokenPurpose.EMAIL_VERIFICATION,
+    ).select_related("user").first()
+    if token is None or not token.user.is_email_verified:
+        return None
+    return token.user
 
 
 def request_password_reset(email: str, request=None) -> None:

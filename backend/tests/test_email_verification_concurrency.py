@@ -120,11 +120,11 @@ def test_the_account_is_verified_once_not_repeatedly(unverified):
 # ---------------------------------------------------------------------------
 
 
-def test_simultaneous_resends_leave_no_more_than_one_live_token(unverified):
-    """Overlapping resends must not leave several working links behind.
+def test_simultaneous_resends_leave_no_more_than_three_live_tokens(unverified):
+    """Overlapping resends must not leave a drawer of working links behind.
 
-    Each issue marks earlier live tokens used, so the invariant is "at most one
-    live token" however the calls interleave - never a drawer full of keys.
+    Each issue retires all but the most recent few, so the invariant is "at
+    most three live tokens" however the calls interleave.
     """
     run_concurrently(lambda _index: send_verification_email(unverified), 10)
 
@@ -134,9 +134,9 @@ def test_simultaneous_resends_leave_no_more_than_one_live_token(unverified):
         used_at__isnull=True,
         expires_at__gt=timezone.now(),
     )
-    assert live.count() <= 1, (
+    assert live.count() <= 3, (
         f"{live.count()} verification tokens are live at once; each resend must "
-        "supersede the previous one"
+        "retire all but the most recent three"
     )
 
 

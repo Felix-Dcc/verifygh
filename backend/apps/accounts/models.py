@@ -202,11 +202,14 @@ class SecurityToken(BaseModel):
         return hashlib.sha256(raw.encode("utf-8")).hexdigest()
 
     @classmethod
-    def issue(cls, user: User, purpose: str, ttl_hours: int, ip: str | None = None):
+    def issue(cls, user: User, purpose: str, ttl_hours: int, ip: str | None = None,
+              *, keep_recent: int = 1):
         """Returns (instance, raw_token). The raw token is never stored.
 
-        One live token per purpose: issuing a new one invalidates the old, so
-        the most recent email is always the only one that works.
+        At most `keep_recent` live tokens per purpose, the new one included:
+        issuing invalidates the rest, oldest first. The default, one, means the
+        most recent email is the only one that works (password resets).
+        Email verification keeps a few: see `send_verification_email`.
 
         Invalidating and inserting have to happen under a lock, not as two
         independent statements. Without it two overlapping requests - a user
@@ -219,9 +222,10 @@ class SecurityToken(BaseModel):
         raw = secrets.token_urlsafe(32)
         with transaction.atomic():
             type(user).objects.select_for_update().filter(pk=user.pk).first()
-            cls.objects.filter(user=user, purpose=purpose, used_at__isnull=True).update(
-                used_at=timezone.now()
-            )
+            live = cls.objects.filter(user=user, purpose=purpose, used_at__isnull=True)
+            kept = list(live.order_by("-created_at")
+                        .values_list("pk", flat=True)[:max(keep_recent - 1, 0)])
+            live.exclude(pk__in=kept).update(used_at=timezone.now())
             instance = cls.objects.create(
                 user=user,
                 purpose=purpose,

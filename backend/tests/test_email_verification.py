@@ -183,20 +183,33 @@ def test_an_invalid_token_is_refused(api):
     assert User.objects.get(email=NEW_EMAIL).is_email_verified is False
 
 
-def test_a_token_cannot_be_used_twice(api):
+def test_a_link_opened_again_says_already_verified(api):
+    """A second device or a mail scanner must not tell a verified user it failed."""
     register(api)
     token = token_from_last_email()
 
     first = api.post(CONFIRM, {"token": token}, format="json")
+    verified_at = User.objects.get(email=NEW_EMAIL).email_verified_at
     second = api.post(CONFIRM, {"token": token}, format="json")
 
-    assert first.status_code == 200
-    assert second.status_code == 400
-    assert second.data["error"]["code"] == "INVALID_TOKEN"
+    assert first.status_code == 200 and "already_verified" not in first.data
+    assert second.status_code == 200 and second.data["already_verified"] is True
+    # Verified once: the replay changed nothing.
+    assert User.objects.get(email=NEW_EMAIL).email_verified_at == verified_at
 
 
-def test_issuing_a_new_token_invalidates_the_previous_one(api, auth):
-    """Otherwise every email ever sent stays a live key to the account."""
+def test_an_expired_link_for_a_verified_account_says_already_verified(api):
+    register(api)
+    token = token_from_last_email()
+    assert api.post(CONFIRM, {"token": token}, format="json").status_code == 200
+    SecurityToken.objects.update(expires_at=timezone.now() - timedelta(minutes=1))
+
+    response = api.post(CONFIRM, {"token": token}, format="json")
+    assert response.status_code == 200 and response.data["already_verified"] is True
+
+
+def test_an_earlier_email_still_works_after_a_resend(api, auth):
+    """Gmail threads the emails; customers tap the older one's button (9 Oct 2026)."""
     register(api)
     first_token = token_from_last_email()
 
@@ -206,12 +219,35 @@ def test_issuing_a_new_token_invalidates_the_previous_one(api, auth):
     second_token = token_from_last_email()
 
     assert first_token != second_token
-    stale = api.post(CONFIRM, {"token": first_token}, format="json")
-    assert stale.status_code == 400
-    assert stale.data["error"]["code"] == "INVALID_TOKEN"
+    earlier = api.post(CONFIRM, {"token": first_token}, format="json")
+    assert earlier.status_code == 200 and "already_verified" not in earlier.data
+    assert User.objects.get(email=NEW_EMAIL).is_email_verified is True
 
-    fresh = api.post(CONFIRM, {"token": second_token}, format="json")
-    assert fresh.status_code == 200
+
+def test_only_the_last_three_emails_work(unverified_buyer, api):
+    """Otherwise every email ever sent stays a live key to the account."""
+    from apps.accounts.services import send_verification_email
+
+    tokens = []
+    for _ in range(4):
+        send_verification_email(unverified_buyer)
+        tokens.append(token_from_last_email())
+
+    oldest = api.post(CONFIRM, {"token": tokens[0]}, format="json")
+    assert oldest.status_code == 400 and oldest.data["error"]["code"] == "INVALID_TOKEN"
+    assert api.post(CONFIRM, {"token": tokens[1]}, format="json").status_code == 200
+
+
+def test_verifying_retires_the_other_links(unverified_buyer, api):
+    from apps.accounts.services import send_verification_email
+
+    for _ in range(3):
+        send_verification_email(unverified_buyer)
+    assert api.post(CONFIRM, {"token": token_from_last_email()},
+                    format="json").status_code == 200
+    assert not SecurityToken.objects.filter(
+        user=unverified_buyer, purpose=TokenPurpose.EMAIL_VERIFICATION,
+        used_at__isnull=True).exists()
 
 
 def test_only_the_hash_of_a_token_is_stored(api):
@@ -471,11 +507,11 @@ def test_the_resend_limit_is_per_address_not_only_per_ip(api, unverified_buyer):
     assert api.post(RESEND, {"email": other.email}, format="json").status_code == 200
 
 
-def test_concurrent_resends_leave_exactly_one_usable_token(unverified_buyer):
-    """Overlapping requests must not leave two live keys to one account.
+def test_concurrent_resends_leave_at_most_three_usable_tokens(unverified_buyer):
+    """Overlapping requests must not leave a drawer of live keys to one account.
 
-    Each issue invalidates the previous, so however the calls interleave the
-    account ends with one live token - and every earlier link is dead.
+    Each issue retires all but the most recent few, so however the calls
+    interleave the account ends with at most three live tokens.
     """
     from apps.accounts.services import send_verification_email
 
@@ -487,10 +523,10 @@ def test_concurrent_resends_leave_exactly_one_usable_token(unverified_buyer):
         purpose=TokenPurpose.EMAIL_VERIFICATION,
         used_at__isnull=True,
     )
-    assert live.count() == 1
+    assert live.count() == 3
 
-    # And the live one is the token in the most recent email.
-    assert live.first().token_hash == SecurityToken.hash_token(token_from_last_email())
+    # And the most recent email's token is among them.
+    assert live.filter(token_hash=SecurityToken.hash_token(token_from_last_email())).exists()
 
 
 def test_the_authenticated_resend_is_a_no_op_for_a_verified_account(api, auth, user):

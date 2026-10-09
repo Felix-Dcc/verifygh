@@ -55,8 +55,8 @@ def capture_token(monkeypatch):
     captured = {}
     original = SecurityToken.issue
 
-    def spy(user, purpose, ttl_hours, ip=None):
-        token, raw = original(user, purpose, ttl_hours, ip)
+    def spy(user, purpose, ttl_hours, ip=None, **options):
+        token, raw = original(user, purpose, ttl_hours, ip, **options)
         captured[user.email] = raw
         return token, raw
 

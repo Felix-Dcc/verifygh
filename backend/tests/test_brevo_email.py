@@ -95,8 +95,10 @@ def test_the_link_from_the_brevo_email_verifies_that_account_only(api, brevo):
     assert api.post(CONFIRM, {"token": token}, format="json").status_code == 200
     assert User.objects.get(email="abena@gmail.com").is_email_verified is True
     assert User.objects.get(email="kofi@gmail.com").is_email_verified is False
-    # Used once, used up.
-    assert api.post(CONFIRM, {"token": token}, format="json").status_code == 400
+    # Used once: opening it again says "already verified" and verifies no one.
+    again = api.post(CONFIRM, {"token": token}, format="json")
+    assert again.status_code == 200 and again.data["already_verified"] is True
+    assert User.objects.get(email="kofi@gmail.com").is_email_verified is False
 
 
 def test_password_reset_works_end_to_end_through_brevo(api, brevo, user):

@@ -165,8 +165,8 @@ def test_password_reset_ends_every_session(api, user, monkeypatch):
     captured = {}
     original = SecurityToken.issue
 
-    def spy(cls_user, purpose, ttl_hours, ip=None):
-        token, raw = original(cls_user, purpose, ttl_hours, ip)
+    def spy(cls_user, purpose, ttl_hours, ip=None, **options):
+        token, raw = original(cls_user, purpose, ttl_hours, ip, **options)
         captured["raw"] = raw
         return token, raw
 

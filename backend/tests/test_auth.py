@@ -209,8 +209,8 @@ def test_email_verification_round_trip(api, monkeypatch):
     captured = {}
     original = SecurityToken.issue
 
-    def spy(cls_user, purpose, ttl_hours, ip=None):
-        token, raw = original(cls_user, purpose, ttl_hours, ip)
+    def spy(cls_user, purpose, ttl_hours, ip=None, **options):
+        token, raw = original(cls_user, purpose, ttl_hours, ip, **options)
         captured["raw"] = raw
         return token, raw
 
@@ -229,8 +229,8 @@ def test_verification_token_is_single_use(api, monkeypatch):
     captured = {}
     original = SecurityToken.issue
 
-    def spy(cls_user, purpose, ttl_hours, ip=None):
-        token, raw = original(cls_user, purpose, ttl_hours, ip)
+    def spy(cls_user, purpose, ttl_hours, ip=None, **options):
+        token, raw = original(cls_user, purpose, ttl_hours, ip, **options)
         captured["raw"] = raw
         return token, raw
 
@@ -238,8 +238,13 @@ def test_verification_token_is_single_use(api, monkeypatch):
     register(api)
 
     url = "/api/v1/auth/email/verify/confirm/"
-    assert api.post(url, {"token": captured["raw"]}, format="json").status_code == 200
-    assert api.post(url, {"token": captured["raw"]}, format="json").status_code == 400
+    first = api.post(url, {"token": captured["raw"]}, format="json")
+    assert first.status_code == 200 and "already_verified" not in first.data
+    verified_at = User.objects.get(email="nana@example.com").email_verified_at
+    # Used once: opening it again verifies nothing, it only says so.
+    again = api.post(url, {"token": captured["raw"]}, format="json")
+    assert again.status_code == 200 and again.data["already_verified"] is True
+    assert User.objects.get(email="nana@example.com").email_verified_at == verified_at
 
 
 def test_only_the_token_hash_is_stored(api):
@@ -265,8 +270,8 @@ def test_password_reset_changes_the_password(api, user, monkeypatch):
     captured = {}
     original = SecurityToken.issue
 
-    def spy(cls_user, purpose, ttl_hours, ip=None):
-        token, raw = original(cls_user, purpose, ttl_hours, ip)
+    def spy(cls_user, purpose, ttl_hours, ip=None, **options):
+        token, raw = original(cls_user, purpose, ttl_hours, ip, **options)
         captured["raw"] = raw
         return token, raw
 

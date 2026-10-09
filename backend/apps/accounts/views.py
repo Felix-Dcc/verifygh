@@ -19,12 +19,12 @@ from rest_framework_simplejwt.tokens import RefreshToken
 from apps.accounts import google, services, turnstile
 from apps.accounts.authentication import (
     blacklist_refresh_token,
-    revoke_access_token,
     clear_auth_cookies,
     detect_refresh_token_reuse,
     issue_tokens,
     recover_session,
     remember_rotation,
+    revoke_access_token,
     rotate_refresh_token,
     set_auth_cookies,
     token_version_of,
@@ -44,7 +44,12 @@ from apps.accounts.serializers import (
 )
 from apps.audit.models import SuspicionLevel, SuspiciousActivity
 from apps.audit.services import flag, record_audit
-from apps.common.errors import AccountSuspended, APIError, AuthenticationRequired
+from apps.common.errors import (
+    AccountSuspended,
+    APIError,
+    AuthenticationRequired,
+    ValidationFailed,
+)
 from apps.common.middleware import get_client_ip
 from apps.common.throttling import (
     EmailVerifyResendThrottle,
@@ -355,7 +360,15 @@ class ConfirmEmailVerificationView(APIView):
     def post(self, request):
         serializer = TokenSerializer(data=request.data)
         serializer.is_valid(raise_exception=True)
-        user = services.verify_email(serializer.validated_data["token"])
+        token = serializer.validated_data["token"]
+        try:
+            user = services.verify_email(token)
+        except ValidationFailed:
+            # Spent or expired, but the address is verified: say so, not "invalid".
+            user = services.verified_owner(token)
+            if user is None:
+                raise
+            return Response({"user": UserSerializer(user).data, "already_verified": True})
         record_audit(actor=user, action="EMAIL_VERIFIED", target=user, request=request)
         return Response({"user": UserSerializer(user).data})
 

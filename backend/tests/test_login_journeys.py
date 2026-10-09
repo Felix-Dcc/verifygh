@@ -44,8 +44,8 @@ def issued(monkeypatch):
     tokens: dict[str, str] = {}
     original = SecurityToken.issue
 
-    def spy(user, purpose, ttl_hours, ip=None):
-        token, raw = original(user, purpose, ttl_hours, ip)
+    def spy(user, purpose, ttl_hours, ip=None, **options):
+        token, raw = original(user, purpose, ttl_hours, ip, **options)
         tokens[str(purpose)] = raw
         return token, raw
 

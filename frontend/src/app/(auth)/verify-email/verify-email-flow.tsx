@@ -27,6 +27,9 @@ export function VerifyEmailFlow({ token }: { token: string }) {
   const signedIn = Boolean(user);
 
   const [state, setState] = React.useState<State>(token ? "verifying" : "missing");
+  // A link opened again after the address was verified (another device, an
+  // older email): the backend says so rather than calling it invalid.
+  const [already, setAlready] = React.useState(false);
 
   /**
    * Guards against React running the effect twice in development's strict
@@ -46,7 +49,11 @@ export function VerifyEmailFlow({ token }: { token: string }) {
     // will be, and the screen spins forever on an account that did verify.
     (async () => {
       try {
-        await api.post("/auth/email/verify/confirm/", { token });
+        const result = await api.post<{ already_verified?: boolean }>(
+          "/auth/email/verify/confirm/",
+          { token },
+        );
+        setAlready(Boolean(result?.already_verified));
         setState("success");
         // Pick up is_email_verified so the purchase gate lifts immediately,
         // without the user having to sign out and back in. Only worth doing
@@ -75,9 +82,13 @@ export function VerifyEmailFlow({ token }: { token: string }) {
         <div className="flex h-12 w-12 items-center justify-center rounded-xl bg-success-50 text-success-700">
           <CheckCircleIcon className="h-6 w-6" />
         </div>
-        <h1 className="mt-4 text-title text-ink">Email verified successfully.</h1>
+        <h1 className="mt-4 text-title text-ink">
+          {already ? "Your email is already verified." : "Email verified successfully."}
+        </h1>
         <p className="mt-2 text-sm text-ink-muted">
-          Your email has been verified. You can now use VerifyGH.
+          {already
+            ? "Nothing more to do - you can use VerifyGH."
+            : "Your email has been verified. You can now use VerifyGH."}
         </p>
         <ButtonLink href={user ? "/dashboard" : "/login"} fullWidth size="lg" className="mt-6 w-full">
           {user ? "Continue to Dashboard" : "Sign in"}
