@@ -202,3 +202,44 @@ def test_a_webhook_found_by_our_reference_in_metadata(sendi, user, api):
     webhook(api, {"event": "charge.success",
                   "data": {"metadata": {"reference": payment.reference}}})
     assert get_or_create_wallet(user).balance == Decimal("10.00")
+
+
+# -- retrying a checkout ------------------------------------------------------
+
+
+def initializes(fake) -> int:
+    return sum(1 for call in fake.calls if call["url"].endswith("/charge/initialize"))
+
+
+def test_tapping_pay_again_reopens_the_open_checkout(sendi, user):
+    """9 Oct: three retries made three unfinished checkouts and a flag."""
+    first = deposit(user, "14.00")
+    again = deposit(user, "14.00")
+    assert again.reference == first.reference
+    assert initializes(sendi) == 1
+    assert Payment.objects.filter(user=user).count() == 1
+
+
+def test_retrying_never_trips_the_unfinished_payments_limit(sendi, user):
+    from apps.audit.models import SuspiciousActivity
+
+    for _ in range(5):
+        deposit(user, "14.00")
+    assert Payment.objects.filter(user=user).count() == 1
+    assert not SuspiciousActivity.objects.filter(user=user).exists()
+
+
+def test_a_checkout_sendi_has_failed_is_not_reopened(sendi, user):
+    first = deposit(user, "14.00")
+    sendi.charges[first.provider_reference]["status"] = "failed"
+    again = deposit(user, "14.00")
+    assert again.reference != first.reference
+    assert Payment.objects.get(pk=first.pk).status == PaymentStatus.FAILED
+    assert initializes(sendi) == 2
+
+
+def test_a_different_amount_gets_its_own_checkout(sendi, user):
+    first = deposit(user, "14.00")
+    other = deposit(user, "13.00")
+    assert other.reference != first.reference
+    assert initializes(sendi) == 2

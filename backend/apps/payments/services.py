@@ -139,12 +139,19 @@ def initiate_deposit(*, user, amount, phone: str, network: str, request=None,
             code="WALLET_CAP_EXCEEDED",
         )
 
+    provider = get_payment_provider()
+
+    # A hosted checkout still open for this amount: send the customer back to
+    # it rather than starting another (9 Oct: retries piled up three unfinished
+    # SENDI checkouts in three minutes, blocking the fourth and raising a flag).
+    reopened = _open_checkout(user, provider, amount)
+    if reopened is not None:
+        return reopened
+
     _check_pending_deposits(user)
 
     reference = payment_reference()
     ttl_minutes = settings.VERIFYGH["PAYMENT_TTL_MINUTES"]
-
-    provider = get_payment_provider()
 
     payment = Payment.objects.create(
         user=user,
@@ -404,6 +411,34 @@ def _note_provider_status(payment: Payment, charge, *, initial: bool = False) ->
     except Exception:
         # Losing a diagnostic must never cost a payment.
         logger.warning("provider_status_note_failed", extra={"reference": payment.reference})
+
+
+#: How recent an unfinished hosted checkout must be to send the customer back to it.
+OPEN_CHECKOUT_MINUTES = 15
+
+
+def _open_checkout(user, provider, amount) -> Payment | None:
+    """The customer's unfinished hosted checkout for this amount, if it is still open.
+
+    Asked of the provider first: a checkout it has already failed (or been
+    paid) is settled as usual, and a fresh one is started instead - the
+    customer is never sent back to a page that can no longer take payment.
+    """
+    if not getattr(provider, "hosted_checkout", False):
+        return None
+    now = timezone.now()
+    candidate = (Payment.objects.filter(
+        user=user, provider=provider.key, status=PaymentStatus.PENDING, amount=amount,
+        created_at__gte=now - timedelta(minutes=OPEN_CHECKOUT_MINUTES),
+        expires_at__gt=now,
+    ).order_by("-created_at").first())
+    if candidate is None or not (candidate.metadata or {}).get("checkout_url"):
+        return None
+    candidate = reconcile_payment(candidate)
+    if candidate.status != PaymentStatus.PENDING:
+        return None
+    logger.info("deposit_checkout_reopened", extra={"reference": candidate.reference})
+    return candidate
 
 
 def _check_pending_deposits(user) -> None:
