@@ -145,6 +145,16 @@ class TokenSerializer(serializers.Serializer):
     token = serializers.CharField(max_length=256)
 
 
+class EmailCodeSerializer(serializers.Serializer):
+    #: write_only, so a code is never echoed back.
+    code = serializers.CharField(max_length=12, trim_whitespace=True, write_only=True)
+
+
+class ChangeOwnEmailSerializer(serializers.Serializer):
+    new_email = serializers.EmailField(max_length=254)
+    password = serializers.CharField(write_only=True, max_length=128, trim_whitespace=False)
+
+
 class PasswordResetConfirmSerializer(serializers.Serializer):
     token = serializers.CharField(max_length=256)
     new_password = serializers.CharField(write_only=True, min_length=10, max_length=128)

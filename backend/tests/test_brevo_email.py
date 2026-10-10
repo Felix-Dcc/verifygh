@@ -77,11 +77,18 @@ def test_registration_sends_the_verification_email_through_brevo(api, brevo):
     body = call["json"]
     assert body["sender"] == {"email": "support@getverifygh.com", "name": "VerifyGH"}
     assert body["to"] == [{"email": "abena@gmail.com"}]
-    assert body["subject"] == "Verify your VerifyGH email address"
+    assert body["subject"] == "Your VerifyGH verification code"
     # Both parts, the same link in each, in the branded layout.
     token = link_token(body, "/verify-email/")
     assert token in body["htmlContent"]
-    assert "Verify Email" in body["htmlContent"] and "/icons/icon-192.png" in body["htmlContent"]
+    assert "Confirm with this link instead" in body["htmlContent"]
+    assert "/icons/icon-192.png" in body["htmlContent"]
+    # The 6-digit code, in both parts and never in the subject.
+    import re
+
+    codes = re.findall(r"(?<!\d)\d{6}(?!\d)", body["textContent"])
+    assert codes and codes[0] in body["htmlContent"]
+    assert codes[0] not in body["subject"]
     assert "support@getverifygh.com" in body["htmlContent"]
     assert Notification.objects.get(channel="EMAIL").delivery_status == DeliveryStatus.SENT
 

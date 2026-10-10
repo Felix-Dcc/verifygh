@@ -28,7 +28,7 @@ import { ApiError, api, newIdempotencyKey } from "@/lib/api";
 import { cedis, formatDate, localPhone, relativeTime } from "@/lib/format";
 import type { AdminUser, Paginated, Transaction } from "@/lib/types";
 
-type Filter = "all" | "flagged" | "suspended";
+type Filter = "all" | "flagged" | "suspended" | "verified" | "unverified";
 
 export default function AdminUsersPage() {
   const { can } = useAuth();
@@ -57,6 +57,7 @@ export default function AdminUsersPage() {
       search: debounced,
       flagged: filter === "flagged" ? "true" : "",
       suspended: filter === "suspended" ? "true" : "",
+      verified: filter === "verified" ? "true" : filter === "unverified" ? "false" : "",
       page,
       page_size: 25,
     },
@@ -77,6 +78,8 @@ export default function AdminUsersPage() {
             { value: "all" as Filter, label: "All" },
             { value: "flagged" as Filter, label: "Flagged" },
             { value: "suspended" as Filter, label: "Suspended" },
+            { value: "verified" as Filter, label: "Verified" },
+            { value: "unverified" as Filter, label: "Unverified" },
           ]}
           value={filter}
           onChange={(value) => {

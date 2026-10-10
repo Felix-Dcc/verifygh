@@ -1,20 +1,23 @@
 {% extends "emails/base.html" %}
-{% comment %}Verification email, HTML alternative to verify_email.txt.{% endcomment %}
+{% comment %}Verification email, HTML alternative to verify_email.txt. The code is what the app asks for; the link is the fallback.{% endcomment %}
 
-{% block preheader %}Verify your email address to activate your {{ brand }} account.{% endblock %}
+{% block preheader %}Enter this code in {{ brand }} to confirm your email.{% endblock %}
 
-{% block heading %}Verify your email address{% endblock %}
+{% block heading %}Confirm your email{% endblock %}
 
 {% block content %}
-<p style="margin:0 0 14px 0;">Hello,</p>
-<p style="margin:0 0 14px 0;">Thank you for creating your {{ brand }} account.</p>
-<p style="margin:0;">Please verify your email address to activate your account and access {{ brand }}.</p>
+<p style="margin:0 0 14px 0;">Hi {{ full_name }},</p>
+<p style="margin:0 0 14px 0;">Enter this code in {{ brand }} to finish setting up your account:</p>
+<p style="margin:0 0 14px 0; padding:14px 0; background:#f3f5f4; border-radius:8px; text-align:center; font-family:Consolas,'Courier New',monospace; font-size:30px; font-weight:bold; letter-spacing:8px; color:#0b1f17;">{{ code }}</p>
+<p style="margin:0;">It expires in {{ code_minutes }} minutes. Never share it with anyone, including {{ brand }} staff.</p>
 {% endblock %}
 
-{% block action %}{% include "emails/_button.html" with url=verify_url label="Verify Email" %}{% endblock %}
+{% block action %}{% endblock %}
 
 {% block fine_print %}
-<p style="margin:0 0 8px 0;">This link expires in {{ hours }} hours and can only be used once.</p>
+<p style="margin:0 0 8px 0;">On another device?
+  <a href="{{ verify_url }}" style="color:#0b6446; text-decoration:underline;">Confirm with this link instead</a>
+  (valid for {{ hours }} hours).</p>
 <p style="margin:0 0 8px 0;">If you did not create a {{ brand }} account, you can ignore this email &mdash;
   no account will be activated without this confirmation.</p>
 <p style="margin:0;">Questions? Write to

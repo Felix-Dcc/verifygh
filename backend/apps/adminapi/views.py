@@ -304,6 +304,9 @@ class AdminUserViewSet(AdminBase, mixins.ListModelMixin, mixins.RetrieveModelMix
             queryset = queryset.filter(is_suspended=True)
         if self.request.query_params.get("flagged") == "true":
             queryset = queryset.filter(open_flags__gt=0)
+        verified = self.request.query_params.get("verified")
+        if verified in ("true", "false"):
+            queryset = queryset.filter(is_email_verified=verified == "true")
         role = self.request.query_params.get("role")
         if role:
             queryset = queryset.filter(role=role.upper())

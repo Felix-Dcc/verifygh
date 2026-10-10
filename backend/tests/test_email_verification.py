@@ -52,6 +52,15 @@ def _run_commit_hooks(django_capture_on_commit_callbacks):
     _capture_on_commit = None
 
 
+def cool_down():
+    """Past the 45-second resend wait and the new-account grace."""
+    from apps.accounts.models import EmailVerificationCode
+
+    past = timezone.now() - timedelta(minutes=5)
+    EmailVerificationCode.objects.update(created_at=past)
+    User.objects.update(created_at=past)
+
+
 def register(api, **overrides):
     body = {
         "email": NEW_EMAIL,
@@ -98,7 +107,7 @@ def test_registration_sends_one_verification_email_to_the_registered_address(api
     assert len(mail.outbox) == 1
     message = mail.outbox[0]
     assert message.to == [NEW_EMAIL]
-    assert message.subject == "Verify your VerifyGH email address"
+    assert message.subject == "Your VerifyGH verification code"
     assert message.from_email == settings.DEFAULT_FROM_EMAIL
 
 
@@ -215,6 +224,7 @@ def test_an_earlier_email_still_works_after_a_resend(api, auth):
 
     account = User.objects.get(email=NEW_EMAIL)
     authed = auth(account, GOOD_PASSWORD)
+    cool_down()
     assert authed.post(SEND, {}, format="json").status_code == 200
     second_token = token_from_last_email()
 
@@ -608,6 +618,7 @@ def test_the_authenticated_resend_reports_a_provider_failure(api, auth, unverifi
         EmailMultiAlternatives, "send", lambda self, *a, **k: (_ for _ in ()).throw(OSError("x"))
     )
     authed = auth(unverified_buyer, GOOD_PASSWORD)
+    cool_down()
 
     response = authed.post(SEND, {}, format="json")
 

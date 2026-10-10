@@ -125,6 +125,13 @@ def initiate_deposit(*, user, amount, phone: str, network: str, request=None,
     if blocked:
         raise ServiceUnavailable(blocked, code="DEPOSITS_PAUSED")
 
+    # As for purchases and manual top-ups: money goes only into a wallet whose
+    # owner we can reach, and who can then spend it.
+    if settings.VERIFYGH.get("REQUIRE_EMAIL_VERIFICATION_FOR_DEPOSIT", True)             and not user.is_email_verified:
+        from apps.common.errors import EmailNotVerified
+
+        raise EmailNotVerified("Verify your email address before adding funds.")
+
     minimum = quantize(settings.VERIFYGH["MIN_DEPOSIT"])
     maximum = quantize(settings.VERIFYGH["MAX_DEPOSIT"])
     balance_cap = quantize(settings.VERIFYGH["MAX_WALLET_BALANCE"])

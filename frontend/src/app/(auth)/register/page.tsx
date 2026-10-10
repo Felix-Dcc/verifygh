@@ -13,13 +13,11 @@ import {
 } from "@/components/auth/google-sign-in";
 import { TURNSTILE_SITE_KEY, Turnstile, type TurnstileHandle } from "@/components/auth/turnstile";
 import { errorMessage, useAuth } from "@/components/auth-provider";
-import { MailIcon } from "@/components/icons";
 import {
   ReferralInviteBanner,
   clearReferralInvite,
   useReferralInvite,
 } from "@/components/referral-invite";
-import { ResendVerification } from "@/components/resend-verification";
 import {
   Alert,
   Button,
@@ -30,20 +28,6 @@ import {
   PasswordInput,
 } from "@/components/ui/primitives";
 import { ApiError } from "@/lib/api";
-
-/**
- * `felix@gmail.com` -> `f****@gmail.com`.
- *
- * Enough for someone to recognise the address they just typed, not enough to
- * be worth reading over their shoulder. The backend masks the same way.
- */
-function maskEmail(address: string): string {
-  const at = address.indexOf("@");
-  if (at < 1) return address;
-  const local = address.slice(0, at);
-  const domain = address.slice(at);
-  return `${local[0]}${"\u2022".repeat(Math.max(local.length - 1, 4))}${domain}`;
-}
 
 /** Mirrors the backend's minimum. Shown as guidance, enforced server-side. */
 const MIN_PASSWORD_LENGTH = 10;
@@ -75,7 +59,6 @@ function RegisterForm() {
   const [formError, setFormError] = React.useState("");
   const [fieldErrors, setFieldErrors] = React.useState<Record<string, string>>({});
   /** Set once registration succeeds; switches this route to the check-your-email panel. */
-  const [registeredEmail, setRegisteredEmail] = React.useState("");
   const [humanToken, setHumanToken] = React.useState<string | null>(null);
   const [humanError, setHumanError] = React.useState("");
   const turnstile = React.useRef<TurnstileHandle>(null);
@@ -97,11 +80,9 @@ function RegisterForm() {
    * Set synchronously, before the registration request goes out.
    *
    * Registering signs the user in, and the effect below sends a signed-in
-   * visitor to the dashboard. `signUp()` populates the auth cache, which
-   * re-renders with `user` set *before* `setRegisteredEmail` has run - so a
-   * state flag is checked too late and the user is redirected past the screen
-   * telling them to go and check their inbox. A ref is written immediately and
-   * closes that window.
+   * visitor to the dashboard. While a registration is in flight that effect
+   * stands aside, so a failed attempt keeps the form and its errors on screen;
+   * a successful one is sent on by `onSubmit` itself.
    */
   const justRegistered = React.useRef(false);
 
@@ -150,10 +131,10 @@ function RegisterForm() {
         turnstile_token: humanToken ?? undefined,
       });
       clearReferralInvite();
-      // Deliberately not redirected to the dashboard: the next thing they need
-      // to do is open their email, and a dashboard would bury that.
-      setRegisteredEmail(form.email.trim());
-      setSubmitting(false);
+      // Straight on to the 6-digit code: the app asks for it before anything
+      // else (components/verify-email-gate.tsx), with the address shown in full
+      // so a typo is caught now.
+      router.replace("/dashboard");
     } catch (error) {
       // Registration failed, so this is an ordinary signed-out visitor again.
       justRegistered.current = false;
@@ -169,38 +150,6 @@ function RegisterForm() {
       }
       setSubmitting(false);
     }
-  }
-
-  if (registeredEmail) {
-    return (
-      <Card className="flex flex-col items-center p-8 text-center">
-        <div className="flex h-12 w-12 items-center justify-center rounded-xl bg-brand-50 text-brand-700">
-          <MailIcon className="h-6 w-6" />
-        </div>
-        <h1 className="mt-4 text-title text-ink">Check your email</h1>
-        <p className="mt-2 text-sm text-ink-muted">
-          We&apos;ve sent a verification link to:
-        </p>
-        <p className="mt-1 break-all text-sm font-medium text-ink">
-          {maskEmail(registeredEmail)}
-        </p>
-        <p className="mt-4 text-sm text-ink-muted">
-          Please click the link in your email to verify your account. You will need a verified
-          email address before you can buy a verification number.
-        </p>
-
-        <div className="mt-6 w-full">
-          <ResendVerification authenticated />
-        </div>
-
-        <Link
-          href="/dashboard"
-          className="mt-4 text-sm font-medium text-brand-700 hover:underline"
-        >
-          Skip for now, go to dashboard
-        </Link>
-      </Card>
-    );
   }
 
   return (

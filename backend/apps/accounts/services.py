@@ -8,14 +8,33 @@ from django.conf import settings
 from django.db import IntegrityError, transaction
 from django.utils import timezone
 
-from apps.accounts.models import LoginAttempt, SecurityToken, TokenPurpose, User, UserDevice
+from apps.accounts.models import (
+    EmailVerificationCode,
+    LoginAttempt,
+    SecurityToken,
+    TokenPurpose,
+    User,
+    UserDevice,
+)
 from apps.common.errors import Conflict, ValidationFailed
 from apps.common.middleware import get_client_ip
 
 logger = logging.getLogger("verifygh.accounts")
 
-#: Subject lines are fixed strings, not derived from user input.
-VERIFY_EMAIL_SUBJECT = "Verify your VerifyGH email address"
+#: Subject lines are fixed strings, not derived from user input - and never
+#: carry the code: subjects are kept in the notification row and in Brevo's log.
+VERIFY_EMAIL_SUBJECT = "Your VerifyGH verification code"
+
+#: The 6-digit code emailed with the link (9 Oct 2026: typed, not clicked).
+EMAIL_CODE_TTL_MINUTES = 15
+EMAIL_CODE_MAX_ATTEMPTS = 5
+#: The least time between two codes for one account.
+EMAIL_CODE_RESEND_SECONDS = 45
+#: An account this new still has its sign-up email on the way: the app does
+#: not send another of its own accord.
+EMAIL_CODE_SIGNUP_GRACE_SECONDS = 120
+#: How many times a user may correct their own unverified address.
+SELF_EMAIL_CHANGES_ALLOWED = 3
 
 
 def _email_ttl_hours() -> int:
@@ -199,11 +218,11 @@ VERIFICATION_LINKS_KEPT = 3
 
 
 def send_verification_email(user: User, ip: str | None = None) -> bool:
-    """Issue a fresh verification token and email the link.
+    """Issue a fresh verification code and link, and email both.
 
-    Returns True if the provider accepted the message. Issuing a new token
-    invalidates any previous one (see `SecurityToken.issue`), so the most recent
-    email is always the one that works and an older link cannot be replayed.
+    Returns True if the provider accepted the message. The code is what the
+    app asks for; the link is the fallback for another device. A new code
+    replaces the last one; the last few links stay valid (see below).
     """
     from apps.notifications.models import DeliveryStatus
     from apps.notifications.services import notify
@@ -221,14 +240,16 @@ def send_verification_email(user: User, ip: str | None = None) -> bool:
         user, TokenPurpose.EMAIL_VERIFICATION, hours, ip,
         keep_recent=VERIFICATION_LINKS_KEPT,
     )
+    _code, raw_code = EmailVerificationCode.issue(user, EMAIL_CODE_TTL_MINUTES)
     # Re-read after issuing: `issue` locks the user row, so this is the address
     # as of this token. A task that loaded the user before staff corrected the
     # address must not mail a live link to the old one.
     user.refresh_from_db(fields=["email", "is_email_verified"])
     if user.is_email_verified:
         return False
-    # The raw token appears in the URL and nowhere else - never in a log line,
-    # never in the notification body stored in the database.
+    # The raw token and code appear in the email body and nowhere else - never
+    # in a log line, the subject, or the notification body stored in the
+    # database.
     sent = notify(
         user,
         event="ACCOUNT_CREATED",
@@ -240,6 +261,8 @@ def send_verification_email(user: User, ip: str | None = None) -> bool:
             "full_name": user.full_name or "there",
             "verify_url": _frontend(f"/verify-email/{raw}"),
             "hours": hours,
+            "code": raw_code,
+            "code_minutes": EMAIL_CODE_TTL_MINUTES,
         },
         channels=("EMAIL",),
     )
@@ -279,6 +302,84 @@ EMAIL_ALREADY_VERIFIED = (
 )
 
 
+def _readdress(target: User, new_email: str) -> int:
+    """Move a locked, unverified account to `new_email`; returns links cancelled.
+
+    Every unused link and code goes: one mailed to the wrong address would
+    otherwise verify the new one, or reset the password, for whoever owns it.
+    """
+    now = timezone.now()
+    cancelled = SecurityToken.objects.filter(
+        user=target, used_at__isnull=True,
+        purpose__in=[TokenPurpose.EMAIL_VERIFICATION, TokenPurpose.PASSWORD_RESET],
+    ).update(used_at=now)
+    EmailVerificationCode.objects.filter(user=target, used_at__isnull=True).update(used_at=now)
+
+    target.email = new_email
+    target.is_email_verified = False
+    target.email_verified_at = None
+    try:
+        # A savepoint, so a lost race on the unique email leaves the outer
+        # transaction usable for the clean error below.
+        with transaction.atomic():
+            target.save(update_fields=["email", "is_email_verified",
+                                       "email_verified_at", "updated_at"])
+    except IntegrityError:
+        raise Conflict("Another account already uses this email.",
+                       code="EMAIL_TAKEN") from None
+    return cancelled
+
+
+def change_own_unverified_email(*, user: User, new_email: str, password: str,
+                                request=None) -> User:
+    """The customer corrects their own mistyped address, before verifying.
+
+    Only while unverified - a verified address is proven, and replacing it
+    would be account takeover - and only with the account password, a few
+    times per account. The session stays (the password was just proven); every
+    old link and code is cancelled and a new code goes to the new address.
+    """
+    from apps.audit.models import AuditLog
+    from apps.audit.services import record_audit
+
+    new_email = (new_email or "").strip().lower()
+    with transaction.atomic():
+        target = User.objects.select_for_update().get(pk=user.pk)
+        if target.is_email_verified:
+            raise Conflict(EMAIL_ALREADY_VERIFIED, code="EMAIL_ALREADY_VERIFIED")
+        if not password or not target.check_password(password):
+            raise ValidationFailed(
+                "That password isn't right.",
+                details={"fields": {"password": ["That password isn't right."]}},
+                code="INVALID_PASSWORD")
+        previous = target.email
+        if new_email == previous.lower():
+            raise ValidationFailed(
+                "That's the address you already have.",
+                details={"fields": {"new_email": ["Same as the current email."]}},
+            )
+        used = AuditLog.objects.filter(actor=target, action="EMAIL_SELF_CHANGED").count()
+        if used >= SELF_EMAIL_CHANGES_ALLOWED:
+            raise Conflict("You've already changed your address the most times allowed. "
+                           "Contact support to change it again.", code="EMAIL_CHANGE_LIMIT")
+        if User.objects.filter(email__iexact=new_email).exclude(pk=target.pk).exists():
+            raise Conflict("Another account already uses this email.", code="EMAIL_TAKEN")
+
+        _readdress(target, new_email)
+        record_audit(actor=target, action="EMAIL_SELF_CHANGED", target=target, request=request,
+                     metadata={"from": previous, "to": new_email})
+
+    logger.info("user_changed_unverified_email", extra={"user_id": str(target.pk)})
+    target.refresh_from_db()
+    # Sent now, not queued: the verify screen asks for this code next.
+    try:
+        send_verification_email(target, ip=get_client_ip(request) if request else None)
+    except Exception:
+        logger.error("verification_email_failed", extra={"user_id": str(target.pk)},
+                     exc_info=True)
+    return target
+
+
 def admin_change_unverified_email(*, user: User, new_email: str, reason: str, actor,
                                   request=None) -> User:
     """Staff correct an address the user mistyped at registration.
@@ -312,23 +413,7 @@ def admin_change_unverified_email(*, user: User, new_email: str, reason: str, ac
         if User.objects.filter(email__iexact=new_email).exclude(pk=target.pk).exists():
             raise Conflict("Another account already uses this email.", code="EMAIL_TAKEN")
 
-        cancelled = SecurityToken.objects.filter(
-            user=target, used_at__isnull=True,
-            purpose__in=[TokenPurpose.EMAIL_VERIFICATION, TokenPurpose.PASSWORD_RESET],
-        ).update(used_at=timezone.now())
-
-        target.email = new_email
-        target.is_email_verified = False
-        target.email_verified_at = None
-        try:
-            # A savepoint, so a lost race on the unique email leaves the outer
-            # transaction usable for the clean error below.
-            with transaction.atomic():
-                target.save(update_fields=["email", "is_email_verified",
-                                           "email_verified_at", "updated_at"])
-        except IntegrityError:
-            raise Conflict("Another account already uses this email.",
-                           code="EMAIL_TAKEN") from None
+        cancelled = _readdress(target, new_email)
 
         record_admin_action(
             admin=actor, action="ADMIN_CHANGED_UNVERIFIED_EMAIL", target=target,
@@ -384,21 +469,120 @@ def verify_email(raw_token: str) -> User:
                 code="INVALID_TOKEN",
             )
         user = token.user
-        user.is_email_verified = True
-        user.email_verified_at = timezone.now()
-        user.save(update_fields=["is_email_verified", "email_verified_at", "updated_at"])
-        # Its job is done: the other links still in the inbox are retired.
-        SecurityToken.objects.filter(
-            user=user, purpose=TokenPurpose.EMAIL_VERIFICATION, used_at__isnull=True,
-        ).update(used_at=timezone.now())
+        newly = _mark_verified(user)
 
-    logger.info("email_verified", extra={"user_id": str(user.id)})
+    if newly:
+        _after_verified(user, method="link")
+    user.refresh_from_db()
+    return user
 
+
+def _mark_verified(user: User) -> bool:
+    """Mark the address verified and retire every other link and code.
+
+    Inside the caller's transaction. A conditional update, so a code and a
+    link arriving together verify the account once: True for the one that did.
+    """
+    now = timezone.now()
+    newly = bool(User.objects.filter(pk=user.pk, is_email_verified=False).update(
+        is_email_verified=True, email_verified_at=now, updated_at=now))
+    # Their job is done: the other links and codes still in the inbox retire.
+    SecurityToken.objects.filter(
+        user=user, purpose=TokenPurpose.EMAIL_VERIFICATION, used_at__isnull=True,
+    ).update(used_at=now)
+    EmailVerificationCode.objects.filter(user=user, used_at__isnull=True).update(used_at=now)
+    return newly
+
+
+def _after_verified(user: User, *, method: str) -> None:
+    logger.info("email_verified", extra={"user_id": str(user.id), "method": method})
     # Verification is the usual last gate before a referral becomes eligible.
     from apps.referrals.services import process_for_user
 
     process_for_user(user)
+
+
+def verify_email_code(user: User, code: str) -> User:
+    """Check a typed 6-digit code; verify the account when it matches.
+
+    `INVALID_CODE` says how many tries are left; after
+    EMAIL_CODE_MAX_ATTEMPTS wrong ones the code is dead and `CODE_EXPIRED`
+    asks for a new one. The code is compared in constant time against its
+    keyed hash and never logged.
+    """
+    typed = "".join(ch for ch in str(code or "") if ch.isdigit())
+    if len(typed) != 6:
+        raise ValidationFailed("Enter the 6-digit code from the email.", code="INVALID_CODE")
+
+    wrong_left = None
+    with transaction.atomic():
+        account = User.objects.select_for_update().get(pk=user.pk)
+        if account.is_email_verified:
+            return account
+        row = (EmailVerificationCode.objects.select_for_update()
+               .filter(user=account, used_at__isnull=True).order_by("-created_at").first())
+        if row is None or row.expires_at <= timezone.now() \
+                or row.attempts >= EMAIL_CODE_MAX_ATTEMPTS:
+            raise ValidationFailed("This code has expired. Send yourself a new one.",
+                                   code="CODE_EXPIRED")
+        import hmac
+
+        if hmac.compare_digest(row.code_hash,
+                               EmailVerificationCode.hash_code(account.pk, typed)):
+            row.used_at = timezone.now()
+            row.save(update_fields=["used_at", "updated_at"])
+            newly = _mark_verified(account)
+        else:
+            # Counted before the refusal, and committed with it.
+            row.attempts += 1
+            fields = ["attempts", "updated_at"]
+            if row.attempts >= EMAIL_CODE_MAX_ATTEMPTS:
+                row.used_at = timezone.now()
+                fields.append("used_at")
+            row.save(update_fields=fields)
+            wrong_left = EMAIL_CODE_MAX_ATTEMPTS - row.attempts
+
+    if wrong_left is not None:
+        logger.info("email_code_wrong", extra={"user_id": str(user.id),
+                                               "tries_left": wrong_left})
+        if wrong_left <= 0:
+            raise ValidationFailed("Too many wrong tries. Send yourself a new code.",
+                                   code="CODE_EXPIRED")
+        raise ValidationFailed(
+            f"That code isn't right. {wrong_left} {'try' if wrong_left == 1 else 'tries'} left.",
+            code="INVALID_CODE")
+    if newly:
+        _after_verified(user, method="code")
+    user.refresh_from_db()
     return user
+
+
+def verification_status(user: User) -> dict:
+    """What the verify screen needs: is a code on its way, when may it resend."""
+    now = timezone.now()
+    latest = EmailVerificationCode.objects.filter(user=user).order_by("-created_at").first()
+    since = (now - latest.created_at).total_seconds() if latest else None
+    live = bool(latest and latest.used_at is None and latest.expires_at > now
+                and latest.attempts < EMAIL_CODE_MAX_ATTEMPTS)
+    # A brand-new account's sign-up email may still be on its way.
+    fresh = (now - user.created_at).total_seconds() < EMAIL_CODE_SIGNUP_GRACE_SECONDS
+    resend_in = max(0, int(EMAIL_CODE_RESEND_SECONDS - since)) if since is not None else 0
+    if latest is None and fresh:
+        resend_in = max(0, int(EMAIL_CODE_RESEND_SECONDS
+                               - (now - user.created_at).total_seconds()))
+    return {"verified": user.is_email_verified, "email": user.email,
+            "code_active": live or (latest is None and fresh), "resend_in": resend_in}
+
+
+def send_verification_code(user: User, ip: str | None = None) -> dict:
+    """Send a new code (and link) unless one went out a moment ago."""
+    status = verification_status(user)
+    if user.is_email_verified:
+        return {**status, "sent": False}
+    if status["resend_in"] > 0:
+        return {**status, "sent": False}
+    delivered = send_verification_email(user, ip=ip)
+    return {**verification_status(user), "sent": True, "delivered": delivered}
 
 
 def verified_owner(raw_token: str) -> User | None:

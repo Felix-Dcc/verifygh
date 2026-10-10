@@ -262,6 +262,49 @@ class SecurityToken(BaseModel):
         return bool(claimed)
 
 
+class EmailVerificationCode(BaseModel):
+    """A 6-digit code, emailed with the verification link, typed into the app.
+
+    Typed rather than clicked: no link to open in the right browser, which is
+    where many sign-ups were lost. Only a keyed hash is stored (HMAC with the
+    secret key and the user's id), so a database leak hands over nothing and
+    one user's code says nothing about another's. One live code per user;
+    `attempts` caps guessing at EMAIL_CODE_MAX_ATTEMPTS per code.
+    """
+
+    user = models.ForeignKey(User, on_delete=models.CASCADE, related_name="email_codes")
+    code_hash = models.CharField(max_length=64)
+    expires_at = models.DateTimeField()
+    attempts = models.PositiveSmallIntegerField(default=0)
+    used_at = models.DateTimeField(null=True, blank=True)
+
+    class Meta:
+        db_table = "accounts_email_code"
+        indexes = [models.Index(fields=["user", "used_at"])]
+
+    @staticmethod
+    def hash_code(user_id, code: str) -> str:
+        import hmac
+
+        message = f"{user_id}:{code}".encode()
+        return hmac.new(settings.SECRET_KEY.encode(), message, hashlib.sha256).hexdigest()
+
+    @classmethod
+    def issue(cls, user: User, ttl_minutes: int):
+        """Returns (instance, raw_code); every earlier unused code stops working."""
+        raw = f"{secrets.randbelow(10 ** 6):06d}"
+        with transaction.atomic():
+            # The user row lock, as SecurityToken.issue: two sends at once must
+            # not leave two live codes.
+            type(user).objects.select_for_update().filter(pk=user.pk).first()
+            cls.objects.filter(user=user, used_at__isnull=True).update(used_at=timezone.now())
+            instance = cls.objects.create(
+                user=user, code_hash=cls.hash_code(user.pk, raw),
+                expires_at=timezone.now() + timedelta(minutes=ttl_minutes),
+            )
+        return instance, raw
+
+
 class LoginAttempt(TimeStampedModel):
     """Authentication telemetry. Feeds the suspicious-activity scorer."""
 

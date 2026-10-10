@@ -33,7 +33,9 @@ from apps.accounts.constants import Role
 from apps.accounts.models import User
 from apps.accounts.serializers import (
     AcceptTermsSerializer,
+    ChangeOwnEmailSerializer,
     ChangePasswordSerializer,
+    EmailCodeSerializer,
     EmailSerializer,
     LoginSerializer,
     PasswordResetConfirmSerializer,
@@ -52,6 +54,8 @@ from apps.common.errors import (
 )
 from apps.common.middleware import get_client_ip
 from apps.common.throttling import (
+    EmailChangeThrottle,
+    EmailCodeThrottle,
     EmailVerifyResendThrottle,
     EmailVerifyThrottle,
     LoginIPThrottle,
@@ -333,6 +337,8 @@ class ChangePasswordView(APIView):
 
 
 class SendEmailVerificationView(APIView):
+    """Email a new code (and link). Not more than once per EMAIL_CODE_RESEND_SECONDS."""
+
     permission_classes = [IsAuthenticated]
     throttle_classes = [EmailVerifyThrottle]
 
@@ -340,14 +346,59 @@ class SendEmailVerificationView(APIView):
         if request.user.is_email_verified:
             return Response({"detail": "Your email address is already verified."})
 
-        delivered = services.send_verification_email(
+        result = services.send_verification_code(
             request.user, ip=get_client_ip(request) or None
         )
-        if not delivered:
+        if not result["sent"]:
+            return Response({**result, "detail": "We sent you a code a moment ago."})
+        if not result.get("delivered"):
             # The provider refused it. Saying "sent" would leave the user
             # waiting for an email that is not coming.
             raise EmailDeliveryFailed()
-        return Response({"detail": "Verification email sent."})
+        return Response({**result, "detail": "Verification email sent."})
+
+
+class EmailVerificationStatusView(APIView):
+    """For the verify screen: is a code on its way, and when may it resend."""
+
+    permission_classes = [IsAuthenticated]
+
+    def get(self, request):
+        return Response(services.verification_status(request.user))
+
+
+class ConfirmEmailCodeView(APIView):
+    """The 6-digit code from the email, typed into the app by the signed-in user."""
+
+    permission_classes = [IsAuthenticated]
+    throttle_classes = [EmailCodeThrottle]
+
+    def post(self, request):
+        serializer = EmailCodeSerializer(data=request.data)
+        serializer.is_valid(raise_exception=True)
+        was_verified = request.user.is_email_verified
+        user = services.verify_email_code(request.user, serializer.validated_data["code"])
+        if not was_verified:
+            record_audit(actor=user, action="EMAIL_VERIFIED", target=user, request=request,
+                         metadata={"method": "code"})
+        return Response({"user": UserSerializer(user).data})
+
+
+class ChangeOwnEmailView(APIView):
+    """Correct a mistyped address while it is still unverified."""
+
+    permission_classes = [IsAuthenticated]
+    throttle_classes = [EmailChangeThrottle]
+
+    def post(self, request):
+        serializer = ChangeOwnEmailSerializer(data=request.data)
+        serializer.is_valid(raise_exception=True)
+        user = services.change_own_unverified_email(
+            user=request.user, new_email=serializer.validated_data["new_email"],
+            password=serializer.validated_data["password"], request=request,
+        )
+        return Response({"user": UserSerializer(user).data,
+                         **services.verification_status(user)})
 
 
 class ConfirmEmailVerificationView(APIView):

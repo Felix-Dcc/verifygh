@@ -116,6 +116,16 @@ class EmailVerifyThrottle(NamedScopeThrottle):
     scope = "email_verify"
 
 
+class EmailCodeThrottle(NamedScopeThrottle):
+    """Typed verification codes, per user. Each code also dies after 5 wrong tries."""
+
+    scope = "email_code"
+
+
+class EmailChangeThrottle(NamedScopeThrottle):
+    scope = "email_change"
+
+
 class DepositThrottle(NamedScopeThrottle):
     scope = "deposit"
 

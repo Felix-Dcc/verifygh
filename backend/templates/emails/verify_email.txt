@@ -1,13 +1,15 @@
-Hello,
+Hi {{ full_name }},
 
-Thank you for creating your {{ brand }} account.
+Your {{ brand }} verification code is:
 
-Please verify your email address to activate your account and access
-{{ brand }}:
+    {{ code }}
+
+Enter it in {{ brand }} to finish setting up your account. It expires in
+{{ code_minutes }} minutes. Never share it with anyone, including {{ brand }} staff.
+
+On another device? Confirm with this link instead (valid for {{ hours }} hours):
 
 {{ verify_url }}
-
-This link expires in {{ hours }} hours and can only be used once.
 
 If you did not create a {{ brand }} account, you can ignore this email -
 no account will be activated without this confirmation.

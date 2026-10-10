@@ -306,6 +306,9 @@ REST_FRAMEWORK = {
         "register": "5/hour",
         "password_reset": "5/hour",
         "email_verify": "5/hour",
+        # Typed codes and self-service address corrections, per user.
+        "email_code": "20/hour",
+        "email_change": "5/hour",
         # Keyed on IP *and* the submitted address, so one person cannot
         # use one address to mail-bomb another.
         "email_verify_resend": "5/hour",
@@ -508,6 +511,10 @@ VERIFYGH = {
     "REQUIRE_EMAIL_VERIFICATION_FOR_PURCHASE": env_bool(
         "REQUIRE_EMAIL_VERIFICATION_FOR_PURCHASE", True
     ),
+    # Top-ups too (9 Oct 2026): an unverified wallet could take money it could
+    # not spend, behind an address nobody could reach.
+    "REQUIRE_EMAIL_VERIFICATION_FOR_DEPOSIT": env_bool(
+        "REQUIRE_EMAIL_VERIFICATION_FOR_DEPOSIT", True),
     # How long a verification link stays usable. Long enough to survive a slow
     # inbox or a night's sleep, short enough that a link left sitting in an
     # abandoned mailbox is not a standing key to the account.
