@@ -48,7 +48,7 @@ export function Logo({
             tone === "light" ? "text-white" : "text-ink",
           )}
         >
-          Verify<span className={tone === "light" ? "text-brand-200" : "text-brand-600"}>GH</span>
+          Verify<span className={tone === "light" ? "text-[rgb(166_211_191)]" : "text-brand-600"}>GH</span>
         </span>
       ) : null}
     </span>

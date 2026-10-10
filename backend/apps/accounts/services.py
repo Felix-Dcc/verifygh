@@ -663,6 +663,9 @@ def reset_password(raw_token: str, new_password: str) -> User:
         user.failed_login_count = 0
         user.locked_until = None
         user.save(update_fields=["password", "failed_login_count", "locked_until", "updated_at"])
+        # The link was opened from this inbox, which proves the address. An
+        # invited staff member lands here first, so they arrive verified.
+        newly_verified = _mark_verified(user)
 
         # A reset is usually the response to a compromise, so every session the
         # attacker may hold has to end here - not when their access token
@@ -672,6 +675,9 @@ def reset_password(raw_token: str, new_password: str) -> User:
             "sessions_revoked",
             extra={"user_id": str(user.id), "reason": "password_reset", "tokens": revoked},
         )
+    if newly_verified:
+        user.refresh_from_db()
+        _after_verified(user, method="password_reset")
 
     from apps.notifications.services import notify
 

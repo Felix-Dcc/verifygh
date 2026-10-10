@@ -1,0 +1,16 @@
+Hi {{ full_name }},
+
+{{ inviter }} invited you to join the {{ brand }} team as {{ role }}.
+
+Choose your password to set up your account:
+
+{{ setup_url }}
+
+This link expires in {{ hours }} hours and can only be used once. After you
+choose a password, sign in and open the admin console.
+
+If you weren't expecting this, you can ignore this email - no account access
+is possible without the link.
+
+--
+{{ brand }} - Verification made simple.

@@ -4,6 +4,7 @@ from decimal import Decimal
 
 from rest_framework import serializers
 
+from apps.accounts.constants import STAFF_ROLES, Role
 from apps.accounts.models import User
 from apps.audit.models import AdminAction, AuditLog, SuspiciousActivity
 from apps.catalog.models import Country, ProviderService, Service
@@ -17,16 +18,39 @@ class AdminUserSerializer(serializers.ModelSerializer):
     promo_balance = serializers.SerializerMethodField()
     order_count = serializers.IntegerField(read_only=True, default=0)
     open_flags = serializers.IntegerField(read_only=True, default=0)
+    #: An invited staff member who has not chosen a password yet.
+    invite_pending = serializers.SerializerMethodField()
+    #: A customer account that once held staff access, so it may be re-added.
+    former_staff = serializers.SerializerMethodField()
+    #: Whether the account has chosen a password (never the password itself).
+    has_password = serializers.SerializerMethodField()
 
     class Meta:
         model = User
         fields = [
             "id", "email", "full_name", "phone", "role", "is_active", "is_suspended",
             "suspension_reason", "is_email_verified", "is_phone_verified", "risk_score",
-            "balance", "promo_balance", "order_count", "open_flags", "last_login",
-            "created_at",
+            "balance", "promo_balance", "order_count", "open_flags", "invite_pending", "former_staff", "has_password",
+            "last_login", "created_at",
         ]
         read_only_fields = fields
+
+    def get_has_password(self, obj: User) -> bool:
+        return obj.has_usable_password()
+
+    def get_former_staff(self, obj: User) -> bool:
+        from apps.accounts.constants import Role
+        from apps.accounts.staff import was_staff
+
+        if obj.role != Role.USER:
+            return False
+        history = self.context.get("staff_history")
+        return str(obj.pk) in history if history is not None else was_staff(obj)
+
+    def get_invite_pending(self, obj: User) -> bool:
+        from apps.accounts.staff import invite_pending
+
+        return invite_pending(obj)
 
     def get_balance(self, obj: User) -> str:
         wallet = getattr(obj, "wallet", None)
@@ -42,6 +66,23 @@ class SuspendUserSerializer(serializers.Serializer):
     """Suspension always carries a reason - it is shown to the user and audited."""
 
     reason = serializers.CharField(max_length=500, min_length=5)
+
+
+class ChangeRoleSerializer(serializers.Serializer):
+    """A super admin's role change. Always audited, always with a reason."""
+
+    role = serializers.ChoiceField(choices=Role.choices)
+    reason = serializers.CharField(max_length=500, min_length=5)
+
+
+class InviteStaffSerializer(serializers.Serializer):
+    email = serializers.EmailField(max_length=254)
+    full_name = serializers.CharField(max_length=150, min_length=2)
+    role = serializers.ChoiceField(choices=[(r, Role(r).label) for r in STAFF_ROLES])
+    reason = serializers.CharField(max_length=500, min_length=5)
+
+    def validate_email(self, value: str) -> str:
+        return value.strip().lower()
 
 
 class ChangeEmailSerializer(serializers.Serializer):

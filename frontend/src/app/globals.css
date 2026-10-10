@@ -504,6 +504,79 @@
     @apply mt-3 text-pretty text-base leading-relaxed text-ink-muted sm:text-lg;
   }
 
+  /* ---- Admin console -------------------------------------------------------
+     AppShell's admin variant puts .admin-portal on its root. Everything here
+     is scoped to it, so the customer app is untouched. The pages keep their
+     own markup: tables, cards and metric groups take the console's look from
+     these rules (they out-rank single utilities on specificity). */
+
+  /* The navy band at the top of the overview, from the homepage's night. */
+  .admin-hero {
+    background:
+      radial-gradient(ellipse 55% 120% at 92% -30%, rgb(8 120 209 / 0.55), rgb(8 120 209 / 0) 60%),
+      radial-gradient(ellipse 40% 90% at 0% 130%, rgb(40 199 247 / 0.18), rgb(40 199 247 / 0) 65%),
+      radial-gradient(ellipse 40% 90% at 70% 140%, rgb(32 178 107 / 0.24), rgb(32 178 107 / 0) 65%),
+      linear-gradient(150deg, #0c2142 0%, #071426 55%, #050b18 100%);
+  }
+
+  /* A single figure on its own surface: a card that lifts on hover. */
+  .stat-card {
+    @apply rounded-2xl border border-line bg-surface;
+    min-width: 0;
+    box-shadow: 0 1px 2px rgb(15 27 23 / 0.04), 0 1px 1px rgb(15 27 23 / 0.02);
+  }
+  .dark .stat-card {
+    box-shadow: 0 1px 0 rgb(0 0 0 / 0.25);
+  }
+
+  .admin-portal {
+    background:
+      radial-gradient(ellipse 60% 40% at 100% 0%, rgb(var(--c-brand-500) / 0.05), transparent 70%),
+      rgb(var(--c-canvas));
+  }
+  .admin-portal .card {
+    @apply rounded-2xl;
+    box-shadow: 0 1px 2px rgb(15 27 23 / 0.04), 0 1px 1px rgb(15 27 23 / 0.02);
+  }
+  .dark .admin-portal .card {
+    box-shadow: 0 1px 0 rgb(0 0 0 / 0.25);
+  }
+  .admin-portal .metric-group {
+    @apply rounded-2xl;
+    box-shadow: 0 1px 2px rgb(15 27 23 / 0.04);
+  }
+
+  /* Tables: a quiet uppercase header, roomy rows, a soft hover. */
+  .admin-portal table thead {
+    @apply border-line bg-sunken/70;
+  }
+  .admin-portal table thead th {
+    @apply whitespace-nowrap text-2xs font-semibold uppercase tracking-wider text-ink-faint;
+  }
+  .admin-portal table tbody tr {
+    @apply transition-colors;
+  }
+  .admin-portal table tbody tr:hover {
+    background-color: rgb(var(--c-brand-50) / 0.55);
+  }
+  .admin-portal table tbody td {
+    @apply align-middle;
+  }
+  .admin-portal .overflow-x-auto {
+    /* Contains absolutely positioned children (sr-only labels in a wide
+       table's header), which otherwise escape and widen the whole page. */
+    position: relative;
+    scrollbar-width: thin;
+  }
+
+  /* The console's sidebar: night navy in both themes. */
+  .admin-sidebar {
+    background:
+      radial-gradient(ellipse 120% 40% at 0% 0%, rgb(8 120 209 / 0.22), transparent 70%),
+      radial-gradient(ellipse 120% 30% at 100% 100%, rgb(32 178 107 / 0.14), transparent 70%),
+      linear-gradient(180deg, #0a1b35 0%, #071426 45%, #050b18 100%);
+  }
+
   .skeleton::after {
     content: "";
     @apply absolute inset-0 -translate-x-full animate-shimmer;

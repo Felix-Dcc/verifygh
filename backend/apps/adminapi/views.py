@@ -13,7 +13,7 @@ Two rules run through every view here:
 from __future__ import annotations
 
 import logging
-from datetime import timedelta
+from datetime import datetime, time, timedelta
 from decimal import Decimal
 
 from django.db import transaction
@@ -26,7 +26,8 @@ from rest_framework.permissions import IsAuthenticated
 from rest_framework.response import Response
 from rest_framework.views import APIView
 
-from apps.accounts.constants import AdminPermission, Role
+from apps.accounts import staff
+from apps.accounts.constants import STAFF_ROLES, AdminPermission, Role
 from apps.accounts.models import LoginAttempt, User
 from apps.adminapi.serializers import (
     AdminActionSerializer,
@@ -40,7 +41,9 @@ from apps.adminapi.serializers import (
     AdminUserSerializer,
     AuditLogSerializer,
     ChangeEmailSerializer,
+    ChangeRoleSerializer,
     ExchangeRateSerializer,
+    InviteStaffSerializer,
     IssueRefundSerializer,
     PriceChangeSerializer,
     PricingRuleSerializer,
@@ -176,6 +179,100 @@ class AdminOverviewView(AdminBase, APIView):
         )
 
 
+#: Orders that earned revenue: the customer got (or is reading) their code.
+EARNING = [OrderStatus.COMPLETED, OrderStatus.CODE_RECEIVED]
+#: Orders that ended without earning. REFUNDED is counted apart from these.
+UNSUCCESSFUL = [OrderStatus.FAILED, OrderStatus.EXPIRED, OrderStatus.CANCELLED]
+
+
+def _by_day(queryset, **aggregates) -> dict:
+    """{local date: row} for one queryset, grouped on created_at."""
+    rows = (queryset.annotate(day=TruncDate("created_at")).values("day")
+            .annotate(**aggregates).order_by("day"))
+    return {row["day"]: row for row in rows}
+
+
+def _money(value) -> Decimal:
+    return Decimal(value or 0).quantize(Decimal("0.01"))
+
+
+def _period(start, end) -> dict:
+    """Everything the dashboard charts, day by day, for [start, end) local dates.
+
+    Every day in the range is present, with zeros on a quiet day - a chart
+    that skips empty days draws a busy week where there was a dead one.
+    """
+    tz = timezone.get_current_timezone()
+    lower = timezone.make_aware(datetime.combine(start, time.min), tz)
+    upper = timezone.make_aware(datetime.combine(end, time.min), tz)
+    window = Q(created_at__gte=lower, created_at__lt=upper)
+    cost = ExpressionWrapper(F("provider_cost") * F("exchange_rate"), output_field=MONEY)
+    earning = Q(status__in=EARNING)
+
+    orders = _by_day(
+        Order.objects.filter(window),
+        total=Count("id"),
+        completed=Count("id", filter=earning),
+        refunded=Count("id", filter=Q(status=OrderStatus.REFUNDED)),
+        failed=Count("id", filter=Q(status__in=UNSUCCESSFUL)),
+        revenue=Sum("price", filter=earning),
+        cost=Sum(cost, filter=earning),
+    )
+    deposits = _by_day(
+        Payment.objects.filter(window, status=PaymentStatus.SUCCESS),
+        amount=Sum("amount"), count=Count("id"),
+    )
+    signups = _by_day(
+        User.objects.filter(window),
+        total=Count("id"), verified=Count("id", filter=Q(is_email_verified=True)),
+    )
+
+    series = []
+    day = start
+    while day < end:
+        o, d, s = orders.get(day, {}), deposits.get(day, {}), signups.get(day, {})
+        revenue, spent = _money(o.get("revenue")), _money(o.get("cost"))
+        total = o.get("total", 0)
+        series.append({
+            "date": str(day),
+            "revenue": str(revenue),
+            "cost": str(spent),
+            "profit": str(revenue - spent),
+            "orders": total,
+            "completed": o.get("completed", 0),
+            "refunded": o.get("refunded", 0),
+            "failed": o.get("failed", 0),
+            "active": total - o.get("completed", 0) - o.get("refunded", 0) - o.get("failed", 0),
+            "deposits": str(_money(d.get("amount"))),
+            "deposit_count": d.get("count", 0),
+            "signups": s.get("total", 0),
+            "verified_signups": s.get("verified", 0),
+        })
+        day += timedelta(days=1)
+
+    def total(key, money=False):
+        values = [Decimal(row[key]) if money else row[key] for row in series]
+        return str(sum(values, Decimal("0.00"))) if money else sum(values)
+
+    completed, refunded, failed = total("completed"), total("refunded"), total("failed")
+    finished = completed + refunded + failed
+    totals = {
+        "revenue": total("revenue", money=True),
+        "cost": total("cost", money=True),
+        "profit": total("profit", money=True),
+        "orders": total("orders"),
+        "completed": completed,
+        "refunded": refunded,
+        "failed": failed,
+        "deposits": total("deposits", money=True),
+        "deposit_count": total("deposit_count"),
+        "signups": total("signups"),
+        "verified_signups": total("verified_signups"),
+        "success_rate": round(completed / finished * 100, 1) if finished else None,
+    }
+    return {"series": series, "totals": totals}
+
+
 class AdminChartsView(AdminBase, APIView):
     required_permission = AdminPermission.METRICS_VIEW
 
@@ -185,6 +282,12 @@ class AdminChartsView(AdminBase, APIView):
         except (TypeError, ValueError):
             days = 14
         since = timezone.now() - timedelta(days=days)
+
+        # The trend: the last `days` local days including today, and the same
+        # length just before it for the "vs previous period" comparison.
+        end = timezone.localdate() + timedelta(days=1)
+        current = _period(end - timedelta(days=days), end)
+        previous = _period(end - timedelta(days=2 * days), end - timedelta(days=days))
 
         revenue_series = list(
             Order.objects.filter(
@@ -270,6 +373,9 @@ class AdminChartsView(AdminBase, APIView):
                 "failure_rate": round((failed_orders / total_orders * 100), 2)
                 if total_orders
                 else 0.0,
+                "series": current["series"],
+                "totals": current["totals"],
+                "previous_totals": previous["totals"],
             }
         )
 
@@ -310,7 +416,21 @@ class AdminUserViewSet(AdminBase, mixins.ListModelMixin, mixins.RetrieveModelMix
         role = self.request.query_params.get("role")
         if role:
             queryset = queryset.filter(role=role.upper())
+        if self.request.query_params.get("staff") == "true":
+            queryset = queryset.filter(role__in=STAFF_ROLES)
+        if self.request.query_params.get("former_staff") == "true":
+            # Once held staff access (from the admin log) - the one kind of
+            # customer account that may be given a staff role again.
+            queryset = queryset.filter(role=Role.USER, pk__in=self._staff_history())
         return queryset.order_by("-created_at")
+
+    def _staff_history(self) -> set[str]:
+        if not hasattr(self, "_staff_history_ids"):
+            self._staff_history_ids = staff.staff_history_ids()
+        return self._staff_history_ids
+
+    def get_serializer_context(self):
+        return {**super().get_serializer_context(), "staff_history": self._staff_history()}
 
     def _get_user(self) -> User:
         user = User.objects.select_related("wallet").filter(pk=self.kwargs["pk"]).first()
@@ -392,6 +512,45 @@ class AdminUserViewSet(AdminBase, mixins.ListModelMixin, mixins.RetrieveModelMix
             target.save(update_fields=["is_suspended", "suspended_at", "suspension_reason",
                                        "updated_at"])
         return Response(AdminUserSerializer(self._get_user()).data)
+
+    @action(detail=True, methods=["post"])
+    def role(self, request, pk=None):
+        """Assign a role. Super admins only; the rules live in accounts.staff."""
+        self.required_permission = AdminPermission.USER_ROLE_CHANGE
+        self.check_permissions(request)
+
+        serializer = ChangeRoleSerializer(data=request.data)
+        serializer.is_valid(raise_exception=True)
+        staff.change_role(
+            target=self._get_user(), role=serializer.validated_data["role"],
+            reason=serializer.validated_data["reason"], actor=request.user, request=request,
+        )
+        return Response(AdminUserSerializer(self._get_user()).data)
+
+    @action(detail=False, methods=["post"])
+    def invite(self, request):
+        """Create a staff account; its owner chooses the password from an email."""
+        self.required_permission = AdminPermission.USER_ROLE_CHANGE
+        self.check_permissions(request)
+
+        serializer = InviteStaffSerializer(data=request.data)
+        serializer.is_valid(raise_exception=True)
+        user, delivered = staff.invite_staff(**serializer.validated_data, actor=request.user,
+                                             request=request)
+        data = AdminUserSerializer(User.objects.select_related("wallet").get(pk=user.pk)).data
+        return Response({**data, "invite_sent": delivered}, status=201)
+
+    @action(detail=True, methods=["post"], url_path="resend-invite")
+    def resend_invite(self, request, pk=None):
+        self.required_permission = AdminPermission.USER_ROLE_CHANGE
+        self.check_permissions(request)
+
+        target = self._get_user()
+        delivered = staff.send_invite(target, actor=request.user, request=request)
+        if not delivered:
+            raise Conflict("The email provider didn't accept the invitation. Try again shortly.",
+                           code="EMAIL_NOT_SENT")
+        return Response({"detail": f"Invitation sent to {target.email}."})
 
     @action(detail=True, methods=["post"], url_path="change-email")
     def change_email(self, request, pk=None):

@@ -492,6 +492,43 @@ export type AdminCharts = {
   popular_services: { slug: string; name: string; orders: number; revenue: string }[];
   payment_methods: { network: string; count: number; amount: string }[];
   failure_rate: number;
+  /** Every day in the range, oldest first, zeros on quiet days. */
+  series: AdminChartDay[];
+  totals: AdminChartTotals;
+  /** The same length of time just before the range, for comparisons. */
+  previous_totals: AdminChartTotals;
+};
+
+export type AdminChartDay = {
+  date: string;
+  revenue: string;
+  cost: string;
+  profit: string;
+  orders: number;
+  completed: number;
+  refunded: number;
+  failed: number;
+  active: number;
+  deposits: string;
+  deposit_count: number;
+  signups: number;
+  verified_signups: number;
+};
+
+export type AdminChartTotals = {
+  revenue: string;
+  cost: string;
+  profit: string;
+  orders: number;
+  completed: number;
+  refunded: number;
+  failed: number;
+  deposits: string;
+  deposit_count: number;
+  signups: number;
+  verified_signups: number;
+  /** Completed out of finished orders; null when none finished. */
+  success_rate: number | null;
 };
 
 export type AdminUser = {
@@ -509,6 +546,12 @@ export type AdminUser = {
   balance: string;
   order_count: number;
   open_flags: number;
+  /** An invited staff member who has not chosen a password yet. */
+  invite_pending: boolean;
+  /** A customer account that once held staff access, so it may be re-added. */
+  former_staff: boolean;
+  /** Whether they have chosen a password yet. */
+  has_password: boolean;
   last_login: string | null;
   created_at: string;
 };

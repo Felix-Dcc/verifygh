@@ -1,0 +1,22 @@
+{% extends "emails/base.html" %}
+{% comment %}Staff invitation, HTML alternative to staff_invite.txt.{% endcomment %}
+
+{% block preheader %}{{ inviter }} invited you to the {{ brand }} team. The link expires in {{ hours }} hours.{% endblock %}
+
+{% block heading %}You're invited to the team{% endblock %}
+
+{% block content %}
+<p style="margin:0 0 14px 0;">Hi {{ full_name }},</p>
+<p style="margin:0 0 14px 0;">{{ inviter }} invited you to join the {{ brand }} team as <strong>{{ role }}</strong>.</p>
+<p style="margin:0;">Choose your password to set up your account, then sign in and open the admin console.</p>
+{% endblock %}
+
+{% block action %}{% include "emails/_button.html" with url=setup_url label="Set up my account" %}{% endblock %}
+
+{% block fine_print %}
+<p style="margin:0 0 8px 0;">This link expires in {{ hours }} hours and can only be used once.</p>
+<p style="margin:0 0 8px 0;">If you weren't expecting this, you can ignore this email &mdash; no account access
+  is possible without the link.</p>
+<p style="margin:0;">Support:
+  <a href="mailto:{{ support_email }}" style="color:#0b6446; text-decoration:underline;">{{ support_email }}</a></p>
+{% endblock %}

@@ -21,6 +21,8 @@ function ResetPasswordForm() {
   const router = useRouter();
   const params = useSearchParams();
   const token = params.get("token") ?? "";
+  // A staff invitation lands here too: the same one-time link, set-up wording.
+  const invite = params.get("invite") === "1";
 
   const [password, setPassword] = React.useState("");
   const [confirm, setConfirm] = React.useState("");
@@ -58,7 +60,7 @@ function ResetPasswordForm() {
       <Card className="p-6">
         <h1 className="text-title text-ink">This link is not valid</h1>
         <p className="mt-2 text-sm text-ink-muted">
-          The reset link is missing its token. Request a new one and use the most recent email.
+          The link is missing its token. Request a new one and use the most recent email.
         </p>
         <ButtonLink href="/forgot-password" fullWidth className="mt-5">
           Request a new link
@@ -70,22 +72,24 @@ function ResetPasswordForm() {
   return (
     <div>
       <div className="mb-6">
-        <h1 className="text-title text-ink">Choose a new password</h1>
+        <h1 className="text-title text-ink">{invite ? "Set up your account" : "Choose a new password"}</h1>
         <p className="mt-1.5 text-sm text-ink-muted">
-          Once you save it, you will be signed out everywhere else.
+          {invite
+            ? "Choose the password you'll use to sign in to VerifyGH. Only you will know it."
+            : "Once you save it, you will be signed out everywhere else."}
         </p>
       </div>
 
       <Card className="p-5 sm:p-6">
         <form onSubmit={onSubmit} noValidate className="space-y-4">
           {error ? (
-            <Alert tone="danger" title="Could not reset your password">
+            <Alert tone="danger" title={invite ? "Could not set your password" : "Could not reset your password"}>
               {error}
             </Alert>
           ) : null}
 
           <Field
-            label="New password"
+            label={invite ? "Password" : "New password"}
             htmlFor="new_password"
             error={fieldErrors.new_password}
             hint={`At least ${MIN_PASSWORD_LENGTH} characters.`}
@@ -102,7 +106,7 @@ function ResetPasswordForm() {
             />
           </Field>
 
-          <Field label="Confirm new password" htmlFor="confirm" error={fieldErrors.confirm} required>
+          <Field label={invite ? "Confirm password" : "Confirm new password"} htmlFor="confirm" error={fieldErrors.confirm} required>
             <PasswordInput
               id="confirm"
               autoComplete="new-password"
@@ -114,7 +118,7 @@ function ResetPasswordForm() {
           </Field>
 
           <Button type="submit" size="lg" fullWidth loading={submitting}>
-            Save new password
+            {invite ? "Create password" : "Save new password"}
           </Button>
         </form>
       </Card>

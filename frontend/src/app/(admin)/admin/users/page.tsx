@@ -4,6 +4,7 @@ import * as React from "react";
 import useSWR from "swr";
 
 import { Pagination } from "@/components/admin/pagination";
+import { ROLE_INFO, RoleBadge, RoleChangeForm } from "@/components/admin/team";
 import { PageHeader } from "@/components/app-shell";
 import { useAuth } from "@/components/auth-provider";
 import { SearchIcon, UsersIcon } from "@/components/icons";
@@ -212,6 +213,7 @@ export default function AdminUsersPage() {
         canChangeEmail={can("USER_EMAIL_CHANGE")}
         canAdjust={can("WALLET_ADJUST")}
         canViewWallet={can("WALLET_VIEW")}
+        canChangeRole={can("USER_ROLE_CHANGE")}
       />
     </div>
   );
@@ -238,7 +240,8 @@ function UserFlags({ user }: { user: AdminUser }) {
       {user.is_suspended ? <Badge tone="danger">Suspended</Badge> : null}
       {user.open_flags > 0 ? <Badge tone="warn">{user.open_flags} flags</Badge> : null}
       {!user.is_email_verified ? <Badge tone="neutral">Unverified</Badge> : null}
-      {user.role !== "USER" ? <Badge tone="brand">{user.role}</Badge> : null}
+      {user.invite_pending ? <Badge tone="warn">Invite pending</Badge> : null}
+      {user.role !== "USER" ? <RoleBadge role={user.role} /> : null}
       {user.is_suspended || user.open_flags || !user.is_email_verified || user.role !== "USER" ? null : (
         <Badge tone="success" dot>
           Active
@@ -258,6 +261,7 @@ function UserDetailDialog({
   canChangeEmail,
   canAdjust,
   canViewWallet,
+  canChangeRole,
 }: {
   user: AdminUser | null;
   onClose: () => void;
@@ -266,9 +270,11 @@ function UserDetailDialog({
   canChangeEmail: boolean;
   canAdjust: boolean;
   canViewWallet: boolean;
+  canChangeRole: boolean;
 }) {
   const toast = useToast();
-  const [tab, setTab] = React.useState<"details" | "suspend" | "adjust" | "email" | "email-confirm">(
+  const { user: me } = useAuth();
+  const [tab, setTab] = React.useState<"details" | "suspend" | "adjust" | "email" | "email-confirm" | "role">(
     "details",
   );
   const [reason, setReason] = React.useState("");
@@ -344,7 +350,7 @@ function UserDetailDialog({
               <Detail label="Balance" value={cedis(user.balance)} />
               <Detail label="Orders" value={String(user.order_count)} />
               <Detail label="Phone" value={user.phone ? localPhone(user.phone) : "Not set"} />
-              <Detail label="Role" value={user.role} />
+              <Detail label="Role" value={ROLE_INFO[user.role]?.label ?? user.role} />
               <div className="flex items-center justify-between gap-4 px-3.5 py-2.5">
                 <dt className="text-sm text-ink-muted">Email</dt>
                 <dd className="flex min-w-0 items-center gap-2 text-sm text-ink">
@@ -416,6 +422,13 @@ function UserDetailDialog({
               {canChangeEmail && !user.is_email_verified ? (
                 <Button variant="secondary" fullWidth onClick={() => setTab("email")}>
                   Change email
+                </Button>
+              ) : null}
+              {/* Staff, or former staff being re-added. Customers are never
+                  promoted - new staff are invited. */}
+              {canChangeRole && (user.role !== "USER" || user.former_staff) && user.id !== me?.id ? (
+                <Button variant="secondary" fullWidth onClick={() => setTab("role")}>
+                  {user.role === "USER" ? "Re-add to team" : "Change role"}
                 </Button>
               ) : null}
             </div>
@@ -588,6 +601,17 @@ function UserDetailDialog({
               </Button>
             </div>
           </div>
+        ) : null}
+
+        {tab === "role" ? (
+          <RoleChangeForm
+            user={user}
+            onCancel={() => setTab("details")}
+            onDone={() => {
+              onChanged();
+              onClose();
+            }}
+          />
         ) : null}
 
         {tab === "adjust" ? (

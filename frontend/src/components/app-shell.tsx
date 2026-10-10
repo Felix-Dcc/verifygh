@@ -13,6 +13,7 @@ import {
   BellIcon,
   BoltIcon,
   ChartIcon,
+  ChevronRightIcon,
   CloseIcon,
   FlagIcon,
   GiftIcon,
@@ -53,6 +54,8 @@ type NavItem = {
   match?: string[];
   /** Only the exact path is active (for a parent like /account). */
   exact?: boolean;
+  /** Shown only to roles holding this permission. */
+  permission?: string;
 };
 
 type NavGroup = { label?: string; items: NavItem[] };
@@ -107,7 +110,13 @@ const ADMIN_NAV: NavGroup[] = [
     ],
   },
   { label: "Growth", items: [{ href: "/admin/referrals", label: "Referrals", icon: GiftIcon }] },
-  { label: "Platform", items: [{ href: "/admin/system", label: "System", icon: SettingsIcon }] },
+  {
+    label: "Platform",
+    items: [
+      { href: "/admin/team", label: "Team", icon: UserIcon, permission: "USER_ROLE_CHANGE" },
+      { href: "/admin/system", label: "System", icon: SettingsIcon },
+    ],
+  },
 ];
 
 function useIsActive() {
@@ -120,6 +129,16 @@ function useIsActive() {
     },
     [pathname],
   );
+}
+
+function roleLabel(role: string): string {
+  const labels: Record<string, string> = {
+    SUPER_ADMIN: "Super admin",
+    ADMIN: "Admin",
+    SUPPORT: "Support",
+    USER: "Customer",
+  };
+  return labels[role] ?? role;
 }
 
 /** `Kwame Mensah` -> `KM`, `felix@gmail.com` -> `F`. */
@@ -142,17 +161,20 @@ export function AppShell({
   const groups = React.useMemo(
     () =>
       variant === "admin"
-        ? ADMIN_NAV
+        ? ADMIN_NAV.map((group) => ({
+            ...group,
+            items: group.items.filter((item) => !item.permission || can(item.permission)),
+          }))
         : // Referrals appear only while the programme is running.
           USER_NAV.map((group) => ({
             ...group,
             items: group.items.filter((item) => referrals || item.href !== "/refer"),
           })),
-    [variant, referrals],
+    [variant, referrals, can],
   );
 
   return (
-    <div className="min-h-dvh bg-canvas">
+    <div className={cn("min-h-dvh", variant === "admin" ? "admin-portal" : "bg-canvas")}>
       <Sidebar groups={groups} variant={variant} />
       <div className="lg:pl-60">
         <TopBar variant={variant} />
@@ -173,21 +195,27 @@ export function AppShell({
 /* ------------------------------------------------------------------ */
 
 function Sidebar({ groups, variant }: { groups: NavGroup[]; variant: "user" | "admin" }) {
-  const { isStaff } = useAuth();
+  const { isStaff, user } = useAuth();
   const pathname = usePathname();
+  const admin = variant === "admin";
   const { data: unread } = useSWR<{ count: number }>(
     variant === "user" ? "/notifications/unread/" : null,
     { refreshInterval: 60_000 },
   );
 
   return (
-    <aside className="fixed inset-y-0 left-0 z-40 hidden w-60 flex-col border-r border-line bg-surface lg:flex">
+    <aside
+      className={cn(
+        "fixed inset-y-0 left-0 z-40 hidden w-60 flex-col lg:flex",
+        admin ? "admin-sidebar text-white" : "border-r border-line bg-surface",
+      )}
+    >
       <div className="flex h-14 shrink-0 items-center gap-2 px-5">
-        <Link href={variant === "admin" ? "/admin" : "/dashboard"} className="rounded-md">
-          <Logo className="[&_svg]:h-7 [&_svg]:w-7" />
+        <Link href={admin ? "/admin" : "/dashboard"} className="rounded-md">
+          <Logo className="[&_svg]:h-7 [&_svg]:w-7" tone={admin ? "light" : "brand"} />
         </Link>
-        {variant === "admin" ? (
-          <span className="rounded border border-line px-1.5 py-px text-2xs font-semibold uppercase tracking-wide text-ink-muted">
+        {admin ? (
+          <span className="rounded-md bg-white/10 px-1.5 py-px text-2xs font-semibold uppercase tracking-wide text-white/80 ring-1 ring-inset ring-white/15">
             Admin
           </span>
         ) : null}
@@ -197,7 +225,12 @@ function Sidebar({ groups, variant }: { groups: NavGroup[]; variant: "user" | "a
         {groups.map((group, index) => (
           <div key={group.label ?? index} className={cn(index > 0 && "mt-5")}>
             {group.label ? (
-              <p className="mb-1 px-2.5 text-2xs font-medium uppercase tracking-wider text-ink-faint">
+              <p
+                className={cn(
+                  "mb-1 px-2.5 text-2xs font-medium uppercase tracking-wider",
+                  admin ? "text-white/40" : "text-ink-faint",
+                )}
+              >
                 {group.label}
               </p>
             ) : null}
@@ -206,6 +239,7 @@ function Sidebar({ groups, variant }: { groups: NavGroup[]; variant: "user" | "a
                 <li key={item.href}>
                   <SidebarLink
                     item={item}
+                    dark={admin}
                     badge={item.href === "/account/notifications" ? unread?.count : undefined}
                   />
                 </li>
@@ -215,7 +249,18 @@ function Sidebar({ groups, variant }: { groups: NavGroup[]; variant: "user" | "a
         ))}
       </nav>
 
-      <div className="border-t border-line px-3 py-3">
+      <div className={cn("border-t px-3 py-3", admin ? "border-white/10" : "border-line")}>
+        {admin && user ? (
+          <div className="mb-2 flex items-center gap-3 rounded-lg bg-white/5 px-2.5 py-2 ring-1 ring-inset ring-white/10">
+            <span className="flex h-8 w-8 shrink-0 items-center justify-center rounded-full bg-gradient-to-br from-aqua to-leaf text-caption font-semibold text-navy">
+              {initials(user.full_name, user.email)}
+            </span>
+            <span className="min-w-0">
+              <span className="block truncate text-sm font-medium text-white">{user.full_name || user.email}</span>
+              <span className="block truncate text-2xs text-white/55">{roleLabel(user.role)}</span>
+            </span>
+          </div>
+        ) : null}
         {variant === "user" ? (
           <Link
             href="/help"
@@ -231,10 +276,13 @@ function Sidebar({ groups, variant }: { groups: NavGroup[]; variant: "user" | "a
         ) : null}
         {isStaff ? (
           <Link
-            href={variant === "admin" ? "/dashboard" : "/admin"}
-            className="flex h-9 items-center gap-3 rounded-lg px-2.5 text-sm font-medium text-ink-soft transition-colors hover:bg-sunken hover:text-ink"
+            href={admin ? "/dashboard" : "/admin"}
+            className={cn(
+              "flex h-9 items-center gap-3 rounded-lg px-2.5 text-sm font-medium transition-colors",
+              admin ? "text-white/70 hover:bg-white/10 hover:text-white" : "text-ink-soft hover:bg-sunken hover:text-ink",
+            )}
           >
-            <ShieldIcon className="h-5 w-5 text-ink-faint" />
+            <ShieldIcon className={cn("h-5 w-5", admin ? "text-white/45" : "text-ink-faint")} />
             {variant === "admin" ? "Customer view" : "Admin console"}
           </Link>
         ) : null}
@@ -243,7 +291,7 @@ function Sidebar({ groups, variant }: { groups: NavGroup[]; variant: "user" | "a
   );
 }
 
-function SidebarLink({ item, badge }: { item: NavItem; badge?: number }) {
+function SidebarLink({ item, badge, dark = false }: { item: NavItem; badge?: number; dark?: boolean }) {
   const isActive = useIsActive();
   const active = isActive(item);
   const Icon = item.icon;
@@ -253,7 +301,13 @@ function SidebarLink({ item, badge }: { item: NavItem; badge?: number }) {
       aria-current={active ? "page" : undefined}
       className={cn(
         "group relative flex h-9 items-center gap-3 rounded-lg px-2.5 text-sm font-medium transition-colors",
-        active ? "bg-sunken text-ink" : "text-ink-soft hover:bg-sunken hover:text-ink",
+        dark
+          ? active
+            ? "bg-white/10 text-white ring-1 ring-inset ring-white/10"
+            : "text-white/65 hover:bg-white/5 hover:text-white"
+          : active
+            ? "bg-sunken text-ink"
+            : "text-ink-soft hover:bg-sunken hover:text-ink",
       )}
     >
       {active ? (
@@ -262,7 +316,13 @@ function SidebarLink({ item, badge }: { item: NavItem; badge?: number }) {
       <Icon
         className={cn(
           "h-5 w-5 shrink-0 transition-colors",
-          active ? "text-brand-600" : "text-ink-faint group-hover:text-ink-muted",
+          dark
+            ? active
+              ? "text-aqua"
+              : "text-white/40 group-hover:text-white/70"
+            : active
+              ? "text-brand-600"
+              : "text-ink-faint group-hover:text-ink-muted",
         )}
       />
       <span className="truncate">{item.label}</span>
@@ -304,7 +364,7 @@ function TopBar({ variant }: { variant: "user" | "admin" }) {
           </span>
         </Link>
 
-        {variant === "user" ? <ServiceSearch /> : null}
+        {variant === "user" ? <ServiceSearch /> : <AdminContext />}
 
         <div className="ml-auto flex items-center gap-1.5 sm:gap-2">
           {variant === "user" ? (
@@ -348,6 +408,33 @@ function TopBar({ variant }: { variant: "user" | "admin" }) {
         </div>
       </div>
     </header>
+  );
+}
+
+/** Where you are in the console: section, then page. */
+function AdminContext() {
+  const pathname = usePathname();
+  const item = ADMIN_NAV.flatMap((group) => group.items.map((entry) => ({ ...entry, group: group.label })))
+    .filter((entry) =>
+      entry.exact ? pathname === entry.href : pathname === entry.href || pathname.startsWith(`${entry.href}/`),
+    )
+    .sort((a, b) => b.href.length - a.href.length)[0];
+  return (
+    <div className="hidden min-w-0 flex-1 items-center gap-2 text-sm lg:flex">
+      <span className="text-ink-faint">Admin</span>
+      {item?.group ? (
+        <>
+          <ChevronRightIcon className="h-3.5 w-3.5 text-ink-faint" />
+          <span className="text-ink-faint">{item.group}</span>
+        </>
+      ) : null}
+      {item ? (
+        <>
+          <ChevronRightIcon className="h-3.5 w-3.5 text-ink-faint" />
+          <span className="truncate font-medium text-ink">{item.label}</span>
+        </>
+      ) : null}
+    </div>
   );
 }
 
