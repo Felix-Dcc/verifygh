@@ -399,3 +399,28 @@ def test_other_signals_list_no_accounts(as_admin, user):
 
     (flag,) = as_admin.get("/api/v1/admin/flags/").data["results"]
     assert flag["linked_accounts"] == []
+
+
+def test_a_service_scoped_pricing_rule_can_be_edited(as_admin, catalog, pricing_rule):
+    """10 Oct 2026: editing the Telegram / US rule failed with a 500 - the audit
+    record held the rule's UUID service and country, which JSON cannot store."""
+    from decimal import Decimal
+
+    from apps.audit.models import AdminAction
+    from apps.catalog.models import Country, Service
+    from apps.pricing.models import MarkupType, PricingRule
+
+    rule = PricingRule.objects.create(
+        name="Markup: Instagram / US", service=Service.objects.get(slug="instagram"),
+        country=Country.objects.get(code="US"), markup_type=MarkupType.PERCENTAGE,
+        markup_percent=Decimal("40.00"), priority=1000,
+    )
+    response = as_admin.patch(f"/api/v1/admin/pricing-rules/{rule.id}/", {
+        "markup_type": "FIXED", "markup_fixed": "4.60", "markup_percent": "0.00",
+        "reason": "Owner: at least GH₵5 profit"}, format="json")
+
+    assert response.status_code == 200, response.data
+    rule.refresh_from_db()
+    assert rule.markup_type == "FIXED" and rule.markup_fixed == Decimal("4.60")
+    entry = AdminAction.objects.get(action="PRICING_RULE_UPDATE")
+    assert entry.before["markup_type"] == "PERCENTAGE" and entry.after["markup_type"] == "FIXED"

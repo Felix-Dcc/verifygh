@@ -45,6 +45,20 @@ def record_audit(*, actor=None, action: str, target=None, request=None, metadata
         logger.exception("audit_write_failed", extra={"action": action})
 
 
+def _json_safe(value):
+    """As stored in a JSON column: UUIDs, Decimals and datetimes as strings.
+
+    Serializer output carries UUID foreign keys (a pricing rule's service and
+    country), which the JSON column cannot store as they are - every edit of a
+    service-scoped pricing rule failed on 10 Oct 2026, rolling the edit back.
+    """
+    import json
+
+    from django.core.serializers.json import DjangoJSONEncoder
+
+    return json.loads(json.dumps(value, cls=DjangoJSONEncoder))
+
+
 def record_admin_action(*, admin, action: str, target, reason: str, before=None, after=None,
                         request=None) -> AdminAction:
     """Write the privileged-action record. Raises if it cannot be written."""
@@ -57,8 +71,8 @@ def record_admin_action(*, admin, action: str, target, reason: str, before=None,
         target_type=target_type,
         target_id=target_id,
         reason=reason.strip(),
-        before=redact_mapping(before or {}),
-        after=redact_mapping(after or {}),
+        before=_json_safe(redact_mapping(before or {})),
+        after=_json_safe(redact_mapping(after or {})),
         ip_address=(get_client_ip(request) if request else None) or None,
         request_id=getattr(request, "request_id", "") if request else "",
     )
