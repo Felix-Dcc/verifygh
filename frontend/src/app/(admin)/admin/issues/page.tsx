@@ -344,7 +344,7 @@ const VERBS: Record<
     label: "Provider refunded",
     done: "Customer refunded",
     warning:
-      "Use when TextVerified refunded the credits through support. Credits the customer's wallet with the full order price. VerifyGH also does this automatically when TextVerified marks the verification refunded.",
+      "Use when TextVerified refunded the credits through support - also after you declined the report, which reverses that decision. Credits the customer's wallet with the full order price; a reversed decision is also emailed to the customer. VerifyGH does this automatically when TextVerified marks a waiting verification refunded.",
   },
   "provider-declined": {
     label: "Provider declined",
@@ -403,6 +403,8 @@ function IssueDialog({
       if (canRemedy) available.push("provider-refunded");
       if (canManage) available.push("provider-declined");
     }
+    // Declined, then the provider refunded after all: reverse the decision.
+    if (issue.status === "REJECTED" && canRemedy) available.push("provider-refunded");
   }
 
   async function submit(event: React.FormEvent) {

@@ -569,11 +569,17 @@ def settle_provider_refund(issue, *, admin, reason: str, request=None) -> Verifi
 
     Called by the scheduled check when the provider's verification shows the
     refund, or by staff when the provider refunded through its support instead.
+
+    Staff may also use it on a report already rejected: the provider can
+    refund after a decline was recorded (9 Oct: TextVerified refunded a
+    WhatsApp claim staff had already declined). That reverses the decision -
+    recorded as such - and tells the customer by email as well.
     """
     from apps.orders.models import RefundReason, RefundStatus
     from apps.orders.services import issue_refund
 
-    if issue.status != IssueStatus.AWAITING_PROVIDER:
+    reversing = admin is not None and issue.status == IssueStatus.REJECTED
+    if issue.status != IssueStatus.AWAITING_PROVIDER and not reversing:
         raise Conflict("This report is not waiting for the provider.")
     order = paying_order(issue)
     before = {"issue_status": issue.status, "refund_status": order.refund_status}
@@ -587,19 +593,30 @@ def settle_provider_refund(issue, *, admin, reason: str, request=None) -> Verifi
             raise Conflict("The refund could not be completed. Nothing was credited.")
 
     if admin is not None:
-        record_admin_action(admin=admin, action="ISSUE_PROVIDER_REFUNDED", target=issue,
-                            reason=reason, before=before,
-                            after={"order": order.reference, "amount": str(order.price)},
+        record_admin_action(admin=admin,
+                            action=("ISSUE_DECISION_REVERSED" if reversing
+                                    else "ISSUE_PROVIDER_REFUNDED"),
+                            target=issue, reason=reason, before=before,
+                            after={"order": order.reference, "amount": str(order.price),
+                                   "status": "REFUNDED"},
                             request=request)
     record_audit(actor=admin, action="NUMBER_ISSUE_PROVIDER_REFUNDED", target=issue,
-                 request=request, metadata={"order": order.reference})
+                 request=request, metadata={"order": order.reference, "reversed": reversing})
     _confirm_number(issue)
     issue = _finish(issue, admin=admin, status=IssueStatus.REFUNDED, note=reason,
-                    allowed_from={IssueStatus.AWAITING_PROVIDER},
-                    provider_report=ProviderReportStatus.ACCEPTED)
-    _notify(issue, "Refund approved",
-            f"Our number provider approved your report on {issue.order.reference}. "
-            f"{format_ghs(order.price)} is back in your wallet.")
+                    allowed_from={IssueStatus.REJECTED if reversing
+                                  else IssueStatus.AWAITING_PROVIDER},
+                    provider_report=ProviderReportStatus.ACCEPTED, customer_reply="")
+    if reversing:
+        _notify(issue, "Good news: your refund was approved",
+                f"We took another look at your report on {issue.order.reference}. Our number "
+                f"provider approved it after all, so {format_ghs(order.price)} is back in "
+                "your wallet. Sorry for the earlier answer.",
+                email=True)
+    else:
+        _notify(issue, "Refund approved",
+                f"Our number provider approved your report on {issue.order.reference}. "
+                f"{format_ghs(order.price)} is back in your wallet.")
     return issue
 
 
@@ -745,10 +762,12 @@ def _confirm_number(issue: VerificationIssue) -> None:
             _set_quality(issue.number_record, NumberQuality.REPORTED_REUSED)
 
 
-def _notify(issue: VerificationIssue, title: str, body: str) -> None:
+def _notify(issue: VerificationIssue, title: str, body: str, *, email: bool = False) -> None:
+    from apps.notifications.models import Channel
     from apps.notifications.services import notify
 
     notify(issue.user, event="NUMBER_ISSUE_UPDATED", title=title, body=body,
+           channels=(Channel.IN_APP, Channel.EMAIL) if email else (Channel.IN_APP,),
            metadata={"order_reference": issue.order.reference, "issue": issue.reference})
 
 

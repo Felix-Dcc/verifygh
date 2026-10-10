@@ -832,3 +832,31 @@ def test_report_screenshots_are_the_formats_textverified_takes(customer, deliver
     gif = customer.post(f"/api/v1/orders/{delivered.reference}/report/",
                         {**LINKED, "evidence": [screenshot(GIF, "x.gif")]}, format="multipart")
     assert gif.status_code == 201, gif.data
+
+
+def test_a_declined_report_is_reversed_when_the_provider_refunds_after_all(
+        user, customer, staff, delivered, reviewing):
+    """9 Oct: TextVerified refunded a WhatsApp claim staff had already declined."""
+    from django.core import mail
+
+    report_with_evidence(customer, delivered)
+    issue = VerificationIssue.objects.get(order=delivered)
+    assert act(staff, issue.reference, "provider-declined",
+               reason="Code was delivered.").status_code == 200
+    before = balance(user)
+    mail.outbox.clear()
+
+    response = act(staff, issue.reference, "provider-refunded",
+                   reason="TextVerified refunded the credits after review")
+    assert response.status_code == 200, response.data
+    issue.refresh_from_db()
+    assert issue.status == IssueStatus.REFUNDED and issue.customer_reply == ""
+    assert balance(user) == before + delivered.price
+    assert AdminAction.objects.filter(action="ISSUE_DECISION_REVERSED").exists()
+    assert any("approved" in m.subject.lower() or "approved" in m.body.lower()
+               for m in mail.outbox), [m.subject for m in mail.outbox]
+
+    # Once refunded it cannot be refunded again.
+    assert act(staff, issue.reference, "provider-refunded",
+               reason="again").status_code == 409
+    assert balance(user) == before + delivered.price
