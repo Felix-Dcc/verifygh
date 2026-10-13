@@ -863,7 +863,7 @@ def approve_replacement(issue, *, admin, reason: str, request=None) -> Verificat
     and the reported number is now flagged for this service, so it cannot come
     straight back.
     """
-    from apps.orders.models import ACTIVE_ORDER_STATUSES, Order, OrderEvent, OrderStatus
+    from apps.orders.models import UPSTREAM_ORDER_STATUSES, Order, OrderEvent, OrderStatus
     from apps.orders.services import STATUS_LABELS, resolve_offering
     from apps.orders.tasks import fulfil_order_task
     from apps.pricing.engine import quote_for_offering
@@ -878,7 +878,8 @@ def approve_replacement(issue, *, admin, reason: str, request=None) -> Verificat
 
     original = issue.order
     platform_cap = int(settings.VERIFYGH["MAX_PLATFORM_ACTIVE_ORDERS"])
-    if platform_cap and Order.objects.filter(status__in=ACTIVE_ORDER_STATUSES).count() >= platform_cap:
+    if platform_cap and Order.objects.filter(
+            status__in=UPSTREAM_ORDER_STATUSES).count() >= platform_cap:
         raise ServiceUnavailable("We are at capacity right now. Try the replacement again shortly.",
                                  code="PLATFORM_AT_CAPACITY")
 

@@ -42,6 +42,7 @@ from apps.common.money import TWO_PLACES, ZERO, format_ghs, quantize, round_to
 from apps.orders.models import (
     ACTIVE_ORDER_STATUSES,
     ALLOWED_TRANSITIONS,
+    UPSTREAM_ORDER_STATUSES,
     Order,
     OrderEvent,
     OrderStatus,
@@ -168,7 +169,7 @@ def check_purchase_eligibility(user) -> None:
     # knows it is us and not them.
     platform_cap = int(settings.VERIFYGH["MAX_PLATFORM_ACTIVE_ORDERS"])
     if platform_cap:
-        in_flight = Order.objects.filter(status__in=ACTIVE_ORDER_STATUSES).count()
+        in_flight = Order.objects.filter(status__in=UPSTREAM_ORDER_STATUSES).count()
         if in_flight >= platform_cap:
             logger.warning(
                 "platform_capacity_reached",
@@ -811,6 +812,13 @@ def fulfil_order(order: Order) -> Order:
             return fail_order(order, reason=(
                 f"No {order.service.name} number was available just then. Your money is back "
                 "in your wallet - try again in a few minutes."
+            ), staff_detail=staff_detail)
+        if provider_code.lower() == "toomanyunfinishedverifications":
+            # The provider's limit on numbers held at once, across all our
+            # customers - not this customer's doing, so not worded as if it were.
+            return fail_order(order, reason=(
+                "We were handling a lot of orders just then. Your money is back in your "
+                "wallet - please try again in a minute."
             ), staff_detail=staff_detail)
         return fail_order(order, reason="The provider could not supply a number.",
                           staff_detail=staff_detail)

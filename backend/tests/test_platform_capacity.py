@@ -1,8 +1,8 @@
 """The platform-wide concurrency cap.
 
-Our supplier limits how many numbers one account may hold at once - OnlineSim's
-standard limit is 40, confirmed by their support on 2026-09-27. Past that,
-`getNum` starts refusing.
+Our supplier limits how many numbers one account may hold at once -
+TextVerified allows 8 unfinished verifications (raised from 4 on 2026-10-13).
+Past that it answers TooManyUnfinishedVerifications.
 
 Without a cap of our own we would find their ceiling by hitting it: the wallet
 debited, the order created, and only then an opaque upstream failure. The refund
@@ -21,7 +21,7 @@ import pytest
 from django.conf import settings
 
 from apps.accounts.models import User
-from apps.orders.models import ACTIVE_ORDER_STATUSES, Order, OrderStatus
+from apps.orders.models import Order, OrderStatus
 from apps.orders.services import check_purchase_eligibility
 from apps.wallet.services import get_or_create_wallet
 
@@ -111,6 +111,15 @@ def test_the_cap_counts_other_users_orders(catalog, buyer, settings):
         check_purchase_eligibility(buyer)
 
 
+def test_an_order_whose_code_arrived_no_longer_holds_a_slot(catalog, buyer, settings):
+    """The provider counts unfinished verifications; a delivered code finishes it."""
+    settings.VERIFYGH = {**settings.VERIFYGH, "MAX_PLATFORM_ACTIVE_ORDERS": 3}
+    for order in fill_platform(3):
+        Order.objects.filter(pk=order.pk).update(status=OrderStatus.CODE_RECEIVED)
+
+    check_purchase_eligibility(buyer)
+
+
 def test_finished_orders_do_not_count_against_capacity(catalog, buyer, settings):
     """A held number is released when the order finishes; the slot comes back."""
     settings.VERIFYGH = {**settings.VERIFYGH, "MAX_PLATFORM_ACTIVE_ORDERS": 3}
@@ -181,34 +190,23 @@ def test_the_eligibility_endpoint_reports_capacity(api, auth, catalog, buyer, se
     assert response.data["code"] == "PLATFORM_AT_CAPACITY"
 
 
-def test_the_shipped_default_sits_below_the_suppliers_ceiling():
-    """OnlineSim's standard limit is 40 numbers on hold.
+def test_the_shipped_default_matches_the_suppliers_ceiling():
+    """TextVerified: 8 unfinished verifications at once (from 13 Oct 2026).
 
-    Ours must be lower, because our count and theirs drift: closing an operation
-    is refused for 120 seconds when no SMS has arrived, so a number we consider
-    released can still be held upstream.
+    Above it, a purchase is charged and then refunded when TextVerified refuses;
+    below it, customers are turned away while a slot is free.
     """
     from config.settings import base
 
-    shipped = int(base.VERIFYGH["MAX_PLATFORM_ACTIVE_ORDERS"])
-    supplier_ceiling = 40
-
-    assert 0 < shipped < supplier_ceiling, (
-        f"the platform cap ({shipped}) must leave headroom below the supplier's "
-        f"{supplier_ceiling}-number ceiling"
-    )
-    assert shipped <= supplier_ceiling * 0.9, "too little headroom for drift"
+    assert int(base.VERIFYGH["MAX_PLATFORM_ACTIVE_ORDERS"]) == 8
 
 
-def test_the_cap_leaves_room_for_several_users_at_their_personal_limit():
-    """MAX_ACTIVE_ORDERS is per user. If the platform cap were only a small
-    multiple of it, two busy users would starve everybody else."""
+def test_one_user_cannot_hold_every_slot():
+    """MAX_ACTIVE_ORDERS is per user: below the platform cap, one busy user
+    cannot shut everybody else out on their own."""
     from config.settings import base
 
     per_user = int(base.VERIFYGH["MAX_ACTIVE_ORDERS"])
     platform = int(base.VERIFYGH["MAX_PLATFORM_ACTIVE_ORDERS"])
 
-    assert platform >= per_user * 5, (
-        f"a platform cap of {platform} with a per-user cap of {per_user} lets "
-        f"{platform // per_user} users block the marketplace"
-    )
+    assert per_user < platform

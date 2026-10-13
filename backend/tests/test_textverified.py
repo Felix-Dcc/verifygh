@@ -366,7 +366,7 @@ def test_the_providers_reason_is_logged_for_staff_with_numbers_masked(configured
 @pytest.mark.parametrize(("error_code", "expected"), [
     ("InsufficientBalance", "temporarily unavailable"),
     ("Unavailable", "No number is available"),
-    ("TooManyUnfinishedVerifications", "finish your active order"),
+    ("TooManyUnfinishedVerifications", "a lot of orders"),
 ])
 def test_documented_create_errors_are_translated(configured, transport, error_code, expected):
     auth_route(transport)

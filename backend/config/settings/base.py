@@ -469,23 +469,21 @@ VERIFYGH = {
     "MAX_WALLET_BALANCE": env("MAX_WALLET_BALANCE", "10000.00"),
     # Anti-abuse controls
     "MAX_ACTIVE_ORDERS": env_int("MAX_ACTIVE_ORDERS", 5),
-    # How many orders the whole platform may have in flight at once, across
-    # every user. This exists to stay *below* the provider's own ceiling on
-    # numbers held simultaneously. OnlineSim's standard limit was 40 (support,
-    # 2026-09-27). TextVerified publishes no number: its API answers
-    # TooManyUnfinishedVerifications past its limit, and its FAQ offers to raise
-    # concurrency for power users on request - ask for the figure in writing.
+    # How many orders the whole platform may have waiting on the provider at
+    # once, across every user - so a purchase past the provider's own ceiling is
+    # refused before the wallet is debited, not charged and then refunded.
     #
-    # Deliberately lower than theirs. Our count and the provider's can drift:
-    # closing an operation is not instant (their protective interval refuses a
-    # close for 120s with no SMS), so a number we consider released may still be
-    # held upstream. Without headroom we would discover their ceiling by hitting
-    # it - mid-purchase, after the wallet was debited, with an opaque upstream
-    # error. 32 of 40 leaves eight slots for that drift.
+    # TextVerified allows 8 unfinished verifications at a time (raised from 4
+    # on 13 Oct 2026); past that it answers TooManyUnfinishedVerifications. Only
+    # orders still waiting upstream count (see UPSTREAM_ORDER_STATUSES): one
+    # whose code has arrived is finished on TextVerified's side. No headroom
+    # below 8 - a cancel or expiry closes the verification there too, so our
+    # count and theirs agree, and a slot held back would only turn customers
+    # away. If they ever disagree, the upstream refusal is refunded as usual.
     #
     # Set to 0 to disable, which is right for the mock provider, where no
     # upstream ceiling exists.
-    "MAX_PLATFORM_ACTIVE_ORDERS": env_int("MAX_PLATFORM_ACTIVE_ORDERS", 32),
+    "MAX_PLATFORM_ACTIVE_ORDERS": env_int("MAX_PLATFORM_ACTIVE_ORDERS", 8),
     # Refuse Mobile Money top-ups while there is nothing to spend them on.
     #
     # Taking a deposit into an empty marketplace is taking real money for

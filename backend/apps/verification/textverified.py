@@ -822,7 +822,9 @@ _ERROR_MESSAGES = {
     "insufficientbalance": "Numbers are temporarily unavailable. Please try again later.",
     "unavailable": "No number is available for that service right now.",
     "pricingfailure": "That service's price has changed. Please try again.",
-    "toomanyunfinishedverifications": "Please finish your active order first.",
+    # Counts every number our account holds, not one customer's: never "your".
+    "toomanyunfinishedverifications": "We are handling a lot of orders right now. "
+                                      "Please try again in a minute.",
 }
 
 

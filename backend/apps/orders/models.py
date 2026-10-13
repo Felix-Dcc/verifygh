@@ -69,6 +69,16 @@ ALLOWED_TRANSITIONS: dict[str, set[str]] = {
     OrderStatus.REFUNDED: set(),
 }
 
+#: Orders the provider is still working on: a number being reserved or held
+#: and no code yet. What the provider's concurrency limit counts.
+UPSTREAM_ORDER_STATUSES = frozenset(
+    {
+        OrderStatus.PROCESSING,
+        OrderStatus.NUMBER_ASSIGNED,
+        OrderStatus.WAITING_FOR_CODE,
+    }
+)
+
 ACTIVE_ORDER_STATUSES = frozenset(
     {
         OrderStatus.CREATED,
