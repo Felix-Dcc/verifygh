@@ -468,7 +468,10 @@ VERIFYGH = {
     "MAX_DEPOSIT": env("MAX_DEPOSIT", "2000.00"),
     "MAX_WALLET_BALANCE": env("MAX_WALLET_BALANCE", "10000.00"),
     # Anti-abuse controls
-    "MAX_ACTIVE_ORDERS": env_int("MAX_ACTIVE_ORDERS", 5),
+    # Orders one customer may have open at once. 3 of the platform's 8
+    # (TextVerified's limit, below): one busy customer cannot hold most of the
+    # slots everybody shares (13 Oct 2026; was 5).
+    "MAX_ACTIVE_ORDERS": env_int("MAX_ACTIVE_ORDERS", 3),
     # How many orders the whole platform may have waiting on the provider at
     # once, across every user - so a purchase past the provider's own ceiling is
     # refused before the wallet is debited, not charged and then refunded.

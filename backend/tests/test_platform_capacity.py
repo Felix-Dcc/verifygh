@@ -210,3 +210,4 @@ def test_one_user_cannot_hold_every_slot():
     platform = int(base.VERIFYGH["MAX_PLATFORM_ACTIVE_ORDERS"])
 
     assert per_user < platform
+    assert per_user == 3
