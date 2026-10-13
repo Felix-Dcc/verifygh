@@ -39,12 +39,15 @@ def expire_stale_payments() -> dict:
             recovered += 1
             continue
         if refreshed.status in AWAITING_PAYMENT_STATUSES:
-            Payment.objects.filter(pk=payment.pk, credited_at__isnull=True).update(
+            # Guarded on expires_at again, in the database: a payment held for
+            # review while being checked has had its expiry cleared, and must
+            # not be written off as expired.
+            expired += Payment.objects.filter(pk=payment.pk, credited_at__isnull=True,
+                                              expires_at__lt=now).update(
                 status=PaymentStatus.EXPIRED,
                 failure_reason="The payment prompt expired before it was approved.",
                 completed_at=now,
             )
-            expired += 1
 
     if expired or recovered:
         logger.info("payments_expiry_sweep", extra={"expired": expired, "recovered": recovered})

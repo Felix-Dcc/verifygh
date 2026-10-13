@@ -887,6 +887,107 @@ def test_a_reactivation_the_provider_refuses_is_refunded(
     assert verify_wallet_integrity(wallet)["ok"] is True
 
 
+def _reactivate(tv, client, original, capture, *, vid="ver_3", total_cost=0.50):
+    tv["routes"][("POST", f"/api/pub/v2/verifications/{original.provider_order_id}/reactivate")] \
+        = Reply(201, {"href": f"/api/pub/v2/verifications/{vid}", "method": "GET"})
+    verification_routes(tv, vid=vid)
+    tv["routes"][("GET", f"/api/pub/v2/verifications/{vid}")]._payload["totalCost"] = total_cost
+    with capture(execute=True):
+        return client.post(f"{ORDERS}{original.reference}/reactivate/", {}, format="json")
+
+
+def test_a_reactivation_of_a_reactivation_is_still_half_the_first_price(
+        tv, tv_catalog, buyer, auth, django_capture_on_commit_callbacks):
+    """13 Oct: GH₵6.75, then GH₵3.38 - halving the halved price sold below cost."""
+    from apps.orders.services import reactivation_price
+
+    original = _finished_order(tv, tv_catalog, buyer, auth, django_capture_on_commit_callbacks)
+    half = (original.price / 2).quantize(Decimal("0.01"), rounding=ROUND_CEILING)
+    response = _reactivate(tv, auth(buyer), original, django_capture_on_commit_callbacks)
+    renewed = Order.objects.get(reference=response.data["reference"])
+
+    assert renewed.price == half
+    assert Decimal(renewed.metadata["reactivation_base_price"]) == original.price
+    assert reactivation_price(renewed) == half
+    # A reactivation made before the base was carried forward: found by
+    # following the chain back to the first order.
+    legacy = dict(renewed.metadata)
+    legacy.pop("reactivation_base_price")
+    Order.objects.filter(pk=renewed.pk).update(metadata=legacy)
+    renewed.refresh_from_db()
+    assert reactivation_price(renewed) == half
+
+
+def test_a_reactivation_records_what_the_provider_charged(
+        tv, tv_catalog, buyer, auth, django_capture_on_commit_callbacks):
+    original = _finished_order(tv, tv_catalog, buyer, auth, django_capture_on_commit_callbacks)
+    response = _reactivate(tv, auth(buyer), original, django_capture_on_commit_callbacks,
+                           total_cost=0.31)
+    renewed = Order.objects.get(reference=response.data["reference"])
+
+    assert renewed.provider_cost == Decimal("0.31")
+    # What the quote assumed stays on record beside it.
+    assert Decimal(renewed.price_breakdown["provider_cost"]) != Decimal("0.31")
+
+
+def test_a_reactivation_priced_below_the_provider_cost_is_refused(
+        tv, tv_catalog, buyer, auth, django_capture_on_commit_callbacks):
+    original = _finished_order(tv, tv_catalog, buyer, auth, django_capture_on_commit_callbacks)
+    Order.objects.filter(pk=original.pk).update(price=Decimal("0.40"))
+    original.refresh_from_db()
+    balance = get_or_create_wallet(buyer).balance
+
+    response = _reactivate(tv, auth(buyer), original, django_capture_on_commit_callbacks)
+
+    assert response.status_code == 503
+    assert response.data["error"]["code"] == "REACTIVATION_NOT_AVAILABLE"
+    assert get_or_create_wallet(buyer).balance == balance
+    assert reactivations(tv) == []
+
+
+def test_a_code_that_lands_at_the_last_moment_is_not_refunded(
+        tv, tv_catalog, buyer, auth, django_capture_on_commit_callbacks):
+    """The expiry sweep looks once more before writing the order off."""
+    from datetime import timedelta
+
+    from django.utils import timezone
+
+    from apps.orders.tasks import expire_stale_orders
+
+    authorise(tv_catalog)
+    verification_routes(tv)
+    order = Order.objects.get(
+        reference=buy(auth(buyer), django_capture_on_commit_callbacks).data["reference"])
+    assert order.status == OrderStatus.WAITING_FOR_CODE
+    Order.objects.filter(pk=order.pk).update(expires_at=timezone.now() - timedelta(seconds=5))
+    verification_routes(tv, state="verificationCompleted", code="482913")
+
+    expire_stale_orders()
+
+    order.refresh_from_db()
+    # Delivered - and, its window being over, closed as completed by the same sweep.
+    assert order.status == OrderStatus.COMPLETED
+    assert order.code_received_at is not None
+    assert order.refund_status != "COMPLETED"
+    assert not order.events.filter(status=OrderStatus.EXPIRED).exists()
+
+
+def test_one_purchase_cannot_carry_the_day_past_the_spending_limit(
+        tv, tv_catalog, buyer, auth, settings, django_capture_on_commit_callbacks):
+    authorise(tv_catalog)
+    verification_routes(tv)
+    price = Decimal(auth(buyer).get("/api/v1/services/tiktok/").data["from_price"])
+    settings.VERIFYGH = {**settings.VERIFYGH, "MAX_DAILY_SPEND": str(price - Decimal("0.01"))}
+    balance = get_or_create_wallet(buyer).balance
+
+    response = buy(auth(buyer), django_capture_on_commit_callbacks)
+
+    assert response.status_code == 429, response.data
+    assert response.data["error"]["code"] == "DAILY_SPEND_LIMIT"
+    assert get_or_create_wallet(buyer).balance == balance
+    assert creates(tv) == []
+
+
 def test_while_the_reuse_window_is_open_reuse_is_the_offer(
         tv, tv_catalog, buyer, auth, django_capture_on_commit_callbacks):
     original = _delivered_order(tv, tv_catalog, buyer, auth, django_capture_on_commit_callbacks)

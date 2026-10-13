@@ -687,34 +687,63 @@ def _apply_event(event, provider_key: str) -> Payment | None:
 OVERPAYMENT_TOLERANCE = Decimal("1.05")
 
 
+def _hold_for_review(payment: Payment, *, reason: str, description: str,
+                     evidence: dict) -> Payment:
+    """Park a payment the provider says is paid but we will not credit automatically.
+
+    A held payment may be money we have actually received, so it must never be
+    swept up later as "expired": clearing `expires_at` takes it out of the
+    expiry sweep (as a claimed manual top-up is), and it stays PROCESSING until
+    a person decides. The abuse signal is raised once per payment - the
+    reconciliation sweep re-checks held payments every couple of minutes, and
+    each check used to raise another HIGH signal for the same money.
+    """
+    with transaction.atomic():
+        locked = _lock_payment(payment.pk)
+        if locked.credited_at is not None:
+            return locked
+        meta = dict(locked.metadata or {})
+        first_time = not meta.get("held_for_review")
+        meta["held_for_review"] = reason[:255]
+        Payment.objects.filter(pk=locked.pk).update(
+            status=PaymentStatus.PROCESSING, failure_reason=reason[:255], expires_at=None,
+            metadata=meta, updated_at=timezone.now(),
+        )
+    if first_time:
+        flag(
+            user=payment.user,
+            kind=SuspiciousActivity.Kind.DEPOSIT_ANOMALY,
+            level=SuspicionLevel.HIGH,
+            description=description,
+            evidence=evidence,
+            dedupe_hours=0,
+        )
+        logger.error("payment_held_for_review", extra=evidence)
+    payment.refresh_from_db()
+    return payment
+
+
 def _credit_payment(payment: Payment, event) -> Payment:
     """Move money into the wallet, exactly once, atomically."""
+    if Payment.objects.filter(pk=payment.pk, credited_at__isnull=False).exists():
+        # Already credited (a late duplicate, or a sweep re-checking it): nothing
+        # to compare or flag again.
+        payment.refresh_from_db()
+        return payment
+
     expected = quantize(payment.amount)
     credited_amount = quantize(event.amount) if event.amount is not None else expected
 
     if (event.currency or payment.currency).upper() != payment.currency.upper():
         # An amount in another currency is a different number entirely. Never
         # convert or credit it automatically.
-        logger.error(
-            "payment_currency_mismatch",
-            extra={"reference": payment.reference, "expected": payment.currency,
-                   "received": event.currency},
-        )
-        flag(
-            user=payment.user,
-            kind=SuspiciousActivity.Kind.DEPOSIT_ANOMALY,
-            level=SuspicionLevel.HIGH,
+        return _hold_for_review(
+            payment,
+            reason="Currency received does not match; held for review.",
             description="Webhook currency did not match the deposit currency.",
             evidence={"reference": payment.reference, "expected": payment.currency,
                       "received": event.currency},
-            dedupe_hours=0,
         )
-        Payment.objects.filter(pk=payment.pk, credited_at__isnull=True).update(
-            status=PaymentStatus.PROCESSING,
-            failure_reason="Currency received does not match; held for review.",
-        )
-        payment.refresh_from_db()
-        return payment
 
     if event.amount is not None and credited_amount != expected:
         mismatch = {
@@ -722,6 +751,17 @@ def _credit_payment(payment: Payment, event) -> Payment:
             "expected": str(expected),
             "received": str(credited_amount),
         }
+        if credited_amount > expected * OVERPAYMENT_TOLERANCE:
+            # Under-payment credits what arrived - the user gets what they paid.
+            # A large over-payment does not: crediting it would create a
+            # liability out of what is far more likely to be a provider or
+            # integration bug. Hold it for a human instead.
+            return _hold_for_review(
+                payment,
+                reason="Amount received exceeds the requested amount; held for review.",
+                description="Webhook amount did not match the requested deposit amount.",
+                evidence=mismatch,
+            )
         logger.error("payment_amount_mismatch", extra=mismatch)
         flag(
             user=payment.user,
@@ -731,21 +771,6 @@ def _credit_payment(payment: Payment, event) -> Payment:
             evidence=mismatch,
             dedupe_hours=0,
         )
-
-        if credited_amount > expected * OVERPAYMENT_TOLERANCE:
-            # Under-payment credits what arrived - the user gets what they paid.
-            # A large over-payment does not: crediting it would create a
-            # liability out of what is far more likely to be a provider or
-            # integration bug. Hold it for a human instead.
-            logger.error("payment_overpayment_held", extra=mismatch)
-            Payment.objects.filter(pk=payment.pk, credited_at__isnull=True).update(
-                status=PaymentStatus.PROCESSING,
-                failure_reason=(
-                    "Amount received exceeds the requested amount; held for review."
-                )[:255],
-            )
-            payment.refresh_from_db()
-            return payment
 
     with transaction.atomic():
         locked = _lock_payment(payment.pk)
@@ -867,6 +892,18 @@ def reconcile_payment(payment: Payment) -> Payment:
         return payment
 
     _note_provider_status(payment, charge)
+
+    held = str((getattr(charge, "raw", None) or {}).get("held") or "")
+    if held:
+        # The provider says paid, but something about it does not add up (the
+        # adapter explains what). Not credited, and never left to expire.
+        return _hold_for_review(
+            payment,
+            reason="Payment reported as successful but could not be confirmed; "
+                   "held for review.",
+            description="The payment provider reported a success we could not confirm.",
+            evidence={"reference": payment.reference, "problem": held[:80]},
+        )
 
     if charge.status == ChargeStatus.SUCCESS:
         from apps.payments.base import WebhookEventDTO

@@ -165,6 +165,12 @@ def test_a_large_enough_png_is_accepted(staff, catalog):
     pytest.param(b'<?xml version="1.0"?><!DOCTYPE svg [<!ENTITY x "y">]><svg xmlns="http://www.w3.org/2000/svg"/>', id="entities"),
     pytest.param(b'<svg xmlns="http://www.w3.org/2000/svg"><foreignObject><div/></foreignObject></svg>', id="foreignObject"),
     pytest.param(b'<svg xmlns="http://www.w3.org/2000/svg"><path style="fill:url(https://evil.example/a)"/></svg>', id="external url()"),
+    pytest.param(b'<svg xmlns="http://www.w3.org/2000/svg"><path style="fill:url(#g);stroke:url(https://evil.example/a)"/></svg>',
+                 id="second url() external"),
+    pytest.param(b'<svg xmlns="http://www.w3.org/2000/svg"><style>@import url(https://evil.example/a.css);</style></svg>',
+                 id="style @import"),
+    pytest.param(b'<svg xmlns="http://www.w3.org/2000/svg"><style>.a{fill:url("https://evil.example/a")}</style></svg>',
+                 id="style external url()"),
     pytest.param(b"<html><body>hi</body></html>", id="not an image"),
     pytest.param(b"GIF89a....", id="wrong format"),
     pytest.param(b"<svg" + b" " * (200 * 1024) + b"/>", id="too large"),
@@ -174,6 +180,15 @@ def test_unsafe_or_unsuitable_uploads_are_refused(staff, catalog, data):
 
     assert response.status_code == 400
     assert Service.objects.get(slug="tiktok").icon_url == "/service-icons/tiktok.svg"
+
+
+def test_an_svg_with_its_own_styles_and_gradients_is_accepted(staff, catalog):
+    data = (b'<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24">'
+            b'<defs><linearGradient id="g"><stop offset="0"/></linearGradient></defs>'
+            b'<style>.a{fill:url(#g)}.b{fill:#fff}</style>'
+            b'<path class="a" d="M0 0h24v24H0z" style="stroke:url( &apos;#g&apos; )"/></svg>')
+    response = upload(staff, "tiktok", data, name="logo.svg")
+    assert response.status_code == 200, response.data
 
 
 def test_a_small_png_is_refused_as_blurry(staff, catalog):

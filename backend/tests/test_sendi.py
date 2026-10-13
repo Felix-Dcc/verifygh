@@ -147,6 +147,35 @@ def test_a_doubtful_success_is_held_not_credited(sendi, user, change):
     assert get_or_create_wallet(user).balance == Decimal("0.00")
 
 
+def test_a_held_success_is_never_written_off_as_expired(sendi, user):
+    """Held money may be real money: the expiry sweep must leave it for staff."""
+    from datetime import timedelta
+
+    from django.utils import timezone
+
+    from apps.audit.models import SuspiciousActivity
+    from apps.payments.tasks import expire_stale_payments, reconcile_recent_payments
+
+    payment = deposit(user)
+    sendi.charges[payment.provider_reference].update({"status": "success", "currency": "USD"})
+    reconcile_payment(payment)
+    Payment.objects.filter(pk=payment.pk).update(
+        created_at=timezone.now() - timedelta(minutes=30))
+    # The sweeps keep re-checking it; once its window would have closed too.
+    reconcile_recent_payments()
+    reconcile_recent_payments()
+    expire_stale_payments()
+
+    payment.refresh_from_db()
+    assert payment.status == PaymentStatus.PROCESSING
+    assert payment.expires_at is None
+    assert "held for review" in payment.failure_reason
+    assert payment.metadata["held_for_review"]
+    assert get_or_create_wallet(user).balance == Decimal("0.00")
+    # One signal for one payment, however often it is re-checked.
+    assert SuspiciousActivity.objects.filter(user=user, kind="DEPOSIT_ANOMALY").count() == 1
+
+
 def test_a_failed_charge_fails_the_payment(sendi, user):
     payment = deposit(user)
     sendi.charges[payment.provider_reference]["status"] = "failed"

@@ -106,8 +106,16 @@ def expire_stale_orders() -> dict:
     expired = 0
     for order in stale:
         try:
-            expire_order(order)
-            expired += 1
+            if order.provider_order_id:
+                # One last look: the polling sweep stops at expires_at, so a
+                # code that landed in the final seconds would otherwise be
+                # refunded - and the provider would still charge us for it.
+                order = poll_order(order)
+                if order.status == OrderStatus.CODE_RECEIVED:
+                    continue
+            # Returns at once for an order the last look already settled.
+            if expire_order(order).status in (OrderStatus.EXPIRED, OrderStatus.REFUNDED):
+                expired += 1
         except Exception:
             logger.exception("order_expiry_failed", extra={"order": order.reference})
 

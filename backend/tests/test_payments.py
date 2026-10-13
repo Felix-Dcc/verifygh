@@ -458,6 +458,31 @@ def test_a_large_overpayment_is_held_not_credited(user, auth, api):
     assert "held for review" in payment.failure_reason
 
 
+def test_a_held_overpayment_survives_the_sweeps_and_is_flagged_once(user, auth, api):
+    from datetime import timedelta
+
+    from django.utils import timezone
+
+    from apps.audit.models import SuspiciousActivity
+    from apps.payments.tasks import expire_stale_payments
+
+    client = auth(user)
+    reference = start_deposit(client, "50.00").data["reference"]
+    raw, headers = build_webhook(reference=reference, amount="5000.00")
+    post_webhook(api, raw, headers)
+    raw, headers = build_webhook(reference=reference, amount="5000.00", event_id="evt-2")
+    post_webhook(api, raw, headers)
+
+    Payment.objects.filter(reference=reference).update(
+        created_at=timezone.now() - timedelta(hours=1))
+    expire_stale_payments()
+
+    payment = Payment.objects.get(reference=reference)
+    assert payment.status == PaymentStatus.PROCESSING
+    assert payment.expires_at is None
+    assert SuspiciousActivity.objects.filter(user=user, kind="DEPOSIT_ANOMALY").count() == 1
+
+
 def test_a_small_overpayment_within_tolerance_is_credited(user, auth, api):
     client = auth(user)
     reference = start_deposit(client, "100.00").data["reference"]

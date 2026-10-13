@@ -41,6 +41,25 @@ def _local(name: str) -> str:
     return name.rsplit("}", 1)[-1].lower()
 
 
+_URL = re.compile(r"url\(\s*(['\"]?)(.*?)\1\s*\)", re.DOTALL)
+
+
+def _check_css(value: str) -> None:
+    """An attribute value or a <style> block: nothing that runs or loads.
+
+    Every url() is checked, not just the first - "url(#a) url(https://...)"
+    used to pass because one internal reference satisfied the whole value.
+    """
+    if "javascript:" in value or "data:" in value:
+        raise ValidationFailed("SVG logos may not contain scripts or embedded data.")
+    if "@import" in value or "expression(" in value:
+        raise ValidationFailed("SVG logos may not load anything outside the file.")
+    if "url(" in value:
+        targets = [target.strip() for _quote, target in _URL.findall(value)]
+        if value.count("url(") != len(targets) or any(not t.startswith("#") for t in targets):
+            raise ValidationFailed("SVG logos may only reference their own gradients.")
+
+
 def _check_svg(data: bytes) -> None:
     try:
         text = data.decode("utf-8")
@@ -59,16 +78,16 @@ def _check_svg(data: bytes) -> None:
     for element in root.iter():
         if _local(element.tag) in _FORBIDDEN_ELEMENTS:
             raise ValidationFailed(f"SVG logos may not contain <{_local(element.tag)}>.")
-        for attribute, value in element.attrib.items():
-            name, value = _local(attribute), str(value).strip().lower()
+        for attribute, raw_value in element.attrib.items():
+            name, value = _local(attribute), str(raw_value).strip().lower()
             if name.startswith("on"):
                 raise ValidationFailed("SVG logos may not contain event handlers.")
             if name == "href" and not value.startswith("#"):
                 raise ValidationFailed("SVG logos may not link or load anything outside the file.")
-            if "javascript:" in value or "data:" in value:
-                raise ValidationFailed("SVG logos may not contain scripts or embedded data.")
-            if "url(" in value and not re.fullmatch(r".*url\(\s*#[^)]*\).*", value):
-                raise ValidationFailed("SVG logos may only reference their own gradients.")
+            _check_css(value)
+        if _local(element.tag) == "style":
+            # Its text is CSS too: an @import or url() here loads from anywhere.
+            _check_css("".join(element.itertext()).lower())
 
 
 def _check_png(data: bytes) -> None:

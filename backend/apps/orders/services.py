@@ -419,6 +419,19 @@ def _place_order(*, user, offering, priced, idempotency_key: str, request=None,
 
         raise WalletFrozen()
 
+    # The eligibility check refuses once the limit is reached; this one also
+    # counts the purchase being made, so a single order cannot carry the day's
+    # spending past it.
+    from apps.wallet.services import net_spending
+
+    spend_cap = quantize(settings.VERIFYGH["MAX_DAILY_SPEND"])
+    spent_today = net_spending(wallet, created_at__gte=timezone.now() - timedelta(days=1))
+    if spent_today + quantize(price) > spend_cap:
+        raise LimitExceeded(
+            f"This would take you past the daily spending limit of {format_ghs(spend_cap)}.",
+            code="DAILY_SPEND_LIMIT",
+        )
+
     reference = order_reference()
 
     try:
@@ -539,12 +552,39 @@ def reuse_blocker(order: Order) -> str:
 REACTIVATION_CHECK_SECONDS = 300
 
 
+#: Reactivation metadata: the price of the first order in the chain.
+REACTIVATION_BASE_KEY = "reactivation_base_price"
+
+
+def reactivation_base(order: Order) -> Decimal:
+    """What the number first sold for, however many times it was reactivated since.
+
+    A reactivation is itself reactivatable, and halving *its* price halved
+    again - 13 Oct: GH₵6.75, then GH₵3.38, below what the provider charges.
+    The base is carried forward on each reactivation; older ones (before it
+    was) are followed back through `reuse_of` to the first order.
+    """
+    current = order
+    for _ in range(20):
+        meta = current.metadata or {}
+        if meta.get(REACTIVATION_BASE_KEY):
+            return Decimal(str(meta[REACTIVATION_BASE_KEY]))
+        if "reactivate_of_provider_order_id" not in meta:
+            break
+        parent = Order.objects.filter(user_id=current.user_id,
+                                      reference=meta.get("reuse_of", "")).first()
+        if parent is None:
+            break
+        current = parent
+    return Decimal(current.price)
+
+
 def reactivation_price(order: Order) -> Decimal:
-    """Half of what the customer paid for the original order, rounded up to
-    the pesewa - as TextVerified prices its own reactivation (0.38 after 0.75)."""
+    """Half of what the customer paid for the number's first order, rounded up
+    to the pesewa - as TextVerified prices its own reactivation (0.38 after 0.75)."""
     from decimal import ROUND_CEILING
 
-    return (Decimal(order.price) / 2).quantize(Decimal("0.01"), rounding=ROUND_CEILING)
+    return (reactivation_base(order) / 2).quantize(Decimal("0.01"), rounding=ROUND_CEILING)
 
 
 def reactivation_blocker(order: Order, *, live: bool = False) -> str:
@@ -611,6 +651,16 @@ def _another_code_on_the_number(*, user, original: Order, idempotency_key: str, 
 
     priced = quote_for_offering(offering)
     if price is not None:
+        # A set price is applied after the engine's own below-cost check, so it
+        # needs one of its own. The provider charges for a reactivation about
+        # half a new number (0.38 after 0.75); never ask less than that.
+        floor = quantize(Decimal(priced.base_cost) / 2)
+        if price < floor:
+            logger.error("set_price_below_cost_refused",
+                         extra={"original": original.reference, "price": str(price),
+                                "floor": str(floor)})
+            raise ServiceUnavailable(
+                "This number cannot be used again right now. Nothing was charged.", code=code)
         # A set price (reactivation): the quote keeps its costs for the record,
         # and says why the customer price differs from the service's.
         import dataclasses
@@ -645,7 +695,8 @@ def reactivate_number(*, user, original: Order, idempotency_key: str, request=No
         # Asked live: a cached "yes" must not take money for a refusal.
         blocker=reactivation_blocker(original, live=True), code="REACTIVATION_NOT_AVAILABLE",
         metadata={"reuse_of": original.reference,
-                  "reactivate_of_provider_order_id": original.provider_order_id},
+                  "reactivate_of_provider_order_id": original.provider_order_id,
+                  REACTIVATION_BASE_KEY: str(reactivation_base(original))},
         label="same number reactivated",
         price=reactivation_price(original),
     )
@@ -672,6 +723,21 @@ def reuse_number(*, user, original: Order, idempotency_key: str, request=None) -
                   "reuse_of_provider_order_id": original.provider_order_id},
         label="same number again",
     )
+
+
+def _actual_cost(result) -> dict:
+    """The provider's own figure for what this number cost us, when it gives one.
+
+    The order is priced from the catalogue's cost, but a reuse or reactivation
+    costs something else (TextVerified: `totalCost` on the new verification),
+    and profit figures are only right if the order keeps what was really paid.
+    The quote, catalogue cost included, stays in `price_breakdown`.
+    """
+    cost = getattr(result, "cost", None)
+    try:
+        return {"provider_cost": Decimal(cost)} if cost is not None and Decimal(cost) > 0 else {}
+    except (ArithmeticError, TypeError, ValueError):
+        return {}
 
 
 def fulfil_order(order: Order) -> Order:
@@ -793,7 +859,7 @@ def fulfil_order(order: Order) -> Order:
         # yet. Record the id so polling can find it, and leave the order in
         # PROCESSING rather than claiming a number we do not have.
         Order.objects.filter(pk=order.pk).update(
-            provider_order_id=result.provider_order_id
+            provider_order_id=result.provider_order_id, **_actual_cost(result)
         )
         order.refresh_from_db()
         logger.info("order_awaiting_number", extra={"order": order.reference})
@@ -811,8 +877,10 @@ def fulfil_order(order: Order) -> Order:
             "provider_order_id": result.provider_order_id,
             "phone_number": result.phone_number,
             "expires_at": expires_at,
+            **_actual_cost(result),
         },
     )
+    _warn_if_sold_below_cost(order)
 
     numbers.note_assigned(order)
 
@@ -830,6 +898,18 @@ def fulfil_order(order: Order) -> Order:
     if order.status == OrderStatus.NUMBER_ASSIGNED:
         order = transition(order, OrderStatus.WAITING_FOR_CODE)
     return order
+
+
+def _warn_if_sold_below_cost(order: Order) -> None:
+    """Tell staff when the provider charged more than the customer paid."""
+    try:
+        cost_ghs = quantize(Decimal(order.provider_cost) * Decimal(order.exchange_rate))
+    except (ArithmeticError, TypeError, ValueError):
+        return
+    if cost_ghs > quantize(order.price):
+        logger.error("order_sold_below_cost",
+                     extra={"order": order.reference, "price": str(order.price),
+                            "cost_ghs": str(cost_ghs)})
 
 
 def poll_order(order: Order) -> Order:
@@ -881,8 +961,10 @@ def poll_order(order: Order) -> Order:
             extra_fields={
                 "phone_number": result.phone_number,
                 "expires_at": result.expires_at or order.expires_at,
+                **_actual_cost(result),
             },
         )
+        _warn_if_sold_below_cost(order)
         numbers.note_assigned(order)
         if order.status == OrderStatus.NUMBER_ASSIGNED:
             order = transition(order, OrderStatus.WAITING_FOR_CODE)
@@ -996,6 +1078,10 @@ def expire_order(order: Order) -> Order:
         detail="No verification code arrived before the number expired.",
         extra_fields={"completed_at": timezone.now()},
     )
+    if order.status != OrderStatus.EXPIRED:
+        # Lost the race - usually to the code arriving at the last moment. No
+        # "no code arrived" message, and no refund for a delivered code.
+        return order
 
     from apps.notifications.services import notify
 
@@ -1022,6 +1108,10 @@ def fail_order(order: Order, *, reason: str, provider_order_id: str = "",
         extra["provider_order_id"] = provider_order_id
 
     order = transition(order, OrderStatus.FAILED, detail=reason, extra_fields=extra)
+    if order.status != OrderStatus.FAILED:
+        # Lost the race to another outcome (a code, an expiry): that path
+        # settles the order, not this one.
+        return order
     order = issue_refund(order, reason=RefundReason.PROVIDER_FAILED, automatic=True)
     _alert_staff_order_failed(order, staff_detail or reason)
     return order
