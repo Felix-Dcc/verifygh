@@ -13,11 +13,20 @@ concurrently. Three independent things make a second reward impossible:
 
 Any one of them alone would be enough; together they hold on SQLite too, where
 there are no row locks.
+
+Two rewards, both promotional credit, both following real money (14 Oct 2026):
+
+* the friend's welcome bonus, once their email is verified AND they have
+  topped up at least `min_first_deposit` of their own cash;
+* the inviter's reward, once that friend has had their bonus and completed a
+  number paid at least partly in cash - so the programme pays after revenue,
+  never for a bare sign-up.
 """
 
 from __future__ import annotations
 
 import logging
+import re
 import secrets
 from datetime import timedelta
 from decimal import Decimal
@@ -36,6 +45,7 @@ from apps.referrals.models import (
     ReferralReward,
     ReferralRiskFlag,
     ReferralStatus,
+    ReferrerReward,
     RewardStatus,
     RiskKind,
     RiskLevel,
@@ -103,6 +113,48 @@ def resolve_code(raw: str | None):
 
 
 # ---------------------------------------------------------------------------
+# Email aliases
+# ---------------------------------------------------------------------------
+
+#: Gmail ignores dots in the name and treats googlemail.com as gmail.com.
+GMAIL_DOMAINS = frozenset({"gmail.com", "googlemail.com"})
+
+
+def canonical_email(address: str | None) -> str:
+    """The inbox an address really delivers to, for duplicate checks only.
+
+    `Sally.Bryan+2@gmail.com` and `sallybryan@googlemail.com` are one inbox.
+    A `+tag` is dropped for every domain; dots only for Gmail, where they are
+    documented to be ignored. Never used to store or send to an address.
+    """
+    local, _, domain = (address or "").strip().lower().partition("@")
+    local = local.split("+", 1)[0]
+    if domain in GMAIL_DOMAINS:
+        local, domain = local.replace(".", ""), "gmail.com"
+    return f"{local}@{domain}" if local and domain else ""
+
+
+def _same_inbox_pattern(address: str) -> str:
+    """A case-insensitive regex matching every spelling of the same inbox."""
+    local, _, domain = canonical_email(address).partition("@")
+    if domain == "gmail.com":
+        body = r"\.?".join(re.escape(char) for char in local)
+        domain_pattern = r"(gmail|googlemail)\.com"
+    else:
+        body, domain_pattern = re.escape(local), re.escape(domain)
+    return rf"^{body}(\+[^@]*)?@{domain_pattern}$"
+
+
+def same_inbox_accounts(user):
+    """Other accounts whose address delivers to this user's inbox."""
+    from apps.accounts.models import User
+
+    if not canonical_email(user.email):
+        return User.objects.none()
+    return User.objects.filter(email__iregex=_same_inbox_pattern(user.email)).exclude(pk=user.pk)
+
+
+# ---------------------------------------------------------------------------
 # Attribution
 # ---------------------------------------------------------------------------
 
@@ -159,7 +211,44 @@ def attach_referral(*, new_user, raw_code: str | None, request=None) -> Referral
         "referral_attributed",
         extra={"referral_id": str(referral.pk), "referrer_id": str(entry.user_id)},
     )
+    _notify_joined(referral, program)
     return referral
+
+
+def _notify_joined(referral: Referral, program: ReferralProgram) -> None:
+    """Tell the inviter a friend joined, and the friend how to get their bonus."""
+    from apps.common.money import format_ghs
+    from apps.notifications.services import notify
+    from apps.referrals.serializers import mask_email
+
+    referrer_bonus = quantize(program.referrer_bonus)
+    bonus = quantize(program.signup_bonus)
+    friend = mask_email(referral.referred_user.email)
+
+    def _send():
+        notify(
+            referral.referrer,
+            event="REFERRAL_BONUS",
+            title="A friend joined with your link",
+            body=(f"{friend} signed up with your code. You get {format_ghs(referrer_bonus)} of "
+                  "promotional credit when they complete their first number."
+                  if referrer_bonus > ZERO else
+                  f"{friend} signed up with your code. Thank you for spreading the word."),
+            channels=("EMAIL", "IN_APP"),
+            metadata={"referral_id": str(referral.pk)},
+        )
+        if bonus > ZERO and program.require_first_deposit:
+            notify(
+                referral.referred_user,
+                event="REFERRAL_BONUS",
+                title="Your welcome bonus is waiting",
+                body=(f"Top up {format_ghs(program.min_first_deposit)} or more and "
+                      f"{format_ghs(bonus)} of promotional credit is added to your wallet."),
+                channels=("IN_APP",),
+                metadata={"referral_id": str(referral.pk)},
+            )
+
+    transaction.on_commit(_send)
 
 
 def _flag(referral: Referral, kind: str, level: str, detail: str, *, blocking: bool) -> None:
@@ -173,9 +262,15 @@ def _record_signup_risk(referral: Referral, *, new_user, referrer, ip, fingerpri
     """Capture what we can see at sign-up. Flags describe; they do not punish."""
     from apps.accounts.models import UserDevice
 
-    if new_user.email and new_user.email.lower() == (referrer.email or "").lower():
+    if canonical_email(new_user.email) and \
+            canonical_email(new_user.email) == canonical_email(referrer.email):
+        # Compared as inboxes: Gmail dots and +tags reach the referrer's mail.
         _flag(referral, RiskKind.SHARED_EMAIL, RiskLevel.HIGH,
               "Referred account uses the referrer's email address.", blocking=True)
+    elif same_inbox_accounts(new_user).exists():
+        _flag(referral, RiskKind.EMAIL_ALIAS, RiskLevel.HIGH,
+              "Referred account's email reaches the same inbox as an existing account "
+              "(Gmail dots or a +tag).", blocking=True)
 
     if new_user.phone and new_user.phone == referrer.phone:
         _flag(referral, RiskKind.SHARED_PHONE, RiskLevel.HIGH,
@@ -244,7 +339,25 @@ def has_received_signup_bonus(user) -> bool:
         wallet__user=user,
         entry_type=LedgerEntryType.REFERRAL_BONUS,
         direction=LedgerDirection.CREDIT,
+    ).exclude(
+        # Credit earned for inviting someone is not a welcome bonus.
+        idempotency_key__startswith=REFERRER_REWARD_KEY,
     ).exists()
+
+
+#: Ledger idempotency-key prefix of the inviter's reward.
+REFERRER_REWARD_KEY = "referrer-reward:"
+
+
+def cash_deposited(user) -> Decimal:
+    """Everything the user has topped up with their own money. Promo is not money."""
+    total = WalletLedgerEntry.objects.filter(
+        wallet__user=user,
+        entry_type=LedgerEntryType.DEPOSIT,
+        direction=LedgerDirection.CREDIT,
+        funds=FundType.CASH,
+    ).aggregate(total=Sum("amount"))["total"]
+    return quantize(total or ZERO)
 
 
 def monthly_reward_count(referrer) -> int:
@@ -291,6 +404,15 @@ def evaluate(referral: Referral) -> Decision:
     # 3. Phone verification, where the programme requires it.
     if program.require_phone_verification and not referred.is_phone_verified:
         return Decision(ReferralStatus.PENDING, "Verify your phone number to qualify.")
+
+    # 4b. Their own money first: a top-up of at least the minimum, in total.
+    if program.require_first_deposit:
+        from apps.common.money import format_ghs
+
+        minimum = quantize(program.min_first_deposit)
+        if cash_deposited(referred) < minimum:
+            return Decision(ReferralStatus.PENDING,
+                            f"Top up {format_ghs(minimum)} or more to receive your welcome bonus.")
 
     # 7. The referred user has not already had a signup bonus.
     if has_received_signup_bonus(referred):
@@ -364,19 +486,22 @@ def issue_reward(referral: Referral, *, actor=None, force: bool = False) -> Refe
             if decision.status != ReferralStatus.ELIGIBLE:
                 _apply_decision(locked, decision)
                 return None
-        if not force and has_received_signup_bonus(locked.referred_user):
+        # Even an admin's override cannot give one account a second welcome bonus.
+        if has_received_signup_bonus(locked.referred_user):
             return None
 
         wallet = get_or_create_wallet(locked.referred_user)
         reference = _reward_reference()
         try:
-            reward = ReferralReward.objects.create(
-                referral=locked,
-                user=locked.referred_user,
-                reference=reference,
-                amount=amount,
-                currency=program.currency,
-            )
+            # Savepoint: losing the OneToOne race must not poison this transaction.
+            with transaction.atomic():
+                reward = ReferralReward.objects.create(
+                    referral=locked,
+                    user=locked.referred_user,
+                    reference=reference,
+                    amount=amount,
+                    currency=program.currency,
+                )
         except IntegrityError:
             # Lost the race on the OneToOne. The winner's reward is the reward.
             return ReferralReward.objects.filter(referral=locked).first()
@@ -406,7 +531,142 @@ def issue_reward(referral: Referral, *, actor=None, force: bool = False) -> Refe
     )
     _notify_rewarded(referral, amount)
     reward.refresh_from_db()
+    # The friend may already have completed a paid number while the bonus was
+    # held for review: the inviter's reward is then due straight away.
+    _after_commit_referrer_reward(referral.pk)
     return reward
+
+
+def _after_commit_referrer_reward(referral_id) -> None:
+    def _run():
+        try:
+            referral = Referral.objects.select_related("referrer", "referred_user") \
+                .filter(pk=referral_id).first()
+            if referral is not None:
+                issue_referrer_reward(referral)
+        except Exception:
+            # The sweep retries; a reward must never break the caller.
+            logger.exception("referrer_reward_failed", extra={"referral_id": str(referral_id)})
+
+    transaction.on_commit(_run)
+
+
+# ---------------------------------------------------------------------------
+# The inviter's reward
+# ---------------------------------------------------------------------------
+
+
+def qualifying_order(referral: Referral):
+    """The friend's first completed number paid at least partly in cash, if any.
+
+    Completed, delivered, not refunded, and cash in it: a number bought with
+    the welcome bonus alone earns the inviter nothing.
+    """
+    from apps.orders.models import Order, OrderStatus, RefundStatus
+
+    return (
+        Order.objects.filter(
+            user_id=referral.referred_user_id,
+            status=OrderStatus.COMPLETED,
+            code_received_at__isnull=False,
+            cash_amount__gt=ZERO,
+        )
+        .exclude(refund_status=RefundStatus.COMPLETED)
+        .order_by("completed_at", "created_at")
+        .first()
+    )
+
+
+def issue_referrer_reward(referral: Referral) -> ReferrerReward | None:
+    """Pay the inviter, once, when their friend has become a paying customer.
+
+    Safe to call from anywhere, any number of times: a row lock on the
+    referral, the OneToOne on ReferrerReward and the ledger key each refuse a
+    second payment.
+    """
+    program = ReferralProgram.load()
+    amount = quantize(program.referrer_bonus)
+    if amount <= ZERO or not program.is_enabled:
+        return None
+
+    existing = ReferrerReward.objects.filter(referral=referral).first()
+    if existing is not None:
+        return existing
+    order = qualifying_order(referral)
+    if order is None:
+        return None
+
+    with transaction.atomic():
+        locked = _lock_referral(referral.pk)
+        already = ReferrerReward.objects.filter(referral=locked).first()
+        if already is not None:
+            return already
+        # Only after the friend's own bonus stands: a held, rejected or
+        # reversed referral pays the inviter nothing.
+        if locked.status != ReferralStatus.REWARDED or not ReferralReward.objects.filter(
+                referral=locked, status=RewardStatus.ISSUED).exists():
+            return None
+        referrer = locked.referrer
+        if referrer.is_suspended or not referrer.is_active:
+            return None
+
+        wallet = get_or_create_wallet(referrer)
+        reference = _reward_reference()
+        try:
+            with transaction.atomic():
+                reward = ReferrerReward.objects.create(
+                    referral=locked, user=referrer, reference=reference, amount=amount,
+                    currency=program.currency, qualifying_order_id=order.pk,
+                )
+        except IntegrityError:
+            return ReferrerReward.objects.filter(referral=locked).first()
+
+        entry = credit_referral_bonus(
+            wallet=wallet,
+            amount=amount,
+            idempotency_key=f"{REFERRER_REWARD_KEY}{locked.pk}",
+            referral_id=locked.pk,
+            reward_reference=reference,
+            description="Referral reward: your friend completed their first number",
+        )
+        ReferrerReward.objects.filter(pk=reward.pk).update(ledger_entry_id=entry.id)
+
+    logger.info("referrer_rewarded", extra={"referral_id": str(referral.pk),
+                                            "reference": reference, "amount": str(amount)})
+    _notify_referrer_rewarded(locked, amount)
+    reward.refresh_from_db()
+    return reward
+
+
+def _notify_referrer_rewarded(referral: Referral, amount) -> None:
+    from apps.common.money import format_ghs
+    from apps.notifications.services import notify
+    from apps.referrals.serializers import mask_email
+
+    friend = mask_email(referral.referred_user.email)
+
+    def _send():
+        notify(
+            referral.referrer,
+            event="REFERRAL_BONUS",
+            title=f"You earned {format_ghs(amount)}",
+            body=(f"{friend} completed their first number, so {format_ghs(amount)} of "
+                  "promotional credit has been added to your wallet. Spend it on any number."),
+            channels=("EMAIL", "IN_APP"),
+            metadata={"referral_id": str(referral.pk)},
+        )
+
+    transaction.on_commit(_send)
+
+
+def process_referrer_reward_for_user(user) -> ReferrerReward | None:
+    """Called when one of the user's orders completes: pay whoever invited them."""
+    referral = Referral.objects.filter(
+        referred_user=user, status=ReferralStatus.REWARDED,
+    ).select_related("referrer", "referred_user").first()
+    if referral is None or ReferrerReward.objects.filter(referral=referral).exists():
+        return None
+    return issue_referrer_reward(referral)
 
 
 def _reward_reference() -> str:
@@ -541,6 +801,9 @@ def stats_for(user) -> dict:
     issued = ReferralReward.objects.filter(
         referral__referrer=user, status=RewardStatus.ISSUED
     ).aggregate(total=Sum("amount"))["total"] or Decimal("0.00")
+    earned = ReferrerReward.objects.filter(
+        user=user, status=RewardStatus.ISSUED
+    ).aggregate(total=Sum("amount"))["total"] or Decimal("0.00")
 
     return {
         "successful": rewarded,
@@ -551,4 +814,6 @@ def stats_for(user) -> dict:
         "rejected": counts[ReferralStatus.REJECTED],
         "total": referrals.count(),
         "rewards_issued": str(quantize(issued)),
+        # What the user has earned for inviting people.
+        "earned": str(quantize(earned)),
     }

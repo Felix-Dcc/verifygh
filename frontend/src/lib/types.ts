@@ -964,13 +964,20 @@ export type ReferralStats = {
   rejected: number;
   total: number;
   rewards_issued: string;
+  /** What this user has earned for inviting people. */
+  earned: string;
 };
 
 export type MyReferral = {
   enabled: boolean;
   code: string;
   share_url: string;
+  /** The friend's welcome bonus. */
   bonus_amount: string;
+  /** What the inviter earns when the friend completes a paid number. */
+  referrer_bonus: string;
+  require_first_deposit: boolean;
+  min_first_deposit: string;
   currency: string;
   stats: ReferralStats;
 };
@@ -980,6 +987,8 @@ export type ReferralHistoryItem = {
   friend: string;
   status: "PENDING" | "REWARDED" | "REJECTED";
   reward_amount: string | null;
+  /** What the inviter earned from this friend. */
+  earned_amount: string | null;
   created_at: string;
   rewarded_at: string | null;
 };
@@ -1015,6 +1024,13 @@ export type AdminReferral = {
     reversed_at: string | null;
     created_at: string;
   } | null;
+  /** The inviter's own reward, once the friend completed a paid number. */
+  referrer_reward: {
+    reference: string;
+    amount: string;
+    status: "ISSUED" | "REVERSED";
+    created_at: string;
+  } | null;
   risk_flags: ReferralRiskFlag[];
   created_at: string;
   eligible_at: string | null;
@@ -1033,6 +1049,19 @@ export type ReferralAnalytics = {
   promotional_credit_reversed: string;
   average_acquisition_cost: string;
   conversion_rate: number;
+  referrer_credit_issued: string;
+  total_bonus_cost: string;
+  /** What invited people went on to do. */
+  invited_verified: number;
+  invited_verified_rate: number;
+  invited_topped_up: number;
+  invited_topped_up_rate: number;
+  invited_buyers: number;
+  invited_repeat_buyers: number;
+  invited_repeat_rate: number;
+  invited_orders: number;
+  invited_revenue: string;
+  invited_cash_revenue: string;
 };
 
 /* -------------------------------------------------------------------------

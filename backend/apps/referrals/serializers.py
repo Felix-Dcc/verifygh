@@ -37,10 +37,13 @@ class ReferralHistorySerializer(serializers.ModelSerializer):
     friend = serializers.SerializerMethodField()
     status = serializers.SerializerMethodField()
     reward_amount = serializers.SerializerMethodField()
+    #: What the inviter earned from this friend, once they became a paying customer.
+    earned_amount = serializers.SerializerMethodField()
 
     class Meta:
         model = Referral
-        fields = ["friend", "status", "reward_amount", "created_at", "rewarded_at"]
+        fields = ["friend", "status", "reward_amount", "earned_amount", "created_at",
+                  "rewarded_at"]
         read_only_fields = fields
 
     def get_friend(self, obj: Referral) -> str:
@@ -52,6 +55,14 @@ class ReferralHistorySerializer(serializers.ModelSerializer):
     def get_reward_amount(self, obj: Referral) -> str | None:
         reward = getattr(obj, "reward", None)
         return str(reward.amount) if reward is not None else None
+
+    def get_earned_amount(self, obj: Referral) -> str | None:
+        from apps.referrals.models import RewardStatus
+
+        reward = getattr(obj, "referrer_reward", None)
+        if reward is None or reward.status != RewardStatus.ISSUED:
+            return None
+        return str(reward.amount)
 
 
 class ValidateCodeSerializer(serializers.Serializer):

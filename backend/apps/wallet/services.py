@@ -388,7 +388,9 @@ def charge_order(*, wallet: Wallet, amount, order_id, order_reference: str,
 
 
 def credit_referral_bonus(*, wallet: Wallet, amount, idempotency_key: str, referral_id,
-                          reward_reference: str) -> WalletLedgerEntry:
+                          reward_reference: str,
+                          description: str = "Referral bonus (promotional credit)",
+                          ) -> WalletLedgerEntry:
     """Grant promotional credit for a referral. Not cash, and never becomes cash."""
     return post_entry(
         wallet=wallet,
@@ -396,7 +398,7 @@ def credit_referral_bonus(*, wallet: Wallet, amount, idempotency_key: str, refer
         entry_type=LedgerEntryType.REFERRAL_BONUS,
         direction=LedgerDirection.CREDIT,
         idempotency_key=idempotency_key,
-        description="Referral bonus (promotional credit)",
+        description=description,
         counterparty="PLATFORM:referrals",
         metadata={"referral_id": str(referral_id), "reward_reference": reward_reference},
         funds=FundType.PROMO,

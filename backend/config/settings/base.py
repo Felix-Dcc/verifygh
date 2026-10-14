@@ -621,13 +621,19 @@ VERIFYGH = {
     # it is read; after that the database is the source of truth, so an admin
     # can change the bonus without a deploy.
     "REFERRAL_PROGRAM_ENABLED": env_bool("REFERRAL_PROGRAM_ENABLED", True),
-    "REFERRAL_SIGNUP_BONUS": env("REFERRAL_SIGNUP_BONUS_GHS", "5.00"),
+    "REFERRAL_SIGNUP_BONUS": env("REFERRAL_SIGNUP_BONUS_GHS", "2.00"),
     "REFERRAL_MAX_MONTHLY_SUCCESSFUL_REFERRALS": env_int(
-        "REFERRAL_MAX_MONTHLY_SUCCESSFUL_REFERRALS", 20
+        "REFERRAL_MAX_MONTHLY_SUCCESSFUL_REFERRALS", 40
     ),
     "REFERRAL_REQUIRE_PHONE_VERIFICATION": env_bool(
         "REFERRAL_REQUIRE_PHONE_VERIFICATION", False
     ),
+    # The friend's welcome bonus waits for their first cash top-up of at least
+    # this much (in total); the inviter earns REFERRER_BONUS when the friend's
+    # first number, paid partly in cash, is complete.
+    "REFERRAL_REQUIRE_FIRST_DEPOSIT": env_bool("REFERRAL_REQUIRE_FIRST_DEPOSIT", True),
+    "REFERRAL_MIN_FIRST_DEPOSIT": env("REFERRAL_MIN_FIRST_DEPOSIT_GHS", "10.00"),
+    "REFERRAL_REFERRER_BONUS": env("REFERRAL_REFERRER_BONUS_GHS", "3.00"),
     # Codes and SMS text are erased from finished orders after this many days.
     "VERIFICATION_DATA_RETENTION_DAYS": env_int("VERIFICATION_DATA_RETENTION_DAYS", 30),
 }

@@ -54,6 +54,15 @@ VERIFYGH = {
     # tests/test_deposit_guard.py turns it back on and covers it properly, and
     # asserts separately that production ships with it enabled.
     "REQUIRE_CATALOG_FOR_DEPOSIT": False,
+    # Off so the referral tests about attribution, fraud holds and races can
+    # reward on email verification alone, as they always have.
+    # tests/test_referral_deposit_gate.py turns it back on and covers it, and
+    # asserts separately that production ships with it enabled.
+    "REFERRAL_REQUIRE_FIRST_DEPOSIT": False,
+    # The older referral tests are written around a GH₵5 bonus. The amount is
+    # configuration, not logic; test_referral_deposit_gate.py checks the
+    # shipped GH₵2 / GH₵3 and runs the full flow at those amounts.
+    "REFERRAL_SIGNUP_BONUS": "5.00",
 }
 
 LOGGING["root"]["level"] = "CRITICAL"  # noqa: F405

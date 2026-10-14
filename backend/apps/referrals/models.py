@@ -9,6 +9,9 @@ Four tables, no duplication of the user or the wallet:
 * `ReferralReward` - one per referral, pointing at the ledger entry that
                      actually granted the credit. Its uniqueness is what stops
                      a second reward.
+* `ReferrerReward` - the inviter's own credit, one per referral, paid once the
+                     friend has topped up, been welcomed and bought a number
+                     partly with their own money.
 * `ReferralRiskFlag` - why a referral was held or rejected, kept out of the
                      customer-facing API.
 
@@ -55,6 +58,7 @@ class RiskKind(models.TextChoices):
     MONTHLY_LIMIT = "MONTHLY_LIMIT", "Referrer is at the monthly limit"
     REFERRER_SUSPENDED = "REFERRER_SUSPENDED", "Referrer is suspended"
     ALREADY_BONUSED = "ALREADY_BONUSED", "User already received a signup bonus"
+    EMAIL_ALIAS = "EMAIL_ALIAS", "Same inbox as an existing account"
 
 
 class ReferralProgram(BaseModel):
@@ -69,13 +73,31 @@ class ReferralProgram(BaseModel):
 
     name = models.CharField(max_length=32, unique=True, default=SINGLETON_NAME)
     is_enabled = models.BooleanField(default=True)
-    signup_bonus = models.DecimalField(max_digits=10, decimal_places=2, default=Decimal("5.00"))
+    #: The invited friend's welcome bonus. GH₵2 (14 Oct 2026, was 5): with the
+    #: inviter's GH₵3, GH₵5 per paying friend - an average customer (2.2
+    #: numbers at about GH₵4.31 profit each) then clearly pays it back.
+    signup_bonus = models.DecimalField(max_digits=10, decimal_places=2, default=Decimal("2.00"))
     currency = models.CharField(max_length=3, default="GHS")
-    max_monthly_successful_referrals = models.PositiveIntegerField(default=20)
+    #: Paid welcome bonuses per referrer per month; more wait for next month.
+    #: 40 (14 Oct 2026, was 20), so one hour at the 40/hour speed limit fits.
+    max_monthly_successful_referrals = models.PositiveIntegerField(default=40)
     #: Sign-ups from one referrer within an hour before the velocity flag.
-    velocity_per_hour = models.PositiveIntegerField(default=5)
+    #: 40, not 5 (14 Oct 2026): a link posted in a busy WhatsApp group brings
+    #: dozens in an hour, and the first-deposit rule now does the anti-farming
+    #: work this flag used to.
+    velocity_per_hour = models.PositiveIntegerField(default=40)
     require_email_verification = models.BooleanField(default=True)
     require_phone_verification = models.BooleanField(default=False)
+    #: The welcome bonus waits for the friend's own money: a cash top-up of at
+    #: least `min_first_deposit` in total. An email alone - instant with Google -
+    #: was enough to farm it with throwaway accounts.
+    require_first_deposit = models.BooleanField(default=True)
+    min_first_deposit = models.DecimalField(max_digits=10, decimal_places=2,
+                                            default=Decimal("10.00"))
+    #: The inviter's credit, paid once the friend's first number - bought partly
+    #: with cash - is complete. 0 turns it off.
+    referrer_bonus = models.DecimalField(max_digits=10, decimal_places=2,
+                                         default=Decimal("3.00"))
     updated_by = models.ForeignKey(
         settings.AUTH_USER_MODEL, null=True, blank=True, on_delete=models.SET_NULL,
         related_name="referral_program_updates",
@@ -86,6 +108,14 @@ class ReferralProgram(BaseModel):
         constraints = [
             models.CheckConstraint(
                 check=Q(signup_bonus__gte=Decimal("0.00")), name="referral_bonus_non_negative"
+            ),
+            models.CheckConstraint(
+                check=Q(referrer_bonus__gte=Decimal("0.00")),
+                name="referral_referrer_bonus_non_negative",
+            ),
+            models.CheckConstraint(
+                check=Q(min_first_deposit__gte=Decimal("0.00")),
+                name="referral_min_deposit_non_negative",
             ),
         ]
 
@@ -106,6 +136,9 @@ class ReferralProgram(BaseModel):
                     "REFERRAL_MAX_MONTHLY_SUCCESSFUL_REFERRALS"
                 ],
                 "require_phone_verification": config["REFERRAL_REQUIRE_PHONE_VERIFICATION"],
+                "require_first_deposit": config["REFERRAL_REQUIRE_FIRST_DEPOSIT"],
+                "min_first_deposit": Decimal(str(config["REFERRAL_MIN_FIRST_DEPOSIT"])),
+                "referrer_bonus": Decimal(str(config["REFERRAL_REFERRER_BONUS"])),
             },
         )
         return program
@@ -237,6 +270,50 @@ class ReferralReward(BaseModel):
         constraints = [
             models.CheckConstraint(
                 check=Q(amount__gt=Decimal("0.00")), name="referral_reward_amount_positive"
+            ),
+        ]
+
+    def __str__(self) -> str:
+        return f"{self.reference} {self.currency} {self.amount}"
+
+
+class ReferrerReward(BaseModel):
+    """The inviter's promotional credit for one referral. One per referral, ever.
+
+    Paid only after the friend has qualified for their own bonus and completed
+    a number paid at least partly in cash - so it follows revenue, never a bare
+    sign-up. The same three locks as the friend's reward stop a second one: a
+    row lock on the referral, this OneToOne, and the ledger's idempotency key.
+    """
+
+    referral = models.OneToOneField(Referral, on_delete=models.PROTECT,
+                                    related_name="referrer_reward")
+    user = models.ForeignKey(
+        settings.AUTH_USER_MODEL, on_delete=models.CASCADE, related_name="referrer_rewards"
+    )
+    reference = models.CharField(max_length=40, unique=True, db_index=True)
+    amount = models.DecimalField(max_digits=10, decimal_places=2)
+    currency = models.CharField(max_length=3, default="GHS")
+    #: The friend's order that earned it.
+    qualifying_order_id = models.UUIDField(null=True, blank=True)
+
+    status = models.CharField(
+        max_length=10, choices=RewardStatus.choices, default=RewardStatus.ISSUED, db_index=True
+    )
+    ledger_entry_id = models.UUIDField(null=True, blank=True, db_index=True)
+    reversal_entry_id = models.UUIDField(null=True, blank=True)
+    reversed_at = models.DateTimeField(null=True, blank=True)
+    reversed_by = models.ForeignKey(
+        settings.AUTH_USER_MODEL, null=True, blank=True, on_delete=models.SET_NULL,
+        related_name="referrer_rewards_reversed",
+    )
+
+    class Meta:
+        db_table = "referrals_referrer_reward"
+        ordering = ["-created_at"]
+        constraints = [
+            models.CheckConstraint(
+                check=Q(amount__gt=Decimal("0.00")), name="referrer_reward_amount_positive"
             ),
         ]
 

@@ -5,6 +5,7 @@ import { SWRConfig } from "swr";
 
 import { AuthProvider } from "@/components/auth-provider";
 import { MaintenanceBanner } from "@/components/maintenance";
+import { ReferralCapture } from "@/components/referral-invite";
 import { ThemeProvider } from "@/components/theme";
 import { ToastProvider } from "@/components/ui/toast";
 import { fetcher } from "@/lib/api";
@@ -28,6 +29,8 @@ export function Providers({ children }: { children: React.ReactNode }) {
           <AuthProvider>
             {/* While staff have paused the site: every customer and public page. */}
             <MaintenanceBanner />
+            {/* Keeps a ?ref= invitation from whichever page a friend lands on. */}
+            <ReferralCapture />
             {children}
           </AuthProvider>
         </ToastProvider>

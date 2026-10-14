@@ -43,6 +43,26 @@ def process_pending_referrals(limit: int = BATCH_SIZE) -> dict:
         else:
             held += 1
 
-    if rewarded:
-        logger.info("referral_sweep", extra={"rewarded": rewarded, "held": held})
-    return {"rewarded": rewarded, "held": held, "at": timezone.now().isoformat()}
+    # Inviters whose friend has become a paying customer, where the reward
+    # did not go through at the moment the order completed.
+    from apps.referrals.services import issue_referrer_reward
+
+    inviters = 0
+    owed = (
+        Referral.objects.filter(status=ReferralStatus.REWARDED, referrer_reward__isnull=True)
+        .select_related("referrer", "referred_user")
+        .order_by("rewarded_at")[:limit]
+    )
+    for referral in owed:
+        try:
+            if issue_referrer_reward(referral) is not None:
+                inviters += 1
+        except Exception:  # noqa: BLE001 - one bad referral must not stop the sweep
+            logger.exception("referrer_reward_sweep_failed",
+                             extra={"referral_id": str(referral.pk)})
+
+    if rewarded or inviters:
+        logger.info("referral_sweep", extra={"rewarded": rewarded, "held": held,
+                                             "inviters_rewarded": inviters})
+    return {"rewarded": rewarded, "held": held, "inviters_rewarded": inviters,
+            "at": timezone.now().isoformat()}

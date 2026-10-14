@@ -819,6 +819,18 @@ def _credit_payment(payment: Payment, event) -> Payment:
 
     transaction.on_commit(_notify)
 
+    def _referral():
+        # A first top-up is what unlocks an invited friend's welcome bonus.
+        # Never allowed to touch the deposit itself.
+        try:
+            from apps.referrals.services import process_for_user
+
+            process_for_user(payment.user)
+        except Exception:
+            logger.exception("referral_after_deposit_failed", extra={"reference": payment.reference})
+
+    transaction.on_commit(_referral)
+
     record_audit(
         actor=payment.user, action="DEPOSIT_CREDITED", target=payment,
         metadata={"reference": payment.reference, "amount": str(credited_amount)},

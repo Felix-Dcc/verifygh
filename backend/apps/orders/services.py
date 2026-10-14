@@ -1038,6 +1038,19 @@ def complete_order(order: Order, *, actor=None) -> Order:
         channels=("EMAIL", "IN_APP"),
         metadata={"order_reference": order.reference},
     )
+
+    def _referral():
+        # A friend's first completed, partly cash-paid number earns whoever
+        # invited them their reward. Never allowed to touch the order itself.
+        try:
+            from apps.referrals.services import process_referrer_reward_for_user
+
+            process_referrer_reward_for_user(order.user)
+        except Exception:
+            logger.exception("referrer_reward_after_order_failed",
+                             extra={"order": order.reference})
+
+    transaction.on_commit(_referral)
     return order
 
 

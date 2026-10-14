@@ -17,6 +17,7 @@ import {
   ReferralInviteBanner,
   clearReferralInvite,
   useReferralInvite,
+  useReferralsEnabled,
 } from "@/components/referral-invite";
 import {
   Alert,
@@ -45,6 +46,7 @@ function RegisterForm() {
   const params = useSearchParams();
   const { signUp, user, ready } = useAuth();
   const invite = useReferralInvite();
+  const referralsOpen = useReferralsEnabled();
   const google = useGoogleSignIn();
   const googleError = googleProblem(params.get("google"));
 
@@ -222,6 +224,37 @@ function RegisterForm() {
               placeholder="024 123 4567"
             />
           </Field>
+
+          {referralsOpen ? (
+            <Field
+              label="Invitation code"
+              htmlFor="referral_code"
+              error={
+                invite.status === "invalid"
+                  ? "We could not find that code. You can still create your account."
+                  : fieldErrors.referral_code
+              }
+              hint={
+                invite.status === "valid"
+                  ? "Invitation applied."
+                  : "Optional - from a friend who uses VerifyGH, e.g. VGHK7M2P."
+              }
+            >
+              <Input
+                id="referral_code"
+                name="referral_code"
+                autoComplete="off"
+                autoCapitalize="characters"
+                spellCheck={false}
+                maxLength={16}
+                value={invite.code}
+                onChange={(event) => invite.setCode(event.target.value)}
+                invalid={invite.status === "invalid"}
+                placeholder="VGH..."
+                className="code uppercase tracking-wider"
+              />
+            </Field>
+          ) : null}
 
           <Field
             label="Password"

@@ -1,7 +1,11 @@
 # Referrals and promotional credit
 
 A VerifyGH user shares a code. A genuinely new person signs up through it and,
-once they qualify, receives **GH₵5 of promotional credit**.
+once they have verified their email **and topped up at least GH₵10 of their own
+money**, receives **GH₵2 of promotional credit**. When that friend then
+completes a number paid at least partly in cash, the person who invited them
+receives **GH₵3 of promotional credit**. Both rewards follow real money - none
+is paid for a bare sign-up (14 Oct 2026).
 
 Promotional credit is not cash. It buys verifications and nothing else: it
 cannot be withdrawn, transferred, converted, or refunded as money. This
@@ -66,9 +70,12 @@ credit into withdrawable cash - not a refund, not a reversal, not an admin.
 | Setting | Default | Where |
 |---|---|---|
 | `REFERRAL_PROGRAM_ENABLED` | `true` | env, then database |
-| `REFERRAL_SIGNUP_BONUS_GHS` | `5.00` | env, then database |
-| `REFERRAL_MAX_MONTHLY_SUCCESSFUL_REFERRALS` | `20` | env, then database |
+| `REFERRAL_SIGNUP_BONUS_GHS` | `2.00` | env, then database |
+| `REFERRAL_MAX_MONTHLY_SUCCESSFUL_REFERRALS` | `40` | env, then database |
 | `REFERRAL_REQUIRE_PHONE_VERIFICATION` | `false` | env, then database |
+| `REFERRAL_REQUIRE_FIRST_DEPOSIT` | `true` | env, then database |
+| `REFERRAL_MIN_FIRST_DEPOSIT_GHS` | `10.00` | env, then database |
+| `REFERRAL_REFERRER_BONUS_GHS` | `3.00` (0 turns it off) | env, then database |
 
 The environment variables **seed** the `ReferralProgram` row the first time it
 is read. After that the row is the source of truth, so a super admin changes
@@ -118,15 +125,35 @@ user waiting on verification is never shown anything about fraud:
 3. neither account is suspended or inactive;
 4. the referred user's email is verified;
 5. their phone is verified, if the programme requires it;
+5b. they have topped up at least `min_first_deposit` of their own cash, in
+   total (ledger `DEPOSIT` entries; staff adjustments and promo do not count),
+   if the programme requires it;
 6. they have not already had a signup bonus (checked against the **ledger**,
-   not only the reward table);
+   not only the reward table - even an admin's approval cannot pay a second);
 7. no blocking risk flag - if there is one, the referral is held for review;
 8. the referrer is under their monthly cap - if not, it is held, not rejected;
 9. the referral has not already been rewarded.
 
-Evaluation runs when the user verifies their email, when an admin acts, and
-every 30 minutes from `process_pending_referrals`, which catches anything that
-became eligible later.
+Evaluation runs when the user verifies their email, when a deposit is
+credited to them, when an admin acts, and every 30 minutes from
+`process_pending_referrals`, which catches anything that became eligible later.
+
+### The inviter's reward
+
+`ReferrerReward`, one per referral (OneToOne), paid by `issue_referrer_reward`
+when all of these hold:
+
+* the friend's own bonus was paid and has not been reversed;
+* the friend has a **completed** order with a delivered code, some of it paid in
+  **cash**, and not refunded - a number bought with the bonus alone earns
+  nothing;
+* the inviter is active and not suspended, and the programme is running.
+
+It runs when one of the friend's orders completes, right after the friend's own
+bonus is paid (in case they bought while it was held), and in the same 30-minute
+sweep. The ledger key is `referrer-reward:<referral id>`, so it is never mistaken
+for a welcome bonus. The inviter is emailed when a friend joins with their code
+and when they earn.
 
 ---
 
@@ -134,11 +161,12 @@ became eligible later.
 
 | Signal | Level | Effect |
 |---|---|---|
-| Same email as the referrer | HIGH | held for review |
+| Same email as the referrer (compared as inboxes: Gmail dots and `+tags`) | HIGH | held for review |
+| Same inbox as any existing account (`canonical_email`) | HIGH | held for review |
 | Same phone as the referrer | HIGH | blocked at registration (the phone is already unique) |
 | Same device as the referrer | HIGH | held for review |
 | Device shared with 2+ other accounts | MEDIUM | held for review |
-| Referrer velocity (default 5/hour) | MEDIUM | held for review |
+| Referrer velocity (default 40/hour) | MEDIUM | held for review |
 | Referrer at monthly cap | LOW | held until next month |
 | Already had a signup bonus | MEDIUM | rejected |
 | **Shared IP address** | LOW | **recorded only, never blocking** |
@@ -172,7 +200,7 @@ reward; a "claim" button would be the browser asking to be given money.
 
 ## Idempotency
 
-Calling the reward path ten times concurrently credits GH₵5 once. Three
+Calling the reward path ten times concurrently credits the bonus once. Three
 independent mechanisms, any one of which would be enough:
 
 1. `SELECT ... FOR UPDATE` on the referral row (PostgreSQL);
@@ -189,8 +217,8 @@ Together they also hold on SQLite, which has no row locks.
 1. Set the environment variables (or accept the defaults):
    ```bash
    REFERRAL_PROGRAM_ENABLED=true
-   REFERRAL_SIGNUP_BONUS_GHS=5.00
-   REFERRAL_MAX_MONTHLY_SUCCESSFUL_REFERRALS=20
+   REFERRAL_SIGNUP_BONUS_GHS=2.00
+   REFERRAL_MAX_MONTHLY_SUCCESSFUL_REFERRALS=40
    ```
 2. Deploy and run `python manage.py migrate`. This adds the promotional bucket
    to existing wallets (`0.00`), the `funds` column to existing ledger rows

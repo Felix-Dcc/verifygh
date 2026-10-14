@@ -37,8 +37,19 @@ class ReferralStatusView(APIView):
         return Response({"enabled": ReferralProgram.load().is_enabled})
 
 
+def _terms(program: ReferralProgram) -> dict:
+    """What each side gets and what unlocks it - shown wherever the offer is."""
+    return {
+        "bonus_amount": str(program.signup_bonus),
+        "referrer_bonus": str(program.referrer_bonus),
+        "require_first_deposit": program.require_first_deposit,
+        "min_first_deposit": str(program.min_first_deposit),
+        "currency": program.currency,
+    }
+
+
 class MyReferralView(APIView):
-    """The user's own code, link and the current bonus."""
+    """The user's own code, link and the current terms."""
 
     permission_classes = [IsAuthenticated, IsActiveUser]
 
@@ -50,8 +61,7 @@ class MyReferralView(APIView):
                 "enabled": program.is_enabled,
                 "code": code.code,
                 "share_url": code.share_url,
-                "bonus_amount": str(program.signup_bonus),
-                "currency": program.currency,
+                **_terms(program),
                 "stats": stats_for(request.user),
             }
         )
@@ -72,7 +82,7 @@ class ReferralHistoryView(APIView):
     def get(self, request):
         referrals = (
             Referral.objects.filter(referrer=request.user)
-            .select_related("referred_user", "reward")
+            .select_related("referred_user", "reward", "referrer_reward")
             .order_by("-created_at")[:100]
         )
         return Response({"results": ReferralHistorySerializer(referrals, many=True).data})
@@ -100,7 +110,6 @@ class ValidateReferralCodeView(APIView):
             {
                 "valid": entry is not None,
                 "enabled": program.is_enabled,
-                "bonus_amount": str(program.signup_bonus),
-                "currency": program.currency,
+                **_terms(program),
             }
         )

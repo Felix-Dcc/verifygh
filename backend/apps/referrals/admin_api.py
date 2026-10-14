@@ -29,6 +29,7 @@ from apps.referrals.models import (
     ReferralProgram,
     ReferralReward,
     ReferralStatus,
+    ReferrerReward,
     RewardStatus,
 )
 from apps.referrals.services import issue_reward, reverse_reward
@@ -54,6 +55,7 @@ class AdminReferralSerializer(serializers.ModelSerializer):
         source="referred_user.is_suspended", read_only=True
     )
     reward = serializers.SerializerMethodField()
+    referrer_reward = serializers.SerializerMethodField()
     risk_flags = serializers.SerializerMethodField()
 
     class Meta:
@@ -62,10 +64,21 @@ class AdminReferralSerializer(serializers.ModelSerializer):
             "id", "code", "status", "reason", "staff_note",
             "referrer_id", "referrer_email", "referred_id", "referred_email",
             "referred_email_verified", "referred_suspended",
-            "signup_ip", "risk_score", "reward", "risk_flags",
+            "signup_ip", "risk_score", "reward", "referrer_reward", "risk_flags",
             "created_at", "eligible_at", "rewarded_at", "rejected_at",
         ]
         read_only_fields = fields
+
+    def get_referrer_reward(self, obj: Referral):
+        reward = getattr(obj, "referrer_reward", None)
+        if reward is None:
+            return None
+        return {
+            "reference": reward.reference,
+            "amount": str(reward.amount),
+            "status": reward.status,
+            "created_at": reward.created_at,
+        }
 
     def get_reward(self, obj: Referral):
         reward = getattr(obj, "reward", None)
@@ -97,7 +110,7 @@ class AdminReferralViewSet(mixins.ListModelMixin, mixins.RetrieveModelMixin,
 
     def get_queryset(self):
         queryset = Referral.objects.select_related(
-            "referrer", "referred_user", "reward"
+            "referrer", "referred_user", "reward", "referrer_reward"
         ).prefetch_related("risk_flags")
 
         status_filter = (self.request.query_params.get("status") or "").upper()
@@ -255,10 +268,15 @@ class AdminReferralAnalyticsView(APIView):
             total=Sum("amount")
         )["total"] or Decimal("0.00")
 
+        referrer_issued = ReferrerReward.objects.filter(status=RewardStatus.ISSUED).aggregate(
+            total=Sum("amount")
+        )["total"] or Decimal("0.00")
+
         # Cost per acquisition counts only referrals we actually paid for.
         # Rejected and fraudulent sign-ups are not acquisitions.
         acquisition_cost = quantize(issued / rewarded) if rewarded else Decimal("0.00")
         conversion = round((rewarded / total) * 100, 1) if total else 0.0
+        funnel = _referred_funnel()
 
         return Response(
             {
@@ -272,8 +290,53 @@ class AdminReferralAnalyticsView(APIView):
                 "promotional_credit_reversed": str(quantize(reversed_total)),
                 "average_acquisition_cost": str(acquisition_cost),
                 "conversion_rate": conversion,
+                "referrer_credit_issued": str(quantize(referrer_issued)),
+                # Both bonuses at face value: the most the programme has promised.
+                "total_bonus_cost": str(quantize(issued + referrer_issued)),
+                **funnel,
             }
         )
+
+
+def _percent(part: int, whole: int) -> float:
+    return round(part / whole * 100, 1) if whole else 0.0
+
+
+def _referred_funnel() -> dict:
+    """What invited people went on to do: top up, buy, come back - and pay.
+
+    Revenue counts delivered, unrefunded orders only, and its cash part is
+    money the customer actually paid - the figure to set against the bonuses.
+    """
+    from apps.orders.models import Order, RefundStatus
+    from apps.wallet.models import FundType, LedgerDirection, LedgerEntryType, WalletLedgerEntry
+
+    invited = Referral.objects.values("referred_user")
+    invited_count = Referral.objects.count()
+    verified = Referral.objects.filter(referred_user__is_email_verified=True).count()
+    topped_up = (
+        WalletLedgerEntry.objects.filter(
+            wallet__user__in=invited, entry_type=LedgerEntryType.DEPOSIT,
+            direction=LedgerDirection.CREDIT, funds=FundType.CASH,
+        ).values("wallet__user").distinct().count()
+    )
+    delivered = Order.objects.filter(user__in=invited, code_received_at__isnull=False) \
+        .exclude(refund_status=RefundStatus.COMPLETED)
+    buyers = delivered.values("user").distinct().count()
+    repeat = delivered.values("user").annotate(n=Count("id")).filter(n__gte=2).count()
+    totals = delivered.aggregate(revenue=Sum("price"), cash=Sum("cash_amount"))
+    return {
+        "invited_verified": verified,
+        "invited_verified_rate": _percent(verified, invited_count),
+        "invited_topped_up": topped_up,
+        "invited_topped_up_rate": _percent(topped_up, invited_count),
+        "invited_buyers": buyers,
+        "invited_repeat_buyers": repeat,
+        "invited_repeat_rate": _percent(repeat, buyers),
+        "invited_orders": delivered.count(),
+        "invited_revenue": str(quantize(totals["revenue"] or Decimal("0.00"))),
+        "invited_cash_revenue": str(quantize(totals["cash"] or Decimal("0.00"))),
+    }
 
 
 class ReferralProgramSerializer(serializers.ModelSerializer):
@@ -282,6 +345,7 @@ class ReferralProgramSerializer(serializers.ModelSerializer):
         fields = [
             "is_enabled", "signup_bonus", "currency", "max_monthly_successful_referrals",
             "velocity_per_hour", "require_email_verification", "require_phone_verification",
+            "require_first_deposit", "min_first_deposit", "referrer_bonus",
             "updated_at",
         ]
         read_only_fields = ["currency", "updated_at"]
@@ -304,8 +368,9 @@ class AdminReferralProgramView(APIView):
         program = ReferralProgram.load()
         serializer = ReferralProgramSerializer(program, data=request.data, partial=True)
         serializer.is_valid(raise_exception=True)
-        if Decimal(str(serializer.validated_data.get("signup_bonus", program.signup_bonus))) < 0:
-            raise ValidationFailed("The bonus cannot be negative.")
+        for field in ("signup_bonus", "referrer_bonus", "min_first_deposit"):
+            if Decimal(str(serializer.validated_data.get(field, getattr(program, field)))) < 0:
+                raise ValidationFailed("Amounts cannot be negative.")
 
         before = ReferralProgramSerializer(program).data
         with transaction.atomic():

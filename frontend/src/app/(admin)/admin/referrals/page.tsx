@@ -85,6 +85,42 @@ export default function AdminReferralsPage() {
         />
       </div>
 
+      {/* What invited people went on to do - the proof the programme pays. */}
+      <div className="metric-group grid-cols-1 sm:grid-cols-2 xl:grid-cols-4">
+        <Stat
+          label="Topped up"
+          value={analytics?.invited_topped_up}
+          hint={analytics ? `${analytics.invited_topped_up_rate}% of invited, ${analytics.invited_verified_rate}% verified email` : undefined}
+        />
+        <Stat
+          label="Bought a number"
+          value={analytics?.invited_buyers}
+          hint={
+            analytics
+              ? `${analytics.invited_repeat_buyers} came back for more (${analytics.invited_repeat_rate}%)`
+              : undefined
+          }
+        />
+        <Stat
+          label="Cash paid by invited"
+          value={analytics ? cedis(analytics.invited_cash_revenue) : undefined}
+          hint={
+            analytics
+              ? `${cedis(analytics.invited_revenue)} across ${analytics.invited_orders} delivered numbers`
+              : undefined
+          }
+        />
+        <Stat
+          label="Bonus cost"
+          value={analytics ? cedis(analytics.total_bonus_cost) : undefined}
+          hint={
+            analytics
+              ? `Friends ${cedis(analytics.promotional_credit_issued)}, inviters ${cedis(analytics.referrer_credit_issued)}`
+              : undefined
+          }
+        />
+      </div>
+
       {analytics && analytics.fraud_flagged > 0 ? (
         <Alert tone="warn" title={`${analytics.fraud_flagged} referrals need review`}>
           These are held, not rejected. Open one to see which check caught it.
@@ -279,8 +315,16 @@ function ReferralDialog({
         <dl className="grid grid-cols-2 gap-3 text-sm">
           <Detail label="Status" value={referral.status} />
           <Detail
-            label="Reward"
+            label="Friend's bonus"
             value={referral.reward ? `${cedis(referral.reward.amount)} (${referral.reward.status})` : "None"}
+          />
+          <Detail
+            label="Inviter's reward"
+            value={
+              referral.referrer_reward
+                ? `${cedis(referral.referrer_reward.amount)} (${referral.referrer_reward.status})`
+                : "Not yet"
+            }
           />
           <Detail
             label="Invited email verified"
@@ -375,7 +419,14 @@ function Detail({ label, value }: { label: string; value: string }) {
   );
 }
 
-type Programme = { is_enabled: boolean; signup_bonus: string; currency: string };
+type Programme = {
+  is_enabled: boolean;
+  signup_bonus: string;
+  referrer_bonus: string;
+  require_first_deposit: boolean;
+  min_first_deposit: string;
+  currency: string;
+};
 
 /**
  * The whole programme on or off. Paused: new sign-ups are not attributed, no
@@ -428,7 +479,15 @@ function ProgrammeSwitch() {
           </p>
           <p className="mt-0.5 text-sm text-ink-muted">
             {running
-              ? `Running. New members invited with a code get ${cedis(data.signup_bonus)} once they qualify.`
+              ? `Running. Invited friends get ${cedis(data.signup_bonus)} ${
+                  data.require_first_deposit
+                    ? `after a first top-up of ${cedis(data.min_first_deposit)} or more`
+                    : "once they verify their email"
+                }${
+                  Number.parseFloat(data.referrer_bonus) > 0
+                    ? `; the inviter gets ${cedis(data.referrer_bonus)} when that friend completes a number paid partly in cash.`
+                    : "."
+                }`
               : "Paused. Sign-ups are not linked to referrers, no bonus is paid, and customers do not see referrals."}
           </p>
         </div>
