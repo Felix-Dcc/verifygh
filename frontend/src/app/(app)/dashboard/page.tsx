@@ -119,6 +119,9 @@ function Dashboard() {
             <ButtonLink href="/services" variant="onBandOutline">
               Buy a number
             </ButtonLink>
+            <ButtonLink href="/rentals" variant="onBandOutline">
+              Rent a number
+            </ButtonLink>
           </>
         }
         aside={
