@@ -22,6 +22,7 @@ import {
   HomeIcon,
   LogoutIcon,
   MenuIcon,
+  PhoneIcon,
   ReceiptIcon,
   SearchIcon,
   SettingsIcon,
@@ -65,6 +66,7 @@ const USER_NAV: NavGroup[] = [
     items: [
       { href: "/dashboard", label: "Home", icon: HomeIcon },
       { href: "/services", label: "Buy a number", icon: GridIcon },
+      { href: "/rentals", label: "Rent a number", icon: PhoneIcon },
       { href: "/orders", label: "Orders", icon: ReceiptIcon },
       { href: "/wallet", label: "Wallet", icon: WalletIcon, match: ["/wallet", "/transactions"] },
     ],
@@ -81,7 +83,7 @@ const USER_NAV: NavGroup[] = [
 
 const USER_BOTTOM_NAV: NavItem[] = [
   { href: "/dashboard", label: "Home", icon: HomeIcon },
-  { href: "/services", label: "Buy", icon: GridIcon },
+  { href: "/services", label: "Buy", icon: GridIcon, match: ["/services", "/rentals"] },
   { href: "/orders", label: "Orders", icon: ReceiptIcon },
   { href: "/wallet", label: "Wallet", icon: WalletIcon, match: ["/wallet", "/transactions"] },
   { href: "/account", label: "Account", icon: UserIcon, match: ["/account", "/refer"] },
@@ -93,6 +95,7 @@ const ADMIN_NAV: NavGroup[] = [
     label: "Operations",
     items: [
       { href: "/admin/orders", label: "Orders", icon: ReceiptIcon },
+      { href: "/admin/rentals", label: "Rentals", icon: PhoneIcon },
       { href: "/admin/issues", label: "Number issues", icon: FlagIcon },
       { href: "/admin/payments", label: "Payments", icon: WalletIcon },
       { href: "/admin/manual-deposits", label: "Manual top-ups", icon: WalletIcon },

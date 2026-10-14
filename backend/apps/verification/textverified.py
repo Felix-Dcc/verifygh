@@ -39,6 +39,7 @@ from __future__ import annotations
 
 import base64
 import binascii
+import dataclasses
 import hashlib
 import hmac
 import json
@@ -62,6 +63,10 @@ from apps.verification.base import (
     ProviderOrderDTO,
     ProviderOrderState,
     ProviderServiceDTO,
+    RentalDTO,
+    RentalExtensionDTO,
+    RentalMessageDTO,
+    RentalState,
     VerificationProvider,
 )
 
@@ -92,6 +97,23 @@ OPERATIONAL_ERROR_CODES = {"insufficientbalance"}
 #: shortage is often momentary (the same number can be bought minutes later).
 #: One more try after this pause, before the customer is refunded.
 UNAVAILABLE_RETRY_SECONDS = 3
+
+#: Rental lengths as the documented `RentalDuration` enum names them, by days.
+RENTAL_DURATIONS = {
+    1: "oneDay", 3: "threeDay", 7: "sevenDay", 14: "fourteenDay",
+    30: "thirtyDay", 90: "ninetyDay", 365: "oneYear",
+}
+
+#: The documented non-renewable rental states (`ReservationState`).
+RENTAL_STATE_MAP = {
+    "nonrenewableactive": RentalState.ACTIVE,
+    "nonrenewableexpired": RentalState.EXPIRED,
+    "nonrenewablerefunded": RentalState.REFUNDED,
+}
+
+#: Pages of a rental's SMS list read in one go. Newest first, so the cap only
+#: ever leaves out the oldest messages of a very busy number.
+RENTAL_SMS_MAX_PAGES = 5
 
 WEBHOOK_SIGNATURE_HEADER = "x-webhook-signature"
 WEBHOOK_SIGNATURE_PREFIX = "HMAC-SHA512="
@@ -165,6 +187,14 @@ class TextVerifiedProvider(VerificationProvider):
     PATH_ORDER_REFUND = "/api/pub/v2/verifications/{id}/report"
     PATH_SMS = "/api/pub/v2/sms"
     PATH_ACCOUNT = "/api/pub/v2/account/me"
+    # Rentals: non-renewable only - a fixed period, prepaid, extendable.
+    PATH_RENTAL_PRICING = "/api/pub/v2/pricing/rentals"
+    PATH_RENTAL_INVENTORY = "/api/pub/v2/inventory/rentals"
+    PATH_RENTAL_CREATE = "/api/pub/v2/reservations/rental"
+    PATH_RENTAL = "/api/pub/v2/reservations/rental/nonrenewable/{id}"
+    PATH_RENTAL_REFUND = "/api/pub/v2/reservations/rental/nonrenewable/{id}/refund"
+    PATH_RENTAL_EXTEND = "/api/pub/v2/reservations/rentals/extensions"
+    PATH_SALE = "/api/pub/v2/sales/{id}"
 
     #: Request shape used throughout: SMS verifications on mobile numbers.
     CAPABILITY = "sms"
@@ -286,10 +316,14 @@ class TextVerifiedProvider(VerificationProvider):
             raise busy
         if response.status_code in (401, 403):
             logger.error("textverified_unauthorised", extra={"status": response.status_code})
-            raise _provider_error("The verification provider rejected our credentials.",
-                                  "UNAUTHORIZED", operational=True)
+            refused = _provider_error("The verification provider rejected our credentials.",
+                                      "UNAUTHORIZED", operational=True)
+            refused.http_status = response.status_code
+            raise refused
         if response.status_code == 404:
-            raise ProviderError("The verification provider does not recognise that request.")
+            missing = ProviderError("The verification provider does not recognise that request.")
+            missing.http_status = 404
+            raise missing
 
         try:
             payload = response.json() if response.content else {}
@@ -315,7 +349,9 @@ class TextVerifiedProvider(VerificationProvider):
                                                       "provider_code": code,
                                                       "provider_description": description,
                                                       "operational": operational})
-            raise _provider_error(_message_for(code), code, operational=operational)
+            error = _provider_error(_message_for(code), code, operational=operational)
+            error.http_status = response.status_code
+            raise error
         return payload
 
     def _request(self, method: str, url: str, *, json_body: dict | None = None,
@@ -704,6 +740,186 @@ class TextVerifiedProvider(VerificationProvider):
             logger.info("textverified_report_refused", extra={"order": provider_order_id[:40]})
             return False
         return True
+
+    # -- rentals -----------------------------------------------------------
+
+    #: Documented: non-renewable rentals, bought for a fixed period from our
+    #: balance, refundable while the rental's own `refund.canRefund` says so,
+    #: and extendable (extensions are not refundable).
+    supports_rentals = True
+
+    @staticmethod
+    def _rental_duration(days: int) -> str:
+        try:
+            return RENTAL_DURATIONS[int(days)]
+        except (KeyError, TypeError, ValueError):
+            raise ValueError(f"Unsupported rental length: {days!r} days") from None
+
+    def _follow(self, link) -> dict:
+        href = str(link.get("href") or "") if isinstance(link, dict) else ""
+        if not href:
+            raise _provider_error("The verification provider did not return a link.")
+        return self._request("GET", href if href.startswith("http") else f"{self.base_url}{href}")
+
+    def rental_price(self, service_code: str, days: int) -> Decimal | None:
+        """`POST /pricing/rentals`. None for a combination they do not sell (400)."""
+        self._require_configured("rental pricing")
+        try:
+            payload = self._request("POST", self._url(self.PATH_RENTAL_PRICING), json_body={
+                "serviceName": service_code,
+                "areaCode": False,
+                "numberType": self.NUMBER_TYPE,
+                "capability": self.CAPABILITY,
+                "isRenewable": False,
+                "duration": self._rental_duration(days),
+            })
+        except ProviderError as exc:
+            if getattr(exc, "http_status", None) == 400:
+                return None
+            raise
+        price = _decimal(payload.get("price") if isinstance(payload, dict) else None,
+                         Decimal("-1"))
+        if price <= 0:
+            raise _provider_error("The verification provider did not return a price.")
+        return price
+
+    def rental_stock(self, service_code: str, days: int) -> int:
+        """`POST /inventory/rentals` -> `availableQuantity` (capped at 9000 by them)."""
+        self._require_configured("rental inventory")
+        try:
+            payload = self._request("POST", self._url(self.PATH_RENTAL_INVENTORY), json_body={
+                "serviceName": service_code,
+                "numberType": self.NUMBER_TYPE,
+                "capability": self.CAPABILITY,
+                "duration": self._rental_duration(days),
+            })
+        except ProviderError as exc:
+            if getattr(exc, "http_status", None) == 400:
+                return 0
+            raise
+        quantity = payload.get("availableQuantity") if isinstance(payload, dict) else None
+        return int(quantity) if isinstance(quantity, int | float) and quantity > 0 else 0
+
+    def create_rental(self, service_code: str, days: int, idempotency_key: str) -> RentalDTO:
+        """`POST /reservations/rental`, then the sale it links to, then the rental.
+
+        The documented flow. `Idempotency-Key` makes a retry after a timeout
+        safe: a completed purchase answers with the same sale; one still
+        running answers 409 IdempotencyConflict (raised, for the caller to try
+        again later). No back orders: a rental out of stock is refused, not
+        queued.
+        """
+        self._require_configured("renting a number")
+        created = self._request(
+            "POST", self._url(self.PATH_RENTAL_CREATE),
+            json_body={
+                "allowBackOrderReservations": False,
+                "isRenewable": False,
+                "duration": self._rental_duration(days),
+                "numberType": self.NUMBER_TYPE,
+                "serviceName": service_code,
+                "capability": self.CAPABILITY,
+            },
+            extra_headers={"Idempotency-Key": idempotency_key[:256]},
+        )
+        return self._rental_from_sale(self._follow(created))
+
+    def get_rental_sale(self, sale_id: str) -> RentalDTO:
+        self._require_configured("reading a rental purchase")
+        return self._rental_from_sale(self._request("GET", self._url(self.PATH_SALE, id=sale_id)))
+
+    def _rental_from_sale(self, sale: dict) -> RentalDTO:
+        sale = sale if isinstance(sale, dict) else {}
+        sale_id = str(sale.get("id") or "")
+        state = str(sale.get("state") or "").lower()
+        cost = _decimal(sale.get("total"), Decimal("0")) or None
+        if state == "failed":
+            return RentalDTO(state=RentalState.FAILED, sale_id=sale_id, cost=cost)
+        rental = next((item for item in sale.get("reservations") or []
+                       if isinstance(item, dict)
+                       and str(item.get("reservationType") or "").lower() == "nonrenewable"),
+                      None)
+        if rental is None:
+            # created / processing: nothing to read yet.
+            return RentalDTO(state=RentalState.PENDING, sale_id=sale_id, cost=cost)
+        dto = self._rental_from_details(self._follow(rental.get("link")))
+        return dataclasses.replace(dto, sale_id=sale_id or dto.sale_id, cost=cost)
+
+    def get_rental(self, provider_rental_id: str) -> RentalDTO:
+        self._require_configured("reading a rental")
+        return self._rental_from_details(
+            self._request("GET", self._url(self.PATH_RENTAL, id=provider_rental_id)))
+
+    def _rental_from_details(self, details: dict) -> RentalDTO:
+        details = details if isinstance(details, dict) else {}
+        raw_state = str(details.get("state") or "")
+        state = RENTAL_STATE_MAP.get(raw_state.lower())
+        if state is None:
+            logger.warning("textverified_unknown_rental_state", extra={"state": raw_state[:40]})
+            state = RentalState.UNKNOWN
+        refund = details.get("refund") if isinstance(details.get("refund"), dict) else {}
+        return RentalDTO(
+            state=state,
+            provider_rental_id=str(details.get("id") or "")[:128],
+            sale_id=str(details.get("saleId") or "")[:128],
+            phone_number=_e164(details.get("number")),
+            ends_at=_parse_time(details.get("endsAt")),
+            can_refund=bool(refund.get("canRefund")),
+            refundable_until=_parse_time(refund.get("refundableUntil")),
+        )
+
+    def refund_rental(self, provider_rental_id: str) -> bool:
+        """`POST /reservations/rental/nonrenewable/{id}/refund`: 400 when not refundable."""
+        self._require_configured("refunding a rental")
+        try:
+            self._request("POST", self._url(self.PATH_RENTAL_REFUND, id=provider_rental_id))
+        except ProviderError as exc:
+            if 400 <= int(getattr(exc, "http_status", 0) or 0) < 500:
+                logger.info("textverified_rental_refund_refused",
+                            extra={"rental": provider_rental_id[:40]})
+                return False
+            raise
+        return True
+
+    def extend_rental(self, provider_rental_id: str, days: int) -> RentalExtensionDTO:
+        """`POST /reservations/rentals/extensions`. Not refundable upstream."""
+        self._require_configured("extending a rental")
+        payload = self._request("POST", self._url(self.PATH_RENTAL_EXTEND), json_body={
+            "rentalId": provider_rental_id,
+            "extensionDuration": self._rental_duration(days),
+        })
+        payload = payload if isinstance(payload, dict) else {}
+        return RentalExtensionDTO(
+            provider_extension_id=str(payload.get("id") or "")[:128],
+            new_ends_at=_parse_time(payload.get("newEndsAt")),
+            cost=_decimal(payload.get("cost"), Decimal("0")) or None,
+        )
+
+    def rental_messages(self, provider_rental_id: str) -> list[RentalMessageDTO]:
+        """`GET /sms?reservationId=`, following `links.next` a few pages."""
+        self._require_configured("reading rental messages")
+        payload = self._request("GET", self._url(self.PATH_SMS),
+                                params={"reservationId": provider_rental_id})
+        messages: list[RentalMessageDTO] = []
+        for _ in range(RENTAL_SMS_MAX_PAGES):
+            if not isinstance(payload, dict):
+                break
+            for item in payload.get("data") or []:
+                if not isinstance(item, dict) or not item.get("id"):
+                    continue
+                messages.append(RentalMessageDTO(
+                    provider_message_id=str(item.get("id"))[:128],
+                    body=str(item.get("smsContent") or "")[:2000],
+                    code=_clean_code(item.get("parsedCode")) or "",
+                    sender=str(item.get("from") or "")[:64],
+                    received_at=_parse_time(item.get("createdAt")),
+                ))
+            following = (payload.get("links") or {}).get("next")
+            if not payload.get("hasNext") or not isinstance(following, dict) \
+                    or not following.get("href"):
+                break
+            payload = self._follow(following)
+        return messages
 
     # -- our account -----------------------------------------------------
 

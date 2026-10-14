@@ -84,6 +84,7 @@ INSTALLED_APPS = [
     "apps.notifications",
     "apps.adminapi",
     "apps.referrals",
+    "apps.rentals",
 ]
 
 MIDDLEWARE = [
@@ -315,6 +316,7 @@ REST_FRAMEWORK = {
         "deposit": "10/hour",
         "otp_submit": "20/hour",
         "order_create": "20/hour",
+        "rental_create": "10/hour",
         "issue_report": "10/hour",
         "webhook": "600/min",
     },
@@ -636,6 +638,25 @@ VERIFYGH = {
     "REFERRAL_REFERRER_BONUS": env("REFERRAL_REFERRER_BONUS_GHS", "3.00"),
     # Codes and SMS text are erased from finished orders after this many days.
     "VERIFICATION_DATA_RETENTION_DAYS": env_int("VERIFICATION_DATA_RETENTION_DAYS", 30),
+    # -- number rentals (apps/rentals): a number kept for days, bought from
+    # TextVerified as a non-renewable rental and resold from the wallet.
+    "RENTALS_ENABLED": env_bool("RENTALS_ENABLED", True),
+    # Customer price = provider price x Pricing FX rate x (100 + this) / 100,
+    # rounded up to RENTAL_PRICE_STEP. 40% agreed 14 Oct 2026.
+    "RENTAL_MARKUP_PERCENT": env("RENTAL_MARKUP_PERCENT", "40"),
+    "RENTAL_PRICE_STEP": env("RENTAL_PRICE_STEP", "0.50"),
+    # The lengths offered, in days (TextVerified also sells a year).
+    "RENTAL_DURATIONS_DAYS": env_list("RENTAL_DURATIONS_DAYS", "1,3,7,14,30,90"),
+    # Rentals one customer may hold at once (active or being set up).
+    "RENTAL_MAX_ACTIVE": env_int("RENTAL_MAX_ACTIVE", 5),
+    # How long a shown rental price is reused before the provider is asked again.
+    # A purchase always asks again.
+    "RENTAL_PRICE_CACHE_SECONDS": env_int("RENTAL_PRICE_CACHE_SECONDS", 900),
+    # How often the background sweep reads each active rental's messages. The
+    # rental's page also reads them while it is open, at most every 10 seconds.
+    "RENTAL_SMS_POLL_SECONDS": env_int("RENTAL_SMS_POLL_SECONDS", 120),
+    # A purchase still unconfirmed after this long is refunded, and staff told.
+    "RENTAL_PENDING_GIVE_UP_MINUTES": env_int("RENTAL_PENDING_GIVE_UP_MINUTES", 30),
 }
 
 PROVIDER_CREDENTIALS = {

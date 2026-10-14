@@ -19,6 +19,8 @@ from apps.payments import admin_api as manual_admin
 from apps.payments import views as payment_views
 from apps.pricing import admin_api as pricing_admin
 from apps.referrals import admin_api as referral_admin
+from apps.rentals import admin_api as rental_admin
+from apps.rentals import views as rental_views
 from apps.verification import admin_api as provider_admin
 from apps.verification import views as verification_views
 from apps.wallet import views as wallet_views
@@ -31,6 +33,7 @@ router.register("wallet", wallet_views.WalletViewSet, basename="wallet")
 router.register("transactions", wallet_views.TransactionViewSet, basename="transaction")
 router.register("payments", payment_views.PaymentViewSet, basename="payment")
 router.register("orders", order_views.OrderViewSet, basename="order")
+router.register("rentals", rental_views.RentalViewSet, basename="rental")
 router.register(
     "notifications", notification_views.NotificationViewSet, basename="notification"
 )
@@ -38,6 +41,7 @@ router.register(
 admin_router = DefaultRouter()
 admin_router.register("users", admin_views.AdminUserViewSet, basename="admin-user")
 admin_router.register("orders", admin_views.AdminOrderViewSet, basename="admin-order")
+admin_router.register("rentals", rental_admin.AdminRentalViewSet, basename="admin-rental")
 admin_router.register("refunds", admin_views.AdminRefundViewSet, basename="admin-refund")
 admin_router.register("payments", admin_views.AdminPaymentViewSet, basename="admin-payment")
 admin_router.register("services", admin_views.AdminServiceViewSet, basename="admin-service")

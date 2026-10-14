@@ -6,7 +6,8 @@ import * as React from "react";
 import useSWR, { mutate as globalMutate } from "swr";
 
 import { PageHeader } from "@/components/app-shell";
-import { CheckCircleIcon, ClockIcon, CopyIcon } from "@/components/icons";
+import { CheckCircleIcon, ClockIcon, CopyIcon, RefreshIcon } from "@/components/icons";
+import { BuyDialog } from "@/components/marketplace/buy-dialog";
 import { CountryFlag } from "@/components/country-flag";
 import { OrderTimeline } from "@/components/orders/order-timeline";
 import { ReportProblem } from "@/components/orders/report-problem";
@@ -35,6 +36,9 @@ import {
   nationalNumber,
 } from "@/lib/format";
 import type { Order, OrderLiveStatus } from "@/lib/types";
+
+/** Ended without delivering a code: the moment to offer the same number again. */
+const RETRYABLE_STATUSES = new Set(["FAILED", "EXPIRED", "CANCELLED", "REFUNDED"]);
 
 const ACTIVE_STATUSES = new Set([
   "CREATED",
@@ -81,6 +85,8 @@ export default function OrderDetailPage() {
   const [cancelling, setCancelling] = React.useState(false);
   const [confirmCancel, setConfirmCancel] = React.useState(false);
   const [completing, setCompleting] = React.useState(false);
+  // "Buy again": the same service and country, straight from this page.
+  const [buyingAgain, setBuyingAgain] = React.useState(false);
 
   async function onCancel() {
     setCancelling(true);
@@ -155,6 +161,8 @@ export default function OrderDetailPage() {
   const phone = live?.phone_number || order.phone_number;
   const code = live?.verification_code || order.verification_code;
   const status = live?.status ?? order.status;
+  const retryable = RETRYABLE_STATUSES.has(status) && !order.code_received_at;
+  const delivered = status === "COMPLETED" || status === "CODE_RECEIVED";
 
   return (
     <div className="space-y-6">
@@ -226,6 +234,27 @@ export default function OrderDetailPage() {
             {order.failure_reason}
           </Alert>
         ) : null}
+
+        {retryable ? (
+          <Card className="flex flex-col gap-3 p-4 sm:flex-row sm:items-center sm:justify-between sm:p-5">
+            <div className="flex min-w-0 items-center gap-3">
+              <ServiceLogo name={order.service_name} src={order.service_icon} slug={order.service_slug} />
+              <div className="min-w-0">
+                <p className="text-sm font-semibold text-ink">Try again with a new number</p>
+                <p className="text-sm text-ink-muted">
+                  {order.service_name}, {order.country_name}. You see the price before you pay.
+                </p>
+              </div>
+            </div>
+            <Button
+              onClick={() => setBuyingAgain(true)}
+              icon={<RefreshIcon className="h-4 w-4" />}
+              className="w-full shrink-0 sm:w-auto"
+            >
+              Buy {order.service_name} again
+            </Button>
+          </Card>
+        ) : null}
       </div>
 
       <div className="grid grid-cols-1 gap-6 lg:grid-cols-5">
@@ -293,6 +322,20 @@ export default function OrderDetailPage() {
           </Card>
 
           <ReportProblem order={order} onReported={() => mutate()} />
+
+          {delivered ? (
+            <div className="flex flex-wrap items-center justify-between gap-3 rounded-xl border border-dashed border-line px-4 py-3">
+              <p className="text-sm text-ink-muted">Need another {order.service_name} number?</p>
+              <Button
+                variant="secondary"
+                size="sm"
+                onClick={() => setBuyingAgain(true)}
+                icon={<RefreshIcon className="h-4 w-4" />}
+              >
+                Buy another
+              </Button>
+            </div>
+          ) : null}
         </div>
 
         <div className="space-y-4 lg:col-span-2">
@@ -331,6 +374,13 @@ export default function OrderDetailPage() {
           </Card>
         </div>
       </div>
+
+      <BuyDialog
+        open={buyingAgain}
+        onClose={() => setBuyingAgain(false)}
+        serviceSlug={order.service_slug}
+        initialCountry={order.country_code}
+      />
 
       <ConfirmDialog
         open={confirmCancel}

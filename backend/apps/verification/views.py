@@ -64,6 +64,24 @@ class VerificationWebhookView(APIView):
                 # The scheduled poll will get there; a callback is only a hint.
                 logger.warning("verification_webhook_poll_unqueued",
                                extra={"provider": provider_key})
+        # The same callback announces SMS on rented numbers.
+        from apps.rentals.models import Rental, RentalStatus
+        from apps.rentals.tasks import sync_rental_messages_task
+
+        rentals = list(
+            Rental.objects.filter(
+                provider__adapter_key=provider_key,
+                provider_rental_id__in=[rid for rid in reservation_ids if rid],
+                status=RentalStatus.ACTIVE,
+            ).values_list("id", flat=True)
+        )
+        for rental_id in rentals:
+            try:
+                sync_rental_messages_task.delay(str(rental_id))
+            except Exception:
+                logger.warning("verification_webhook_rental_sync_unqueued",
+                               extra={"provider": provider_key})
         logger.info("verification_webhook_received",
-                    extra={"provider": provider_key, "orders": len(orders)})
+                    extra={"provider": provider_key, "orders": len(orders),
+                           "rentals": len(rentals)})
         return Response({"status": "ok"})

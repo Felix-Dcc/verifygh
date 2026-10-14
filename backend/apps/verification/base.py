@@ -117,6 +117,57 @@ class BalanceDTO:
     currency: str = "USD"
 
 
+class RentalState(str, Enum):
+    """A rented number's state upstream, normalised across providers."""
+
+    #: Bought, but the provider has not handed over the number yet.
+    PENDING = "PENDING"
+    ACTIVE = "ACTIVE"
+    EXPIRED = "EXPIRED"
+    REFUNDED = "REFUNDED"
+    #: The provider says the purchase did not go through: nothing was rented.
+    FAILED = "FAILED"
+    #: A state the adapter does not recognise. Never acted on.
+    UNKNOWN = "UNKNOWN"
+
+
+@dataclass(frozen=True)
+class RentalDTO:
+    """One rented number, as the provider sees it."""
+
+    state: RentalState
+    provider_rental_id: str = ""
+    #: The provider's purchase record. Kept so a purchase the provider is still
+    #: processing can be looked up again without buying twice.
+    sale_id: str = ""
+    phone_number: str = ""
+    ends_at: datetime | None = None
+    can_refund: bool = False
+    refundable_until: datetime | None = None
+    #: What the purchase cost us, in `currency`, when the provider says.
+    cost: Decimal | None = None
+    currency: str = "USD"
+
+
+@dataclass(frozen=True)
+class RentalExtensionDTO:
+    provider_extension_id: str
+    new_ends_at: datetime | None = None
+    cost: Decimal | None = None
+    currency: str = "USD"
+
+
+@dataclass(frozen=True)
+class RentalMessageDTO:
+    """One SMS received on a rented number. Never logged."""
+
+    provider_message_id: str
+    body: str = ""
+    code: str = ""
+    sender: str = ""
+    received_at: datetime | None = None
+
+
 class VerificationProvider(abc.ABC):
     """Base class for every verification provider adapter."""
 
@@ -264,6 +315,42 @@ class VerificationProvider(abc.ABC):
     def release_retry_after_seconds(self, service_code: str) -> int:
         """How long to wait before retrying a release the provider refused."""
         return 60
+
+    # -- rentals -----------------------------------------------------------
+
+    #: Whether the provider documents renting a number for days at a time.
+    supports_rentals: bool = False
+
+    def rental_price(self, service_code: str, days: int) -> Decimal | None:
+        """What renting `service_code` for `days` days costs us, or None when
+        the provider does not offer that combination."""
+        raise NotImplementedError(f"{self.display_name} documents no rentals.")
+
+    def rental_stock(self, service_code: str, days: int) -> int:
+        raise NotImplementedError(f"{self.display_name} documents no rentals.")
+
+    def create_rental(self, service_code: str, days: int,
+                      idempotency_key: str) -> RentalDTO:
+        """Rent a number. Safe to call again with the same key after an unclear
+        failure: the provider answers with the same purchase."""
+        raise NotImplementedError(f"{self.display_name} documents no rentals.")
+
+    def get_rental(self, provider_rental_id: str) -> RentalDTO:
+        raise NotImplementedError(f"{self.display_name} documents no rentals.")
+
+    def get_rental_sale(self, sale_id: str) -> RentalDTO:
+        """Follow up a purchase the provider was still processing."""
+        raise NotImplementedError(f"{self.display_name} documents no rentals.")
+
+    def refund_rental(self, provider_rental_id: str) -> bool:
+        """Ask for the rental to be refunded; False when the provider refuses."""
+        raise NotImplementedError(f"{self.display_name} documents no rentals.")
+
+    def extend_rental(self, provider_rental_id: str, days: int) -> RentalExtensionDTO:
+        raise NotImplementedError(f"{self.display_name} documents no rentals.")
+
+    def rental_messages(self, provider_rental_id: str) -> list[RentalMessageDTO]:
+        raise NotImplementedError(f"{self.display_name} documents no rentals.")
 
     # -- our account with the provider ------------------------------------
 

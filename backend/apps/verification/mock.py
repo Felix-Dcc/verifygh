@@ -36,6 +36,10 @@ from apps.verification.base import (
     ProviderOrderDTO,
     ProviderOrderState,
     ProviderServiceDTO,
+    RentalDTO,
+    RentalExtensionDTO,
+    RentalMessageDTO,
+    RentalState,
     VerificationProvider,
 )
 
@@ -99,6 +103,26 @@ MOCK_SERVICES = [
     ("paypal", "PayPal", Decimal("1.80"), True, False),
     ("signal", "Signal", Decimal("1.45"), True, True),
 ]
+
+
+#: Mock rental prices in USD by days, shaped like TextVerified's (14 Oct 2026):
+#: a single-service number, and "allservices", which has no one-day rental.
+MOCK_RENTAL_PRICES = {
+    "single": {1: Decimal("1.90"), 3: Decimal("2.40"), 7: Decimal("3.00"),
+               14: Decimal("3.80"), 30: Decimal("4.80"), 90: Decimal("13.90")},
+    "allservices": {3: Decimal("5.50"), 7: Decimal("7.00"), 14: Decimal("8.20"),
+                    30: Decimal("10.00"), 90: Decimal("28.90")},
+}
+
+#: A mock rental can be refunded for this long after it starts, as long as no
+#: message has arrived - roughly how TextVerified's `refund.canRefund` behaves.
+MOCK_RENTAL_REFUND_MINUTES = 20
+
+#: In the default mode a first message lands this long after the rental starts,
+#: so the inbox can be seen working in a local preview.
+MOCK_RENTAL_FIRST_SMS_SECONDS = 15
+
+RENTAL_PREFIX = f"{CACHE_PREFIX}rental:"
 
 
 def _key(provider_order_id: str) -> str:
@@ -337,6 +361,168 @@ class MockVerificationProvider(VerificationProvider):
     def release_retry_after_seconds(self, service_code: str) -> int:
         return 1
 
+    # -- rentals -----------------------------------------------------------
+
+    supports_rentals = True
+
+    @staticmethod
+    def _rental_prices(service_code: str) -> dict:
+        return MOCK_RENTAL_PRICES["allservices" if service_code == "allservices" else "single"]
+
+    def rental_price(self, service_code: str, days: int) -> Decimal | None:
+        if _rental_mode() == "PROVIDER_ERR":
+            raise ProviderError("The verification provider did not respond in time.")
+        override = cache.get(f"{RENTAL_PREFIX}price:{service_code}:{days}")
+        if override is not None:
+            return Decimal(str(override))
+        return self._rental_prices(service_code).get(int(days))
+
+    def rental_stock(self, service_code: str, days: int) -> int:
+        if _rental_mode() == "NO_STOCK":
+            return 0
+        return 9000 if self.rental_price(service_code, days) is not None else 0
+
+    def create_rental(self, service_code: str, days: int, idempotency_key: str) -> RentalDTO:
+        mode = _rental_mode()
+        known = cache.get(f"{RENTAL_PREFIX}key:{idempotency_key}")
+        if known:
+            # The same key answers with the same purchase, as upstream.
+            return self.get_rental_sale(known)
+        if mode == "REFUSE":
+            refused = ProviderError("No number is available for that service right now.")
+            refused.provider_code = "Unavailable"
+            refused.http_status = 400
+            raise refused
+        price = self.rental_price(service_code, days)
+        if price is None:
+            refused = ProviderError("The verification provider could not complete that.")
+            refused.provider_code = "BadRequest"
+            refused.http_status = 400
+            raise refused
+
+        rental_id = f"mock-rnt-{secrets.token_hex(6)}"
+        now = timezone.now()
+        state = {
+            "id": rental_id,
+            "service": service_code,
+            "phone": _next_forced_number() or _fake_number("US"),
+            "created_at": now.isoformat(),
+            "ends_at": (now + timedelta(days=int(days))).isoformat(),
+            "price": str(price),
+            "state": "ACTIVE",
+            # Further reads still processing (PENDING mode answers the purchase itself so).
+            "pending_reads": 0,
+            "messages": [],
+            "quiet": mode == "QUIET",
+            "refundable": True,
+        }
+        cache.set(f"{RENTAL_PREFIX}{rental_id}", state, CACHE_TTL)
+        cache.set(f"{RENTAL_PREFIX}key:{idempotency_key}", rental_id, CACHE_TTL)
+        if mode == "TIMEOUT":
+            # The purchase went through, but the answer never reached us.
+            _set_rental_mode(None)
+            raise ProviderError("The verification provider did not respond in time.")
+        if mode == "PENDING":
+            return RentalDTO(state=RentalState.PENDING, sale_id=rental_id, cost=price)
+        return self._rental_dto(state)
+
+    def get_rental_sale(self, sale_id: str) -> RentalDTO:
+        state = cache.get(f"{RENTAL_PREFIX}{sale_id}")
+        if state is None:
+            missing = ProviderError("The verification provider does not recognise that request.")
+            missing.http_status = 404
+            raise missing
+        if state["pending_reads"] > 0:
+            state["pending_reads"] -= 1
+            cache.set(f"{RENTAL_PREFIX}{sale_id}", state, CACHE_TTL)
+            return RentalDTO(state=RentalState.PENDING, sale_id=sale_id,
+                             cost=Decimal(state["price"]))
+        return self._rental_dto(state)
+
+    def get_rental(self, provider_rental_id: str) -> RentalDTO:
+        state = cache.get(f"{RENTAL_PREFIX}{provider_rental_id}")
+        if state is None:
+            missing = ProviderError("The verification provider does not recognise that request.")
+            missing.http_status = 404
+            raise missing
+        return self._rental_dto(state)
+
+    def _rental_dto(self, state: dict) -> RentalDTO:
+        now = timezone.now()
+        created = datetime.fromisoformat(state["created_at"])
+        ends_at = datetime.fromisoformat(state["ends_at"])
+        refundable_until = created + timedelta(minutes=MOCK_RENTAL_REFUND_MINUTES)
+        kind = state["state"]
+        if kind == "ACTIVE" and ends_at <= now:
+            kind = "EXPIRED"
+        can_refund = (kind == "ACTIVE" and state.get("refundable", True)
+                      and now < refundable_until and not self._mock_messages(state))
+        return RentalDTO(
+            state=RentalState(kind),
+            provider_rental_id=state["id"],
+            sale_id=state["id"],
+            phone_number=state["phone"],
+            ends_at=ends_at,
+            can_refund=can_refund,
+            refundable_until=refundable_until,
+            cost=Decimal(state["price"]),
+        )
+
+    def refund_rental(self, provider_rental_id: str) -> bool:
+        state = cache.get(f"{RENTAL_PREFIX}{provider_rental_id}")
+        if state is None or not self._rental_dto(state).can_refund:
+            return False
+        state["state"] = "REFUNDED"
+        cache.set(f"{RENTAL_PREFIX}{provider_rental_id}", state, CACHE_TTL)
+        return True
+
+    def extend_rental(self, provider_rental_id: str, days: int) -> RentalExtensionDTO:
+        state = cache.get(f"{RENTAL_PREFIX}{provider_rental_id}")
+        if state is None or self._rental_dto(state).state != RentalState.ACTIVE:
+            refused = ProviderError("The verification provider could not complete that.")
+            refused.provider_code = "BadRequest"
+            refused.http_status = 400
+            raise refused
+        if _rental_mode() == "REFUSE":
+            refused = ProviderError("The verification provider could not complete that.")
+            refused.provider_code = "BadRequest"
+            refused.http_status = 400
+            raise refused
+        price = self.rental_price(state["service"], days)
+        if price is None:
+            refused = ProviderError("The verification provider could not complete that.")
+            refused.provider_code = "BadRequest"
+            refused.http_status = 400
+            raise refused
+        new_ends = datetime.fromisoformat(state["ends_at"]) + timedelta(days=int(days))
+        state["ends_at"] = new_ends.isoformat()
+        cache.set(f"{RENTAL_PREFIX}{provider_rental_id}", state, CACHE_TTL)
+        return RentalExtensionDTO(provider_extension_id=f"mock-ext-{secrets.token_hex(4)}",
+                                  new_ends_at=new_ends, cost=price)
+
+    def _mock_messages(self, state: dict) -> list[dict]:
+        messages = list(state.get("messages") or [])
+        created = datetime.fromisoformat(state["created_at"])
+        if not state.get("quiet") and (timezone.now() - created).total_seconds() >= \
+                MOCK_RENTAL_FIRST_SMS_SECONDS:
+            messages.insert(0, {
+                "id": f"{state['id']}-sms-1",
+                "body": "Your verification code is 482913. Do not share it.",
+                "code": "482913",
+                "sender": "22395",
+                "at": (created + timedelta(seconds=MOCK_RENTAL_FIRST_SMS_SECONDS)).isoformat(),
+            })
+        return messages
+
+    def rental_messages(self, provider_rental_id: str) -> list[RentalMessageDTO]:
+        state = cache.get(f"{RENTAL_PREFIX}{provider_rental_id}")
+        if state is None:
+            return []
+        return [RentalMessageDTO(provider_message_id=item["id"], body=item["body"],
+                                 code=item["code"], sender=item["sender"],
+                                 received_at=datetime.fromisoformat(item["at"]))
+                for item in self._mock_messages(state)]
+
     # -- our account ------------------------------------------------------
 
     supports_balance = True
@@ -404,3 +590,72 @@ def fast_forward(provider_order_id: str, seconds: int) -> None:
     created_at = datetime.fromisoformat(state["created_at"])
     state["created_at"] = (created_at - timedelta(seconds=seconds)).isoformat()
     cache.set(_key(provider_order_id), state, CACHE_TTL)
+
+
+# -- rental test helpers ----------------------------------------------------
+
+
+def _rental_mode() -> str:
+    return cache.get(f"{RENTAL_PREFIX}mode") or "OK"
+
+
+def _set_rental_mode(mode: str | None) -> None:
+    if mode is None:
+        cache.delete(f"{RENTAL_PREFIX}mode")
+    else:
+        cache.set(f"{RENTAL_PREFIX}mode", mode, CACHE_TTL)
+
+
+#: OK          rented at once; a first message lands after a few seconds
+#: QUIET       rented at once; no message arrives unless a test sends one
+#: PENDING     the provider is still processing the purchase on the first read
+#: TIMEOUT     the purchase goes through but its answer is lost (once)
+#: REFUSE      the provider refuses the purchase (or an extension)
+#: NO_STOCK    no number in stock
+#: PROVIDER_ERR pricing calls fail
+RENTAL_MODES = {"OK", "QUIET", "PENDING", "TIMEOUT", "REFUSE", "NO_STOCK", "PROVIDER_ERR"}
+
+
+def force_rental_mode(mode: str | None) -> None:
+    if mode is not None and mode not in RENTAL_MODES:
+        raise ValueError(f"Unknown mock rental mode: {mode}")
+    _set_rental_mode(mode)
+
+
+def set_rental_price(service_code: str, days: int, usd) -> None:
+    """Make the mock quote `usd` for this rental (None restores the default)."""
+    key = f"{RENTAL_PREFIX}price:{service_code}:{days}"
+    if usd is None:
+        cache.delete(key)
+    else:
+        cache.set(key, str(usd), CACHE_TTL)
+
+
+def send_rental_sms(provider_rental_id: str, body: str, code: str = "",
+                    sender: str = "12345") -> None:
+    state = cache.get(f"{RENTAL_PREFIX}{provider_rental_id}")
+    if state is None:
+        return
+    state["messages"].insert(0, {
+        "id": f"{provider_rental_id}-sms-{len(state['messages']) + 2}",
+        "body": body, "code": code, "sender": sender, "at": timezone.now().isoformat(),
+    })
+    cache.set(f"{RENTAL_PREFIX}{provider_rental_id}", state, CACHE_TTL)
+
+
+def end_rental_upstream(provider_rental_id: str, state: str = "EXPIRED") -> None:
+    """Make the provider report this rental as EXPIRED or REFUNDED."""
+    entry = cache.get(f"{RENTAL_PREFIX}{provider_rental_id}")
+    if entry is None:
+        return
+    entry["state"] = state
+    if state == "EXPIRED":
+        entry["ends_at"] = timezone.now().isoformat()
+    cache.set(f"{RENTAL_PREFIX}{provider_rental_id}", entry, CACHE_TTL)
+
+
+def block_rental_refund(provider_rental_id: str) -> None:
+    entry = cache.get(f"{RENTAL_PREFIX}{provider_rental_id}")
+    if entry is not None:
+        entry["refundable"] = False
+        cache.set(f"{RENTAL_PREFIX}{provider_rental_id}", entry, CACHE_TTL)

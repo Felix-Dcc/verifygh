@@ -33,3 +33,7 @@ def refund_reference() -> str:
 
 def issue_reference() -> str:
     return f"VGH-ISS-{_token(6)}"
+
+
+def rental_reference() -> str:
+    return f"VGH-RNT-{_token(6)}"

@@ -1312,3 +1312,108 @@ export type AdminMaintenance = SiteStatus & {
   preset_reasons: string[];
   notices: Record<Exclude<MaintenanceMode, "OFF">, string>;
 };
+
+/* -------------------------------------------------------------------------
+ * Number rentals (apps/rentals): a number kept for days, every SMS in an inbox.
+ * ---------------------------------------------------------------------- */
+
+export type RentalStatus = "PENDING" | "ACTIVE" | "EXPIRED" | "REFUNDED" | "FAILED";
+
+export interface RentalSummary {
+  id: string;
+  reference: string;
+  /** A catalogue slug, or "all" for a number any app can text. */
+  service_slug: string;
+  service_name: string;
+  service_icon: string;
+  all_services: boolean;
+  days: number;
+  duration_label: string;
+  price: string;
+  currency: string;
+  status: RentalStatus;
+  status_label: string;
+  phone_number: string;
+  activated_at: string | null;
+  ends_at: string | null;
+  ended_at: string | null;
+  seconds_remaining: number;
+  message_count: number;
+  refunded_amount: string;
+  created_at: string;
+}
+
+export interface RentalMessage {
+  id: string;
+  sender: string;
+  body: string;
+  code: string;
+  received_at: string;
+}
+
+export interface RentalExtension {
+  id: string;
+  days: number;
+  price: string;
+  status: "PENDING" | "COMPLETED" | "FAILED";
+  new_ends_at: string | null;
+  created_at: string;
+}
+
+export interface Rental extends RentalSummary {
+  failure_reason: string;
+  refundable_until: string | null;
+  can_cancel: boolean;
+  cancel_note: string;
+  messages: RentalMessage[];
+  messages_hidden: boolean;
+  extensions: RentalExtension[];
+  promo_amount: string;
+  cash_amount: string;
+  poll_interval_seconds: number;
+}
+
+export interface RentalDuration {
+  days: number;
+  label: string;
+  price: string | null;
+  available: boolean;
+  note?: string;
+}
+
+export interface RentalOptions {
+  service: string;
+  service_name: string;
+  all_services: boolean;
+  currency: string;
+  durations: RentalDuration[];
+}
+
+export interface RentalCatalog {
+  services: { slug: string; name: string; icon_url: string; is_popular: boolean }[];
+  durations: { days: number; label: string }[];
+}
+
+export interface AdminRental extends RentalSummary {
+  user_email: string;
+  provider_name: string;
+  provider_service_name: string;
+  provider_cost: string;
+  provider_currency: string;
+  exchange_rate: string;
+  provider_rental_id: string;
+  provider_sale_id: string;
+  failure_reason: string;
+  promo_amount: string;
+  cash_amount: string;
+  attempts: number;
+}
+
+export interface AdminRentalSummary {
+  active: number;
+  pending: number;
+  ended: number;
+  refunded_or_failed: number;
+  takings: string;
+  takings_30d: string;
+}

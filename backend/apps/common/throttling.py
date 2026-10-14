@@ -134,6 +134,12 @@ class OrderCreateThrottle(NamedScopeThrottle):
     scope = "order_create"
 
 
+class RentalCreateThrottle(NamedScopeThrottle):
+    """Renting a number, and extending one: both spend money upstream."""
+
+    scope = "rental_create"
+
+
 class IssueReportThrottle(NamedScopeThrottle):
     scope = "issue_report"
 

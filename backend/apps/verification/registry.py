@@ -171,6 +171,7 @@ class RateLimitedProvider(VerificationProvider):
         self.supports_reuse = inner.supports_reuse
         self.supports_reactivation = inner.supports_reactivation
         self.supports_account_funding = inner.supports_account_funding
+        self.supports_rentals = inner.supports_rentals
         self._limiter = ProviderRateLimiter(
             inner.key, settings.VERIFYGH["PROVIDER_RATE_LIMIT_PER_MINUTE"]
         )
@@ -262,6 +263,37 @@ class RateLimitedProvider(VerificationProvider):
         if not self._inner.supports_reactivation:
             raise NotImplementedError(f"{self.display_name} documents no reactivation.")
         return self._call("reactivate_order", provider_order_id, idempotency_key)
+
+    # -- rentals: every call budgeted like the rest --------------------------
+
+    def _rental_call(self, name: str, *args):
+        if not self._inner.supports_rentals:
+            raise NotImplementedError(f"{self.display_name} documents no rentals.")
+        return self._call(name, *args)
+
+    def rental_price(self, service_code: str, days: int):
+        return self._rental_call("rental_price", service_code, days)
+
+    def rental_stock(self, service_code: str, days: int):
+        return self._rental_call("rental_stock", service_code, days)
+
+    def create_rental(self, service_code: str, days: int, idempotency_key: str):
+        return self._rental_call("create_rental", service_code, days, idempotency_key)
+
+    def get_rental(self, provider_rental_id: str):
+        return self._rental_call("get_rental", provider_rental_id)
+
+    def get_rental_sale(self, sale_id: str):
+        return self._rental_call("get_rental_sale", sale_id)
+
+    def refund_rental(self, provider_rental_id: str):
+        return self._rental_call("refund_rental", provider_rental_id)
+
+    def extend_rental(self, provider_rental_id: str, days: int):
+        return self._rental_call("extend_rental", provider_rental_id, days)
+
+    def rental_messages(self, provider_rental_id: str):
+        return self._rental_call("rental_messages", provider_rental_id)
 
     def get_balance(self):
         if not self._inner.supports_balance:

@@ -1,5 +1,6 @@
 "use client";
 
+import Link from "next/link";
 import { useRouter, useSearchParams } from "next/navigation";
 import * as React from "react";
 import useSWR from "swr";
@@ -8,7 +9,7 @@ import useSWRInfinite from "swr/infinite";
 import { AppHero, HeroStat } from "@/components/app-hero";
 import { useAuth } from "@/components/auth-provider";
 import { CountryFlag } from "@/components/country-flag";
-import { SearchIcon, StarIcon } from "@/components/icons";
+import { ChevronRightIcon, ClockIcon, SearchIcon, StarIcon } from "@/components/icons";
 import { PhoneMessageArt, SearchArt } from "@/components/illustrations";
 import { AvailabilityLabel, TemporarilyUnavailableBadge } from "@/components/marketplace/availability";
 import { BuyDialog } from "@/components/marketplace/buy-dialog";
@@ -223,6 +224,25 @@ export function Marketplace() {
             ? "Our provider connection is being set up. Prices and availability appear here as soon as it is."
             : "Pricing is being configured. Nothing can be bought until it is complete."}
         </Alert>
+      ) : null}
+
+      {user && !searching ? (
+        // Rentals: the other way to get a number, for days rather than minutes.
+        <Link
+          href="/rentals"
+          className="group flex items-center gap-3 rounded-2xl border border-line bg-surface px-4 py-3 transition-colors hover:border-brand-300"
+        >
+          <span className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-brand-50 text-brand-700">
+            <ClockIcon className="h-5 w-5" />
+          </span>
+          <span className="min-w-0 flex-1">
+            <span className="block text-sm font-semibold text-ink">Need a number for days? Rent one</span>
+            <span className="block text-caption text-ink-muted">
+              Keep a US number from 1 day to 3 months and receive every SMS it gets.
+            </span>
+          </span>
+          <ChevronRightIcon className="h-4 w-4 shrink-0 text-ink-faint transition-transform group-hover:translate-x-0.5" />
+        </Link>
       ) : null}
 
       {!searching && popular.length > 0 ? (

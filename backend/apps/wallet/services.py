@@ -275,7 +275,7 @@ def credit_deposit(*, wallet: Wallet, amount, idempotency_key: str, payment_refe
 
 
 def net_spending(wallet: Wallet, *, successful_only: bool = False, **when) -> Decimal:
-    """What the customer actually spent on orders placed in a period.
+    """What the customer actually spent on orders and rentals placed in a period.
 
     Purchases in the period minus the refunds of those same orders, whenever
     the refund landed: an order that was cancelled or failed and refunded cost
@@ -288,10 +288,26 @@ def net_spending(wallet: Wallet, *, successful_only: bool = False, **when) -> De
     """
     purchases = wallet.ledger_entries.filter(entry_type=LedgerEntryType.PURCHASE, **when)
     if successful_only:
-        from apps.orders.models import Order
+        from django.db.models import Q
 
-        purchases = purchases.filter(related_order_id__in=Order.objects.filter(
-            user_id=wallet.user_id, code_received_at__isnull=False).values("id"))
+        from apps.orders.models import Order
+        from apps.rentals.models import (
+            DELIVERED_RENTAL_STATUSES,
+            ExtensionStatus,
+            Rental,
+            RentalExtension,
+        )
+
+        # A rented number counts once it was handed over, and an extension
+        # once it was made - what the customer received, like a delivered code.
+        purchases = purchases.filter(
+            Q(related_order_id__in=Order.objects.filter(
+                user_id=wallet.user_id, code_received_at__isnull=False).values("id"))
+            | Q(related_order_id__in=Rental.objects.filter(
+                user_id=wallet.user_id, status__in=DELIVERED_RENTAL_STATUSES).values("id"))
+            | Q(related_order_id__in=RentalExtension.objects.filter(
+                rental__user_id=wallet.user_id,
+                status=ExtensionStatus.COMPLETED).values("id")))
     spent = purchases.aggregate(total=Sum("amount"))["total"] or ZERO
     refunded = wallet.ledger_entries.filter(
         entry_type=LedgerEntryType.REFUND,
@@ -342,16 +358,8 @@ def split_charge(wallet: Wallet, amount) -> tuple[Decimal, Decimal]:
     return promo, quantize(amount - promo)
 
 
-def charge_order(*, wallet: Wallet, amount, order_id, order_reference: str,
-                 service_name: str) -> Charge:
-    """Pay for an order from the wallet: promotional credit first, then cash.
-
-    Runs inside the caller's transaction and posts one ledger entry per bucket,
-    each with its own idempotency key, so a retry of the same order repeats
-    neither. Insufficiency is judged on the two buckets together, because that
-    is what the user can actually spend.
-    """
-    amount = quantize(amount)
+def _affordable_split(wallet: Wallet, amount: Decimal) -> tuple[Decimal, Decimal]:
+    """(promotional, cash) for `amount`, or raise if the wallet cannot pay it."""
     wallet.refresh_from_db(fields=["balance", "promo_balance", "is_frozen"])
     if wallet.is_frozen:
         raise WalletFrozen()
@@ -368,6 +376,20 @@ def charge_order(*, wallet: Wallet, amount, order_id, order_reference: str,
                 "shortfall": str(quantize(amount - wallet.spendable)),
             },
         )
+    return promo_part, cash_part
+
+
+def charge_order(*, wallet: Wallet, amount, order_id, order_reference: str,
+                 service_name: str) -> Charge:
+    """Pay for an order from the wallet: promotional credit first, then cash.
+
+    Runs inside the caller's transaction and posts one ledger entry per bucket,
+    each with its own idempotency key, so a retry of the same order repeats
+    neither. Insufficiency is judged on the two buckets together, because that
+    is what the user can actually spend.
+    """
+    amount = quantize(amount)
+    promo_part, cash_part = _affordable_split(wallet, amount)
 
     charge = Charge(promo=promo_part, cash=cash_part)
     if promo_part > ZERO:
@@ -385,6 +407,56 @@ def charge_order(*, wallet: Wallet, amount, order_id, order_reference: str,
             funds=FundType.CASH,
         )
     return charge
+
+
+def charge_rental(*, wallet: Wallet, amount, charge_id, reference: str,
+                  description: str) -> Charge:
+    """Pay for a number rental (or an extension of one), exactly as an order is paid.
+
+    Promotional credit first, then cash; one PURCHASE entry per bucket, keyed
+    on `charge_id` (the rental's or the extension's id), which is also what
+    `related_order_id` holds - so refunds and `net_spending` match them up the
+    same way they match orders.
+    """
+    amount = quantize(amount)
+    promo_part, cash_part = _affordable_split(wallet, amount)
+
+    charge = Charge(promo=promo_part, cash=cash_part)
+    for funds, part, key in ((FundType.PROMO, promo_part, f"rental:{charge_id}:promo"),
+                             (FundType.CASH, cash_part, f"rental:{charge_id}")):
+        if part <= ZERO:
+            continue
+        entry = post_entry(
+            wallet=wallet, amount=part, entry_type=LedgerEntryType.PURCHASE,
+            direction=LedgerDirection.DEBIT, idempotency_key=key,
+            description=description, counterparty="PLATFORM:rentals",
+            related_order_id=charge_id, metadata={"rental_reference": reference},
+            funds=funds,
+        )
+        if funds == FundType.PROMO:
+            charge.promo_entry = entry
+        else:
+            charge.cash_entry = entry
+    return charge
+
+
+def refund_rental_charge(*, wallet: Wallet, charge_id, reference: str, promo, cash,
+                         reason: str) -> WalletLedgerEntry | None:
+    """Return a rental charge to the buckets it came from. Idempotent per charge."""
+    last = None
+    for funds, part, key in ((FundType.PROMO, quantize(promo), f"rental-refund:{charge_id}:promo"),
+                             (FundType.CASH, quantize(cash), f"rental-refund:{charge_id}")):
+        if part <= ZERO:
+            continue
+        last = post_entry(
+            wallet=wallet, amount=part, entry_type=LedgerEntryType.REFUND,
+            direction=LedgerDirection.CREDIT, idempotency_key=key,
+            description=f"Refund for {reference}", counterparty="PLATFORM:rentals",
+            related_order_id=charge_id,
+            metadata={"reason": reason[:200], "rental_reference": reference},
+            allow_frozen=True, funds=funds,
+        )
+    return last
 
 
 def credit_referral_bonus(*, wallet: Wallet, amount, idempotency_key: str, referral_id,

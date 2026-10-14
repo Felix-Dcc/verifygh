@@ -50,6 +50,16 @@ const KINDS: Record<string, Kind> = {
   ACCOUNT_SUSPENDED: { icon: LockIcon, tone: "danger" },
   ADMIN_MESSAGE: { icon: MailIcon, tone: "neutral" },
   REFERRAL_BONUS: { icon: GiftIcon, tone: "gold" },
+  // Number rentals (apps/rentals).
+  RENTAL_ACTIVE: { icon: PhoneIcon, tone: "neutral" },
+  RENTAL_MESSAGE: { icon: MessageIcon, tone: "success" },
+  RENTAL_ENDING: { icon: ClockIcon, tone: "warn" },
+  RENTAL_ENDED: { icon: ClockIcon, tone: "neutral" },
+  RENTAL_EXTENDED: { icon: CheckCircleIcon, tone: "neutral" },
+  RENTAL_REFUNDED: { icon: RefreshIcon, tone: "success" },
+  RENTAL_FAILED: { icon: AlertIcon, tone: "danger" },
+  RENTAL_EXTENSION_FAILED: { icon: AlertIcon, tone: "danger" },
+  STAFF_RENTAL_FAILED: { icon: AlertIcon, tone: "danger" },
   // Staff alerts (apps/notifications/staff.py).
   STAFF_ORDER_FAILED: { icon: AlertIcon, tone: "danger" },
   STAFF_ISSUE_REPORTED: { icon: FlagIcon, tone: "warn" },
@@ -71,6 +81,7 @@ function destination(notification: Notification): string | null {
   // Staff alerts open the admin page that can act on them.
   if (typeof meta.admin_link === "string" && meta.admin_link.startsWith("/admin/")) return meta.admin_link;
   if (typeof meta.order_reference === "string") return `/orders/${meta.order_reference}`;
+  if (typeof meta.rental_reference === "string") return `/rentals/${meta.rental_reference}`;
   if (typeof meta.payment_reference === "string") return "/transactions";
   if (notification.event === "REFERRAL_BONUS") return "/refer";
   if (notification.event === "SECURITY_ALERT") return "/account";

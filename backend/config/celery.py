@@ -85,6 +85,20 @@ app.conf.beat_schedule = {
         "task": "apps.numbers.tasks.check_provider_refunds",
         "schedule": crontab(minute="*/10"),
     },
+    # Number rentals: confirm purchases, close ended ones, send reminders.
+    "process-rentals": {
+        "task": "apps.rentals.tasks.process_rentals",
+        "schedule": 30.0,
+    },
+    # Each active rental's inbox, at most every RENTAL_SMS_POLL_SECONDS.
+    "poll-rental-messages": {
+        "task": "apps.rentals.tasks.poll_rental_messages",
+        "schedule": 60.0,
+    },
+    "purge-rental-messages": {
+        "task": "apps.rentals.tasks.purge_rental_messages",
+        "schedule": crontab(minute=50, hour=3),
+    },
     # Catches deposits whose provider callback never arrived.
     "reconcile-recent-payments": {
         "task": "apps.payments.tasks.reconcile_recent_payments",
