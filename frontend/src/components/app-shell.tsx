@@ -181,7 +181,7 @@ export function AppShell({
         {variant === "admin" ? <MaintenanceStrip canManage={can("MAINTENANCE_MANAGE")} /> : null}
         <main id="main" className="px-4 pb-safe-nav pt-5 sm:px-6 lg:px-10 lg:pb-12 lg:pt-8">
           <div className={cn("mx-auto w-full", variant === "admin" ? "max-w-7xl" : "max-w-6xl")}>
-            {children}
+            <AdminPortal.Provider value={variant === "admin"}>{children}</AdminPortal.Provider>
           </div>
         </main>
       </div>
@@ -412,13 +412,18 @@ function TopBar({ variant }: { variant: "user" | "admin" }) {
 }
 
 /** Where you are in the console: section, then page. */
-function AdminContext() {
-  const pathname = usePathname();
-  const item = ADMIN_NAV.flatMap((group) => group.items.map((entry) => ({ ...entry, group: group.label })))
+/** The admin nav item (and its group) for a path - the deepest match wins. */
+function adminItemFor(pathname: string) {
+  return ADMIN_NAV.flatMap((group) => group.items.map((entry) => ({ ...entry, group: group.label })))
     .filter((entry) =>
       entry.exact ? pathname === entry.href : pathname === entry.href || pathname.startsWith(`${entry.href}/`),
     )
     .sort((a, b) => b.href.length - a.href.length)[0];
+}
+
+function AdminContext() {
+  const pathname = usePathname();
+  const item = adminItemFor(pathname);
   return (
     <div className="hidden min-w-0 flex-1 items-center gap-2 text-sm lg:flex">
       <span className="text-ink-faint">Admin</span>
@@ -707,6 +712,110 @@ function AdminBottomNav({ groups }: { groups: NavGroup[] }) {
 /* Page header                                                        */
 /* ------------------------------------------------------------------ */
 
+/** True inside the admin console: page headers there become the navy banner. */
+const AdminPortal = React.createContext(false);
+
+/**
+ * Each admin section in its own colour, so a glance at the banner says where
+ * you are: Operations azure, Catalogue & pricing teal, Growth gold, Platform
+ * violet. Only the accents change - the navy and the type stay the same.
+ */
+const ADMIN_THEMES: Record<string, { tile: string; glow: string; line: string }> = {
+  Operations: {
+    tile: "from-[#0878D1] to-[#28C7F7]",
+    glow: "rgb(8 120 209 / 0.55)",
+    line: "from-[#0878D1] via-[#28C7F7] to-[#0878D1]",
+  },
+  "Catalogue & pricing": {
+    tile: "from-[#13A3B5] to-[#20B26B]",
+    glow: "rgb(32 178 107 / 0.42)",
+    line: "from-[#28C7F7] via-[#20B26B] to-[#65D99A]",
+  },
+  Growth: {
+    tile: "from-[#C79A2E] to-[#F2B64A]",
+    glow: "rgb(214 160 44 / 0.42)",
+    line: "from-[#C79A2E] via-[#F2B64A] to-[#C79A2E]",
+  },
+  Platform: {
+    tile: "from-[#6E56F0] to-[#3E8BFF]",
+    glow: "rgb(110 86 240 / 0.48)",
+    line: "from-[#6E56F0] via-[#3E8BFF] to-[#6E56F0]",
+  },
+};
+const DEFAULT_THEME = ADMIN_THEMES.Operations;
+
+/** The admin page header: a navy banner in the section's colour. */
+function AdminPageHero({
+  title,
+  description,
+  action,
+  back,
+}: {
+  title: string;
+  description?: React.ReactNode;
+  action?: React.ReactNode;
+  back?: { href: string; label: string };
+}) {
+  const pathname = usePathname();
+  const item = adminItemFor(pathname);
+  const theme = (item?.group && ADMIN_THEMES[item.group]) || DEFAULT_THEME;
+  const Icon = item?.icon;
+  return (
+    <section
+      className={cn(
+        // `dark`: buttons, inputs and badges inside take the dark theme's
+        // colours, which read on navy.
+        "admin-hero dark relative mb-6 overflow-hidden rounded-2xl px-5 py-5 text-white shadow-[0_24px_50px_-30px_rgba(5,11,24,0.8)] ring-1 ring-white/5 sm:px-6 sm:py-6 lg:mb-8",
+      )}
+    >
+      <span
+        aria-hidden
+        className="pointer-events-none absolute -right-16 -top-24 h-64 w-80 rounded-full blur-2xl"
+        style={{ background: `radial-gradient(closest-side, ${theme.glow}, transparent)` }}
+      />
+      <div className="relative">
+        {back ? (
+          <Link
+            href={back.href}
+            className="-mt-1 mb-2 inline-flex min-h-9 items-center gap-1 text-sm font-medium text-white/70 transition-colors hover:text-white"
+          >
+            <svg viewBox="0 0 24 24" fill="none" className="h-4 w-4" aria-hidden>
+              <path d="M15 6l-6 6 6 6" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" />
+            </svg>
+            {back.label}
+          </Link>
+        ) : null}
+        <div className="flex flex-wrap items-center justify-between gap-x-6 gap-y-4">
+          <div className="flex min-w-0 items-start gap-4">
+            {Icon ? (
+              <span
+                aria-hidden
+                className={cn(
+                  "flex h-12 w-12 shrink-0 items-center justify-center rounded-xl bg-gradient-to-br text-white shadow-lg ring-1 ring-white/20",
+                  theme.tile,
+                )}
+              >
+                <Icon className="h-6 w-6" />
+              </span>
+            ) : null}
+            <div className="min-w-0">
+              {item?.group ? (
+                <p className="text-2xs font-semibold uppercase tracking-[0.14em] text-white/55">{item.group}</p>
+              ) : null}
+              <h1 className="text-balance text-2xl font-extrabold tracking-[-0.02em] text-white">{title}</h1>
+              {description ? (
+                <div className="mt-1 max-w-2xl text-pretty text-sm leading-relaxed text-white/70">{description}</div>
+              ) : null}
+            </div>
+          </div>
+          {action ? <div className="flex shrink-0 flex-wrap items-center gap-2">{action}</div> : null}
+        </div>
+      </div>
+      <span aria-hidden className={cn("absolute inset-x-0 bottom-0 h-[3px] bg-gradient-to-r opacity-90", theme.line)} />
+    </section>
+  );
+}
+
 export function PageHeader({
   title,
   description,
@@ -720,6 +829,8 @@ export function PageHeader({
   back?: { href: string; label: string };
   icon?: React.ReactNode;
 }) {
+  const admin = React.useContext(AdminPortal);
+  if (admin) return <AdminPageHero title={title} description={description} action={action} back={back} />;
   return (
     <div className="mb-6 lg:mb-8">
       {back ? (

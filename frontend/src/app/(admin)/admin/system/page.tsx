@@ -5,9 +5,10 @@ import * as React from "react";
 import useSWR from "swr";
 
 import { Pagination } from "@/components/admin/pagination";
+import { AdminToolbar, KpiCard, KpiRow, ListCard } from "@/components/admin/ui";
 import { PageHeader } from "@/components/app-shell";
 import { useAuth } from "@/components/auth-provider";
-import { AlertIcon, CheckCircleIcon, FlagIcon, ShieldIcon } from "@/components/icons";
+import { AlertIcon, BoltIcon, CheckCircleIcon, FlagIcon, ShieldIcon, WalletIcon } from "@/components/icons";
 import { Dialog } from "@/components/ui/dialog";
 import {
   Alert,
@@ -28,6 +29,7 @@ import { ApiError, api } from "@/lib/api";
 import { formatDateTime, relativeTime } from "@/lib/format";
 import type {
   AdminActionEntry,
+  AdminOverview,
   AdminSystemHealth,
   AuditLogEntry,
   LinkedAccount,
@@ -40,6 +42,10 @@ type Tab = "health" | "flags" | "audit" | "actions";
 export default function AdminSystemPage() {
   const { can } = useAuth();
   const [tab, setTab] = React.useState<Tab>("health");
+  const { data: health } = useSWR<AdminSystemHealth>("/admin/health/", { refreshInterval: 30_000 });
+  const { data: overview } = useSWR<AdminOverview>("/admin/overview/", { refreshInterval: 60_000 });
+  const providerState = (provider?: { healthy: boolean; is_mock: boolean }) =>
+    !provider ? undefined : !provider.healthy ? "Not reachable" : provider.is_mock ? "Mock" : "Healthy";
 
   return (
     <div className="space-y-4">
@@ -48,16 +54,54 @@ export default function AdminSystemPage() {
         description="Provider health, abuse signals and the permanent record of who did what."
       />
 
-      <SegmentedControl
-        options={[
-          { value: "health" as Tab, label: "Health" },
-          { value: "flags" as Tab, label: "Abuse signals" },
-          { value: "audit" as Tab, label: "Audit log" },
-          { value: "actions" as Tab, label: "Admin actions" },
-        ]}
-        value={tab}
-        onChange={setTab}
-      />
+      <KpiRow>
+        <KpiCard
+          icon={<BoltIcon />}
+          tone={health && !health.verification_provider.healthy ? "danger" : "brand"}
+          label="Number provider"
+          value={providerState(health?.verification_provider)}
+          hint={health?.verification_provider.key}
+          onClick={() => setTab("health")}
+          active={tab === "health"}
+        />
+        <KpiCard
+          icon={<WalletIcon />}
+          tone={health && !health.payment_provider.healthy ? "danger" : "brand"}
+          label="Payment provider"
+          value={providerState(health?.payment_provider)}
+          hint={health?.payment_provider.key}
+          onClick={() => setTab("health")}
+        />
+        <KpiCard
+          icon={<FlagIcon />}
+          tone={overview && overview.flags.high > 0 ? "danger" : overview && overview.flags.open > 0 ? "warn" : "brand"}
+          label="Open abuse signals"
+          value={overview?.flags.open}
+          hint={overview ? `${overview.flags.high} high severity` : undefined}
+          onClick={() => setTab("flags")}
+          active={tab === "flags"}
+        />
+        <KpiCard
+          icon={<AlertIcon />}
+          tone={health && health.unprocessed_webhooks > 0 ? "danger" : "neutral"}
+          label="Unprocessed webhooks"
+          value={health?.unprocessed_webhooks}
+          hint={health && health.unprocessed_webhooks > 0 ? "Investigate first" : "All applied"}
+        />
+      </KpiRow>
+
+      <AdminToolbar>
+        <SegmentedControl
+          options={[
+            { value: "health" as Tab, label: "Health" },
+            { value: "flags" as Tab, label: "Abuse signals" },
+            { value: "audit" as Tab, label: "Audit log" },
+            { value: "actions" as Tab, label: "Admin actions" },
+          ]}
+          value={tab}
+          onChange={setTab}
+        />
+      </AdminToolbar>
 
       {tab === "health" ? <HealthTab /> : null}
       {tab === "flags" ? <FlagsTab /> : null}
@@ -312,10 +356,10 @@ function FlagsTab() {
   const [note, setNote] = React.useState("");
   const [busy, setBusy] = React.useState(false);
 
-  const { data, error, mutate } = useSWR<Paginated<SuspiciousActivity>>([
-    "/admin/flags/",
-    { resolved: showResolved ? "true" : "", page, page_size: 25 },
-  ]);
+  const { data, error, isValidating, mutate } = useSWR<Paginated<SuspiciousActivity>>(
+    ["/admin/flags/", { resolved: showResolved ? "true" : "", page, page_size: 25 }],
+    { keepPreviousData: true },
+  );
 
   const flags = data?.results ?? [];
 
@@ -342,19 +386,26 @@ function FlagsTab() {
         easily as it can mean abuse - a person decides, and that decision is recorded.
       </Alert>
 
-      <SegmentedControl
-        options={[
-          { value: "open", label: "Open" },
-          { value: "resolved", label: "Resolved" },
-        ]}
-        value={showResolved ? "resolved" : "open"}
-        onChange={(value) => {
-          setShowResolved(value === "resolved");
-          setPage(1);
-        }}
-      />
-
-      <Card className="overflow-hidden">
+      <ListCard
+        title={showResolved ? "Resolved signals" : "Open signals"}
+        count={data?.pagination?.count}
+        noun="signals"
+        refreshing={isValidating}
+        onRefresh={() => mutate()}
+        action={
+          <SegmentedControl
+            options={[
+              { value: "open", label: "Open" },
+              { value: "resolved", label: "Resolved" },
+            ]}
+            value={showResolved ? "resolved" : "open"}
+            onChange={(value) => {
+              setShowResolved(value === "resolved");
+              setPage(1);
+            }}
+          />
+        }
+      >
         {error && !data ? (
           <LoadError what="this list" onRetry={() => mutate()} />
         ) : !data ? (
@@ -418,7 +469,7 @@ function FlagsTab() {
             ))}
           </ul>
         )}
-      </Card>
+      </ListCard>
 
       {data?.pagination ? (
         <Pagination
@@ -467,8 +518,9 @@ function FlagsTab() {
 
 function AuditTab({ canView }: { canView: boolean }) {
   const [page, setPage] = React.useState(1);
-  const { data, error, mutate } = useSWR<Paginated<AuditLogEntry>>(
+  const { data, error, isValidating, mutate } = useSWR<Paginated<AuditLogEntry>>(
     canView ? ["/admin/audit/", { page, page_size: 50 }] : null,
+    { keepPreviousData: true },
   );
 
   if (!canView) {
@@ -481,7 +533,13 @@ function AuditTab({ canView }: { canView: boolean }) {
 
   return (
     <div className="space-y-4">
-      <Card className="overflow-hidden">
+      <ListCard
+        title="Audit log"
+        count={data?.pagination?.count}
+        noun="entries"
+        refreshing={isValidating}
+        onRefresh={() => mutate()}
+      >
         {error && !data ? (
           <LoadError what="this list" onRetry={() => mutate()} />
         ) : !data ? (
@@ -512,7 +570,7 @@ function AuditTab({ canView }: { canView: boolean }) {
             ))}
           </ul>
         )}
-      </Card>
+      </ListCard>
 
       {data?.pagination ? (
         <Pagination
@@ -531,8 +589,9 @@ function AuditTab({ canView }: { canView: boolean }) {
 
 function ActionsTab({ canView }: { canView: boolean }) {
   const [page, setPage] = React.useState(1);
-  const { data, error, mutate } = useSWR<Paginated<AdminActionEntry>>(
+  const { data, error, isValidating, mutate } = useSWR<Paginated<AdminActionEntry>>(
     canView ? ["/admin/admin-actions/", { page, page_size: 50 }] : null,
+    { keepPreviousData: true },
   );
 
   if (!canView) {
@@ -550,7 +609,13 @@ function ActionsTab({ canView }: { canView: boolean }) {
         take effect. These rows are never updated or deleted.
       </Alert>
 
-      <Card className="overflow-hidden">
+      <ListCard
+        title="Admin actions"
+        count={data?.pagination?.count}
+        noun="actions"
+        refreshing={isValidating}
+        onRefresh={() => mutate()}
+      >
         {error && !data ? (
           <LoadError what="this list" onRetry={() => mutate()} />
         ) : !data ? (
@@ -578,7 +643,7 @@ function ActionsTab({ canView }: { canView: boolean }) {
             ))}
           </ul>
         )}
-      </Card>
+      </ListCard>
 
       {data?.pagination ? (
         <Pagination

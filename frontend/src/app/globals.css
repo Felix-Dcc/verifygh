@@ -562,6 +562,51 @@
   .admin-portal table tbody td {
     @apply align-middle;
   }
+  /* Filter tabs (SegmentedControl): the chosen one in the deep brand green,
+     which carries white text in both themes. The overview's period picker on
+     the navy banner is not bg-sunken, so it keeps its own look. */
+  .admin-portal [role="tablist"].bg-sunken {
+    @apply rounded-xl p-1 ring-1 ring-inset ring-line;
+  }
+  .admin-portal [role="tablist"].bg-sunken [aria-selected="true"] {
+    background-color: rgb(var(--c-primary));
+    color: #fff;
+    box-shadow: 0 6px 16px -8px rgb(var(--c-primary) / 0.8);
+    --tw-ring-color: transparent;
+  }
+  .admin-portal [role="tablist"].bg-sunken [aria-selected="true"] span {
+    color: rgb(255 255 255 / 0.75);
+  }
+
+  /* Section headings get a short accent bar, so long pages scan in blocks. */
+  .admin-portal section > div > div > h2.text-heading {
+    @apply flex items-center gap-2;
+  }
+  .admin-portal section > div > div > h2.text-heading::before {
+    content: "";
+    @apply inline-block h-4 w-1 rounded-full bg-gradient-to-b from-azure to-leaf;
+  }
+
+  /* Figure tiles: a hairline of colour along the top. */
+  .admin-portal .metric-group > * {
+    background-image: linear-gradient(90deg, rgb(8 120 209 / 0.55), rgb(32 178 107 / 0.55));
+    background-size: 100% 2px;
+    background-repeat: no-repeat;
+  }
+
+  /* Rows that open a record (components/admin/ui.tsx openRow): reachable by
+     keyboard, and plainly focused when they are. */
+  .admin-portal tr.admin-row:focus-visible {
+    outline: 2px solid rgb(var(--c-primary));
+    outline-offset: -2px;
+    background-color: rgb(var(--c-brand-50) / 0.55);
+  }
+
+  /* Clickable list rows inside cards lift a little on hover. */
+  .admin-portal .card ul > li > button:hover {
+    background-color: rgb(var(--c-brand-50) / 0.55);
+  }
+
   .admin-portal .overflow-x-auto {
     /* Contains absolutely positioned children (sr-only labels in a wide
        table's header), which otherwise escape and widen the whole page. */

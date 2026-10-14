@@ -4,10 +4,19 @@ import * as React from "react";
 import useSWR from "swr";
 
 import { Pagination } from "@/components/admin/pagination";
+import {
+  AdminToolbar,
+  KpiCard,
+  KpiRow,
+  ListCard,
+  SearchBox,
+  TableSkeleton,
+  openRow,
+} from "@/components/admin/ui";
 import { ROLE_INFO, RoleBadge, RoleChangeForm } from "@/components/admin/team";
 import { PageHeader } from "@/components/app-shell";
 import { useAuth } from "@/components/auth-provider";
-import { SearchIcon, UsersIcon } from "@/components/icons";
+import { AlertIcon, BoltIcon, UserIcon, UsersIcon } from "@/components/icons";
 import { Dialog } from "@/components/ui/dialog";
 import {
   Alert,
@@ -27,7 +36,7 @@ import {
 import { useToast } from "@/components/ui/toast";
 import { ApiError, api, newIdempotencyKey } from "@/lib/api";
 import { cedis, formatDate, localPhone, relativeTime } from "@/lib/format";
-import type { AdminUser, Paginated, Transaction } from "@/lib/types";
+import type { AdminOverview, AdminUser, Paginated, Transaction } from "@/lib/types";
 
 type Filter = "all" | "flagged" | "suspended" | "verified" | "unverified";
 
@@ -52,19 +61,39 @@ export default function AdminUsersPage() {
     return () => window.clearTimeout(timer);
   }, [search]);
 
-  const { data, isLoading, error, mutate } = useSWR<Paginated<AdminUser>>([
-    "/admin/users/",
-    {
-      search: debounced,
-      flagged: filter === "flagged" ? "true" : "",
-      suspended: filter === "suspended" ? "true" : "",
-      verified: filter === "verified" ? "true" : filter === "unverified" ? "false" : "",
-      page,
-      page_size: 25,
-    },
-  ]);
+  const { data, isLoading, isValidating, error, mutate } = useSWR<Paginated<AdminUser>>(
+    [
+      "/admin/users/",
+      {
+        search: debounced,
+        flagged: filter === "flagged" ? "true" : "",
+        suspended: filter === "suspended" ? "true" : "",
+        verified: filter === "verified" ? "true" : filter === "unverified" ? "false" : "",
+        page,
+        page_size: 25,
+      },
+    ],
+    { keepPreviousData: true },
+  );
+  const { data: overview } = useSWR<AdminOverview>("/admin/overview/", { refreshInterval: 60_000 });
+  // Accounts still waiting on their email code - a count only.
+  const { data: unverified } = useSWR<Paginated<AdminUser>>(
+    ["/admin/users/", { verified: "false", page_size: 1 }],
+    { refreshInterval: 60_000 },
+  );
 
   const users = data?.results ?? [];
+  const show = (value: Filter) => {
+    setFilter((current) => (current === value ? "all" : value));
+    setPage(1);
+  };
+  const FILTER_TITLES: Record<Filter, string> = {
+    all: "All users",
+    flagged: "Flagged users",
+    suspended: "Suspended users",
+    verified: "Verified users",
+    unverified: "Unverified users",
+  };
 
   return (
     <div className="space-y-4">
@@ -73,7 +102,43 @@ export default function AdminUsersPage() {
         description="Search accounts, review abuse signals, and act with a recorded reason."
       />
 
-      <div className="flex flex-col gap-3 sm:flex-row sm:items-center">
+      <KpiRow>
+        <KpiCard
+          icon={<UsersIcon />}
+          label="Customers"
+          value={overview?.users.total}
+          hint={overview ? `${overview.users.new_today} joined today` : undefined}
+          onClick={() => show("all")}
+          active={filter === "all"}
+        />
+        <KpiCard
+          icon={<BoltIcon />}
+          tone="info"
+          label="Active in 30 days"
+          value={overview?.users.active_30d}
+          hint="Signed in this month"
+        />
+        <KpiCard
+          icon={<UserIcon />}
+          tone="warn"
+          label="Email not verified"
+          value={unverified?.pagination?.count}
+          hint="Cannot buy or top up yet"
+          onClick={() => show("unverified")}
+          active={filter === "unverified"}
+        />
+        <KpiCard
+          icon={<AlertIcon />}
+          tone="danger"
+          label="Suspended"
+          value={overview?.users.suspended}
+          hint="Signed out and blocked"
+          onClick={() => show("suspended")}
+          active={filter === "suspended"}
+        />
+      </KpiRow>
+
+      <AdminToolbar>
         <SegmentedControl
           options={[
             { value: "all" as Filter, label: "All" },
@@ -88,22 +153,24 @@ export default function AdminUsersPage() {
             setPage(1);
           }}
         />
-        <div className="relative sm:ml-auto sm:w-72">
-          <SearchIcon className="pointer-events-none absolute left-3.5 top-1/2 h-5 w-5 -translate-y-1/2 text-ink-faint" />
-          <Input
-            type="search"
-            aria-label="Search users"
-            placeholder="Email, name or phone"
-            value={search}
-            onChange={(event) => setSearch(event.target.value)}
-            className="pl-11"
-          />
-        </div>
-      </div>
+        <SearchBox
+          label="Search users"
+          placeholder="Email, name or phone"
+          value={search}
+          onChange={setSearch}
+          className="lg:ml-auto"
+        />
+      </AdminToolbar>
 
-      <Card className="overflow-hidden">
+      <ListCard
+        title={FILTER_TITLES[filter]}
+        count={data?.pagination?.count}
+        noun="accounts"
+        refreshing={isValidating}
+        onRefresh={() => mutate()}
+      >
         {isLoading ? (
-          <RowSkeletons />
+          <TableSkeleton />
         ) : error && !data ? (
           <LoadError what="the users" onRetry={() => mutate()} />
         ) : users.length === 0 ? (
@@ -111,6 +178,21 @@ export default function AdminUsersPage() {
             icon={<UsersIcon />}
             title={debounced ? "No users match that search" : "No users to show"}
             description={debounced ? "Try a different email, name or phone number." : undefined}
+            action={
+              debounced || filter !== "all" ? (
+                <Button
+                  variant="secondary"
+                  size="sm"
+                  onClick={() => {
+                    setSearch("");
+                    setFilter("all");
+                    setPage(1);
+                  }}
+                >
+                  Clear filters
+                </Button>
+              ) : undefined
+            }
           />
         ) : (
           <>
@@ -154,11 +236,7 @@ export default function AdminUsersPage() {
                 </thead>
                 <tbody className="divide-y divide-line">
                   {users.map((user) => (
-                    <tr
-                      key={user.id}
-                      onClick={() => setSelected(user)}
-                      className="cursor-pointer transition-colors hover:bg-sunken/60"
-                    >
+                    <tr key={user.id} {...openRow(() => setSelected(user), `Open ${user.email}`)}>
                       <td className="px-5 py-3.5">
                         <div className="flex items-center gap-3">
                           <Avatar user={user} />
@@ -192,7 +270,7 @@ export default function AdminUsersPage() {
             </div>
           </>
         )}
-      </Card>
+      </ListCard>
 
       {data?.pagination && data.pagination.pages > 1 ? (
         <Pagination

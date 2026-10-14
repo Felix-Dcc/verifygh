@@ -4,9 +4,10 @@ import Link from "next/link";
 import * as React from "react";
 import useSWR, { mutate as globalMutate } from "swr";
 
+import { AdminToolbar, KpiCard, KpiRow, SearchBox } from "@/components/admin/ui";
 import { PageHeader } from "@/components/app-shell";
 import { useAuth } from "@/components/auth-provider";
-import { RefreshIcon } from "@/components/icons";
+import { AlertIcon, CheckCircleIcon, GridIcon, RefreshIcon, StarIcon } from "@/components/icons";
 import { CountryFlag } from "@/components/country-flag";
 import { ServiceLogo } from "@/components/service-logo";
 import { Dialog } from "@/components/ui/dialog";
@@ -79,11 +80,20 @@ function ServicesTab({ canManage }: { canManage: boolean }) {
   const [editing, setEditing] = React.useState<AdminService | null>(null);
   const [syncing, setSyncing] = React.useState(false);
   const [scope, setScope] = React.useState<"sold" | "missing" | "all">("sold");
+  const [query, setQuery] = React.useState("");
 
   const sold = (services ?? []).filter((service) => service.marketplace_offerings > 0);
   const missing = sold.filter((service) => !service.icon_url);
-  const shown =
-    scope === "all" ? services ?? [] : scope === "missing" ? missing : sold;
+  const offline = sold.filter((service) => !service.is_enabled || service.is_maintenance);
+  const inStock = sold.reduce((sum, service) => sum + service.available_count, 0);
+  const needle = query.trim().toLowerCase();
+  const shown = (scope === "all" ? services ?? [] : scope === "missing" ? missing : sold).filter(
+    (service) =>
+      !needle ||
+      service.name.toLowerCase().includes(needle) ||
+      service.slug.includes(needle) ||
+      (service.aliases || "").toLowerCase().includes(needle),
+  );
 
   async function sync() {
     setSyncing(true);
@@ -107,6 +117,40 @@ function ServicesTab({ canManage }: { canManage: boolean }) {
 
   return (
     <>
+      <KpiRow>
+        <KpiCard
+          icon={<GridIcon />}
+          label="Services on sale"
+          value={services ? sold.length : undefined}
+          hint={services ? `${services.length} in the provider catalogue` : undefined}
+          onClick={() => setScope("sold")}
+          active={scope === "sold"}
+        />
+        <KpiCard
+          icon={<CheckCircleIcon />}
+          tone="info"
+          label="Offerings in stock"
+          value={services ? inStock : undefined}
+          hint="Service and country pairs"
+        />
+        <KpiCard
+          icon={<StarIcon />}
+          tone="gold"
+          label="Missing a logo"
+          value={services ? missing.length : undefined}
+          hint="Shown with a generic mark"
+          onClick={() => setScope("missing")}
+          active={scope === "missing"}
+        />
+        <KpiCard
+          icon={<AlertIcon />}
+          tone="warn"
+          label="Off or in maintenance"
+          value={services ? offline.length : undefined}
+          hint="Not buyable right now"
+        />
+      </KpiRow>
+
       <Card>
         <CardHeader
           title="Services"
@@ -125,23 +169,35 @@ function ServicesTab({ canManage }: { canManage: boolean }) {
             ) : undefined
           }
         />
-        <div className="flex flex-wrap items-center gap-2 px-4 pt-3 sm:px-5">
-          <SegmentedControl
-            options={[
-              { value: "sold" as const, label: `Sold in the US (${sold.length})` },
-              { value: "missing" as const, label: `Missing logo (${missing.length})` },
-              { value: "all" as const, label: "Whole provider catalogue" },
-            ]}
-            value={scope}
-            onChange={setScope}
-          />
+        <div className="px-4 pt-3 sm:px-5">
+          <AdminToolbar inset>
+            <SegmentedControl
+              options={[
+                { value: "sold" as const, label: `Sold in the US (${sold.length})` },
+                { value: "missing" as const, label: `Missing logo (${missing.length})` },
+                { value: "all" as const, label: "Whole provider catalogue" },
+              ]}
+              value={scope}
+              onChange={setScope}
+              className="lg:flex-1"
+            />
+            <SearchBox label="Search services" placeholder="Name or alias" value={query} onChange={setQuery} />
+          </AdminToolbar>
         </div>
         {!services ? (
           <RowSkeletons />
         ) : (
           <ul className="mt-2 divide-y divide-line">
+            {shown.length === 0 ? (
+              <li className="px-5 py-10 text-center text-sm text-ink-muted">
+                No services match{needle ? ` "${query.trim()}"` : ""}.
+              </li>
+            ) : null}
             {shown.map((service) => (
-              <li key={service.id} className="flex items-center gap-3 px-4 py-3.5 sm:px-5">
+              <li
+                key={service.id}
+                className="flex items-center gap-3 px-4 py-3.5 transition-colors hover:bg-brand-50/40 sm:px-5"
+              >
                 <ServiceLogo name={service.name} src={service.icon_url} slug={service.slug} />
                 <div className="min-w-0 flex-1">
                   <p className="truncate text-sm font-medium text-ink">{service.name}</p>

@@ -4,20 +4,29 @@ import * as React from "react";
 import useSWR from "swr";
 
 import { Pagination } from "@/components/admin/pagination";
+import {
+  AdminToolbar,
+  KpiCard,
+  KpiRow,
+  ListCard,
+  SearchBox,
+  TableSkeleton,
+  openRow,
+} from "@/components/admin/ui";
 import { PageHeader } from "@/components/app-shell";
-import { SearchIcon, WalletIcon } from "@/components/icons";
+import { AlertIcon, CheckCircleIcon, ClockIcon, WalletIcon } from "@/components/icons";
 import { Dialog } from "@/components/ui/dialog";
 import {
+  Button,
   Card,
   EmptyState,
-  Input,
   LoadError,
   SegmentedControl,
   Skeleton,
   StatusBadge,
 } from "@/components/ui/primitives";
 import { cedis, formatDateTime } from "@/lib/format";
-import type { AdminPayment, AdminPaymentDetail, Paginated } from "@/lib/types";
+import type { AdminOverview, AdminPayment, AdminPaymentDetail, Paginated } from "@/lib/types";
 
 const STATUS_FILTERS = [
   { value: "", label: "All" },
@@ -43,12 +52,23 @@ export default function AdminPaymentsPage() {
     return () => window.clearTimeout(timer);
   }, [search]);
 
-  const { data, isLoading, error, mutate } = useSWR<Paginated<AdminPayment>>([
-    "/admin/payments/",
-    { status, search: debounced, page, page_size: 25 },
-  ]);
+  const { data, isLoading, isValidating, error, mutate } = useSWR<Paginated<AdminPayment>>(
+    ["/admin/payments/", { status, search: debounced, page, page_size: 25 }],
+    { keepPreviousData: true },
+  );
+  const { data: overview } = useSWR<AdminOverview>("/admin/overview/", { refreshInterval: 60_000 });
+  // Waiting on the customer: how many are open right now (a count only).
+  const { data: pending } = useSWR<Paginated<AdminPayment>>(
+    ["/admin/payments/", { status: "PENDING", page_size: 1 }],
+    { refreshInterval: 60_000 },
+  );
 
   const payments = data?.results ?? [];
+  const filter = (value: string) => {
+    setStatus((current) => (current === value ? "" : value));
+    setPage(1);
+  };
+  const label = STATUS_FILTERS.find((item) => item.value === status)?.label ?? "All";
 
   return (
     <div className="space-y-4">
@@ -57,7 +77,44 @@ export default function AdminPaymentsPage() {
         description="Every Mobile Money collection, and whether it was credited."
       />
 
-      <div className="flex flex-col gap-3 lg:flex-row lg:items-center">
+      <KpiRow>
+        <KpiCard
+          icon={<WalletIcon />}
+          label="Collected today"
+          value={overview ? cedis(overview.payments.momo_today) : undefined}
+          hint={overview ? `${cedis(overview.payments.momo_total)} all time` : undefined}
+          onClick={() => filter("")}
+          active={status === ""}
+        />
+        <KpiCard
+          icon={<CheckCircleIcon />}
+          label="Successful"
+          value={overview?.payments.count}
+          hint="Credited to wallets"
+          onClick={() => filter("SUCCESS")}
+          active={status === "SUCCESS"}
+        />
+        <KpiCard
+          icon={<ClockIcon />}
+          tone="warn"
+          label="Waiting on customer"
+          value={pending?.pagination?.count}
+          hint="Checkout or prompt still open"
+          onClick={() => filter("PENDING")}
+          active={status === "PENDING"}
+        />
+        <KpiCard
+          icon={<AlertIcon />}
+          tone="danger"
+          label="Failed"
+          value={overview?.payments.failed}
+          hint="No money moved"
+          onClick={() => filter("FAILED")}
+          active={status === "FAILED"}
+        />
+      </KpiRow>
+
+      <AdminToolbar>
         <SegmentedControl
           options={STATUS_FILTERS}
           value={status}
@@ -67,28 +124,40 @@ export default function AdminPaymentsPage() {
           }}
           className="lg:flex-1"
         />
-        <div className="relative lg:w-72">
-          <SearchIcon className="pointer-events-none absolute left-3.5 top-1/2 h-5 w-5 -translate-y-1/2 text-ink-faint" />
-          <Input
-            type="search"
-            aria-label="Search payments"
-            placeholder="Reference or email"
-            value={search}
-            onChange={(event) => setSearch(event.target.value)}
-            className="pl-11"
-          />
-        </div>
-      </div>
+        <SearchBox label="Search payments" placeholder="Reference or email" value={search} onChange={setSearch} />
+      </AdminToolbar>
 
-      <Card className="overflow-hidden">
+      <ListCard
+        title={label === "All" ? "All payments" : `${label} payments`}
+        count={data?.pagination?.count}
+        noun="payments"
+        refreshing={isValidating}
+        onRefresh={() => mutate()}
+      >
         {isLoading ? (
-          <RowSkeletons />
+          <TableSkeleton />
         ) : error && !data ? (
           <LoadError what="the payments" onRetry={() => mutate()} />
         ) : payments.length === 0 ? (
           <EmptyState
             icon={<WalletIcon />}
-            title={debounced ? "No payments match that search" : "No payments yet"}
+            title={debounced ? "No payments match that search" : status ? "No payments with this status" : "No payments yet"}
+            description={debounced || status ? "Try another filter, or clear the search." : undefined}
+            action={
+              debounced || status ? (
+                <Button
+                  variant="secondary"
+                  size="sm"
+                  onClick={() => {
+                    setSearch("");
+                    setStatus("");
+                    setPage(1);
+                  }}
+                >
+                  Clear filters
+                </Button>
+              ) : undefined
+            }
           />
         ) : (
           <div className="overflow-x-auto">
@@ -106,11 +175,7 @@ export default function AdminPaymentsPage() {
               </thead>
               <tbody className="divide-y divide-line">
                 {payments.map((payment) => (
-                  <tr
-                    key={payment.id}
-                    onClick={() => setSelected(payment)}
-                    className="cursor-pointer transition-colors hover:bg-sunken/60"
-                  >
+                  <tr key={payment.id} {...openRow(() => setSelected(payment), `Open payment ${payment.reference}`)}>
                     <td className="tabular whitespace-nowrap px-5 py-3.5 font-medium text-ink">
                       {payment.reference}
                       {payment.provider_reference ? (
@@ -151,7 +216,7 @@ export default function AdminPaymentsPage() {
             </table>
           </div>
         )}
-      </Card>
+      </ListCard>
 
       {data?.pagination ? (
         <Pagination
@@ -316,20 +381,5 @@ function Row({ label, value }: { label: string; value: string }) {
       <dt className="shrink-0 text-sm text-ink-muted">{label}</dt>
       <dd className="tabular break-words text-right text-sm font-medium text-ink">{value}</dd>
     </div>
-  );
-}
-
-function RowSkeletons() {
-  return (
-    <ul className="divide-y divide-line">
-      {Array.from({ length: 8 }).map((_, index) => (
-        <li key={index} className="flex items-center gap-4 px-5 py-3.5">
-          <Skeleton className="h-4 w-28" />
-          <Skeleton className="h-4 flex-1" />
-          <Skeleton className="h-4 w-16" />
-          <Skeleton className="h-6 w-24 rounded-full" />
-        </li>
-      ))}
-    </ul>
   );
 }

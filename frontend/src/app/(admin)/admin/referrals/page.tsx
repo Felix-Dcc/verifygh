@@ -4,9 +4,25 @@ import * as React from "react";
 import useSWR, { mutate as globalMutate } from "swr";
 
 import { Pagination } from "@/components/admin/pagination";
+import {
+  AdminToolbar,
+  KpiCard,
+  KpiRow,
+  ListCard,
+  SearchBox,
+  TableSkeleton,
+  openRow,
+} from "@/components/admin/ui";
 import { PageHeader } from "@/components/app-shell";
 import { useAuth } from "@/components/auth-provider";
-import { GiftIcon, SearchIcon } from "@/components/icons";
+import {
+  AlertIcon,
+  CheckCircleIcon,
+  GiftIcon,
+  ReceiptIcon,
+  UsersIcon,
+  WalletIcon,
+} from "@/components/icons";
 import { Dialog } from "@/components/ui/dialog";
 import {
   Alert,
@@ -51,7 +67,9 @@ export default function AdminReferralsPage() {
   }, [search]);
 
   const key = ["/admin/referrals/", { status, search: debounced, page, page_size: 25 }] as const;
-  const { data, isLoading, error, mutate } = useSWR<Paginated<AdminReferral>>(key);
+  const { data, isLoading, isValidating, error, mutate } = useSWR<Paginated<AdminReferral>>(key, {
+    keepPreviousData: true,
+  });
   const { data: analytics, mutate: refreshAnalytics } =
     useSWR<ReferralAnalytics>("/admin/referrals-analytics/");
 
@@ -71,46 +89,44 @@ export default function AdminReferralsPage() {
 
       <ProgrammeSwitch />
 
-      <div className="metric-group grid-cols-1 sm:grid-cols-2 xl:grid-cols-4">
-        <Stat label="Registrations" value={analytics?.registrations} />
-        <Stat label="Rewarded" value={analytics?.rewarded} />
-        <Stat
-          label="Credit issued"
-          value={analytics ? cedis(analytics.promotional_credit_issued) : undefined}
+      <KpiRow>
+        <KpiCard
+          icon={<UsersIcon />}
+          label="Sign-ups via links"
+          value={analytics?.registrations}
+          hint={analytics ? `${analytics.pending} not qualified yet` : undefined}
+          onClick={() => {
+            setStatus("ALL");
+            setPage(1);
+          }}
+          active={status === "ALL"}
         />
-        <Stat
-          label="Cost per acquisition"
-          value={analytics ? cedis(analytics.average_acquisition_cost) : undefined}
-          hint={analytics ? `${analytics.conversion_rate}% conversion` : undefined}
+        <KpiCard
+          icon={<CheckCircleIcon />}
+          label="Welcomed"
+          value={analytics?.rewarded}
+          hint={analytics ? `${analytics.conversion_rate}% of sign-ups` : undefined}
+          onClick={() => {
+            setStatus("REWARDED");
+            setPage(1);
+          }}
+          active={status === "REWARDED"}
         />
-      </div>
-
-      {/* What invited people went on to do - the proof the programme pays. */}
-      <div className="metric-group grid-cols-1 sm:grid-cols-2 xl:grid-cols-4">
-        <Stat
-          label="Topped up"
-          value={analytics?.invited_topped_up}
-          hint={analytics ? `${analytics.invited_topped_up_rate}% of invited, ${analytics.invited_verified_rate}% verified email` : undefined}
+        <KpiCard
+          icon={<AlertIcon />}
+          tone="warn"
+          label="Held for review"
+          value={analytics?.fraud_flagged}
+          hint="Approve or reject each one"
+          onClick={() => {
+            setStatus("FRAUD_FLAGGED");
+            setPage(1);
+          }}
+          active={status === "FRAUD_FLAGGED"}
         />
-        <Stat
-          label="Bought a number"
-          value={analytics?.invited_buyers}
-          hint={
-            analytics
-              ? `${analytics.invited_repeat_buyers} came back for more (${analytics.invited_repeat_rate}%)`
-              : undefined
-          }
-        />
-        <Stat
-          label="Cash paid by invited"
-          value={analytics ? cedis(analytics.invited_cash_revenue) : undefined}
-          hint={
-            analytics
-              ? `${cedis(analytics.invited_revenue)} across ${analytics.invited_orders} delivered numbers`
-              : undefined
-          }
-        />
-        <Stat
+        <KpiCard
+          icon={<GiftIcon />}
+          tone="gold"
           label="Bonus cost"
           value={analytics ? cedis(analytics.total_bonus_cost) : undefined}
           hint={
@@ -119,7 +135,42 @@ export default function AdminReferralsPage() {
               : undefined
           }
         />
-      </div>
+      </KpiRow>
+
+      {/* What invited people went on to do - the proof the programme pays. */}
+      <KpiRow>
+        <KpiCard
+          icon={<WalletIcon />}
+          tone="info"
+          label="Topped up"
+          value={analytics?.invited_topped_up}
+          hint={analytics ? `${analytics.invited_topped_up_rate}% of invited` : undefined}
+        />
+        <KpiCard
+          icon={<ReceiptIcon />}
+          tone="info"
+          label="Bought a number"
+          value={analytics?.invited_buyers}
+          hint={
+            analytics
+              ? `${analytics.invited_repeat_buyers} came back for more (${analytics.invited_repeat_rate}%)`
+              : undefined
+          }
+        />
+        <KpiCard
+          icon={<WalletIcon />}
+          label="Cash paid by invited"
+          value={analytics ? cedis(analytics.invited_cash_revenue) : undefined}
+          hint={analytics ? `${analytics.invited_orders} delivered numbers` : undefined}
+        />
+        <KpiCard
+          icon={<CheckCircleIcon />}
+          tone="neutral"
+          label="Verified email"
+          value={analytics ? `${analytics.invited_verified_rate}%` : undefined}
+          hint={analytics ? `${analytics.invited_verified} of ${analytics.registrations}` : undefined}
+        />
+      </KpiRow>
 
       {analytics && analytics.fraud_flagged > 0 ? (
         <Alert tone="warn" title={`${analytics.fraud_flagged} referrals need review`}>
@@ -127,7 +178,7 @@ export default function AdminReferralsPage() {
         </Alert>
       ) : null}
 
-      <div className="flex flex-col gap-3 lg:flex-row lg:items-center">
+      <AdminToolbar>
         <SegmentedControl
           options={STATUS_FILTERS}
           value={status}
@@ -135,26 +186,20 @@ export default function AdminReferralsPage() {
             setStatus(value);
             setPage(1);
           }}
+          className="lg:flex-1"
         />
-        <div className="relative lg:ml-auto lg:w-80">
-          <SearchIcon className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-ink-muted" />
-          <Input
-            value={search}
-            onChange={(event) => setSearch(event.target.value)}
-            placeholder="Code or email address"
-            className="pl-9"
-            aria-label="Search referrals"
-          />
-        </div>
-      </div>
+        <SearchBox label="Search referrals" placeholder="Code or email address" value={search} onChange={setSearch} />
+      </AdminToolbar>
 
-      <Card className="overflow-hidden">
+      <ListCard
+        title={status === "ALL" ? "All referrals" : `${STATUS_FILTERS.find((item) => item.value === status)?.label} referrals`}
+        count={data?.pagination?.count}
+        noun="referrals"
+        refreshing={isValidating}
+        onRefresh={refresh}
+      >
         {isLoading ? (
-          <div className="space-y-2 p-4">
-            {[0, 1, 2, 3].map((row) => (
-              <Skeleton key={row} className="h-12 w-full" />
-            ))}
-          </div>
+          <TableSkeleton rows={4} />
         ) : error && !data ? (
           <LoadError what="the referrals" onRetry={() => mutate()} />
         ) : referrals.length === 0 ? (
@@ -178,11 +223,7 @@ export default function AdminReferralsPage() {
               </thead>
               <tbody className="divide-y divide-line">
                 {referrals.map((referral) => (
-                  <tr
-                    key={referral.id}
-                    onClick={() => setSelected(referral)}
-                    className="cursor-pointer transition hover:bg-sunken/60"
-                  >
+                  <tr key={referral.id} {...openRow(() => setSelected(referral), `Open referral ${referral.code}`)}>
                     <td className="tabular px-4 py-3 font-medium text-ink">{referral.code}</td>
                     <td className="px-4 py-3 text-ink-muted">{referral.referrer_email}</td>
                     <td className="px-4 py-3 text-ink-muted">{referral.referred_email}</td>
@@ -208,7 +249,7 @@ export default function AdminReferralsPage() {
             </table>
           </div>
         )}
-      </Card>
+      </ListCard>
 
       {data?.pagination ? (
         <Pagination
@@ -228,28 +269,6 @@ export default function AdminReferralsPage() {
         onChanged={refresh}
       />
     </div>
-  );
-}
-
-function Stat({
-  label,
-  value,
-  hint,
-}: {
-  label: string;
-  value?: number | string;
-  hint?: string;
-}) {
-  return (
-    <Card className="p-4">
-      <p className="text-caption text-ink-muted">{label}</p>
-      {value === undefined ? (
-        <Skeleton className="mt-2 h-6 w-20" />
-      ) : (
-        <p className="tabular mt-1 text-title text-ink">{value}</p>
-      )}
-      {hint ? <p className="mt-0.5 text-caption text-ink-muted">{hint}</p> : null}
-    </Card>
   );
 }
 

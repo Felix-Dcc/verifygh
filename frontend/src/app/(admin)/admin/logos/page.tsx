@@ -4,8 +4,9 @@ import * as React from "react";
 import useSWR from "swr";
 
 import { Pagination } from "@/components/admin/pagination";
+import { AdminToolbar, KpiCard, KpiRow, ListCard, SearchBox } from "@/components/admin/ui";
 import { PageHeader } from "@/components/app-shell";
-import { CheckCircleIcon, SearchIcon } from "@/components/icons";
+import { CheckCircleIcon, GridIcon, SearchIcon, StarIcon } from "@/components/icons";
 import { ServiceLogo } from "@/components/service-logo";
 import { Dialog } from "@/components/ui/dialog";
 import {
@@ -54,10 +55,10 @@ export default function AdminLogosPage() {
     return () => window.clearTimeout(timer);
   }, [search]);
 
-  const { data, error, isLoading, mutate } = useSWR<Queue>([
-    "/admin/services/logo-queue/",
-    { page, search: debounced },
-  ]);
+  const { data, error, isLoading, isValidating, mutate } = useSWR<Queue>(
+    ["/admin/services/logo-queue/", { page, search: debounced }],
+    { keepPreviousData: true },
+  );
 
   // What each row's live search found, and which of those logos did not load.
   const [found, setFound] = React.useState<Record<string, Candidate[]>>({});
@@ -88,37 +89,54 @@ export default function AdminLogosPage() {
         </Alert>
       ) : null}
 
-      <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
-        <p className="text-sm text-ink-muted">
-          {data
-            ? data.count === 1
-              ? "1 service on sale still shows the generic tile."
-              : `${data.count} services on sale still show the generic tile.`
-            : " "}
+      <KpiRow>
+        <KpiCard
+          icon={<StarIcon />}
+          tone="gold"
+          label="Waiting for a logo"
+          value={data?.count}
+          hint="On sale, showing the generic tile"
+        />
+        <KpiCard
+          icon={<CheckCircleIcon />}
+          label="One-click matches"
+          value={data ? picks.length : undefined}
+          hint="Brand-claimed, on this page"
+          onClick={data?.configured && picks.length ? () => setReviewing(true) : undefined}
+        />
+        <KpiCard
+          icon={<SearchIcon />}
+          tone="info"
+          label="Logo source"
+          value={data ? (data.configured ? "Brandfetch" : "Not set up") : undefined}
+          hint="Official brand logos"
+        />
+        <KpiCard
+          icon={<GridIcon />}
+          tone="neutral"
+          label="Pages to review"
+          value={data?.pages}
+          hint="25 services a page"
+        />
+      </KpiRow>
+
+      <AdminToolbar>
+        <p className="px-1 text-sm text-ink-muted lg:flex-1">
+          Pick the right company for each service, or say none of them is.
         </p>
-        <div className="flex flex-col gap-2 sm:flex-row sm:items-center">
-          {data?.configured ? (
-            <Button
-              variant="secondary"
-              disabled={picks.length === 0}
-              onClick={() => setReviewing(true)}
-              className="shrink-0"
-            >
-              Use claimed brands ({picks.length})
-            </Button>
-          ) : null}
-        <div className="relative sm:w-80">
-          <SearchIcon className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-ink-muted" />
-          <Input
-            value={search}
-            onChange={(event) => setSearch(event.target.value)}
-            placeholder="Find a service"
-            className="pl-9"
-            aria-label="Find a service"
-          />
-        </div>
-        </div>
-      </div>
+        {data?.configured ? (
+          <Button
+            variant="primary"
+            disabled={picks.length === 0}
+            onClick={() => setReviewing(true)}
+            className="shrink-0"
+            icon={<CheckCircleIcon className="h-4 w-4" />}
+          >
+            Use claimed brands ({picks.length})
+          </Button>
+        ) : null}
+        <SearchBox label="Find a service" placeholder="Find a service" value={search} onChange={setSearch} />
+      </AdminToolbar>
 
       {error && !data ? (
         <Card>
@@ -139,7 +157,14 @@ export default function AdminLogosPage() {
           />
         </Card>
       ) : (
-        <Card className="divide-y divide-line overflow-hidden">
+        <ListCard
+          title="Services without a logo"
+          count={data.count}
+          noun="services"
+          refreshing={isValidating}
+          onRefresh={() => mutate()}
+        >
+          <div className="divide-y divide-line">
           {data.results.map((row) => (
             <QueueItem
               key={row.slug}
@@ -150,7 +175,8 @@ export default function AdminLogosPage() {
               onMissing={onMissing}
             />
           ))}
-        </Card>
+          </div>
+        </ListCard>
       )}
 
       {data ? (

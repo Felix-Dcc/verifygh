@@ -3,12 +3,20 @@
 import * as React from "react";
 import useSWR from "swr";
 
-import { MetricTile } from "@/components/admin/charts";
 import { Pagination } from "@/components/admin/pagination";
+import {
+  AdminToolbar,
+  KpiCard,
+  KpiRow,
+  ListCard,
+  SearchBox,
+  TableSkeleton,
+  openRow,
+} from "@/components/admin/ui";
 import { PageHeader } from "@/components/app-shell";
 import { useAuth } from "@/components/auth-provider";
 import { CountryFlag } from "@/components/country-flag";
-import { FlagIcon, SearchIcon } from "@/components/icons";
+import { CheckCircleIcon, ClockIcon, FlagIcon, ShieldIcon } from "@/components/icons";
 import { ServiceLogo } from "@/components/service-logo";
 import { Dialog } from "@/components/ui/dialog";
 import {
@@ -75,15 +83,20 @@ export default function AdminNumberIssuesPage() {
     return () => window.clearTimeout(timer);
   }, [search]);
 
-  const { data, isLoading, error, mutate } = useSWR<Paginated<AdminNumberIssue>>([
-    "/admin/number-issues/",
-    { status, search: debounced, page, page_size: 25 },
-  ]);
+  const { data, isLoading, isValidating, error, mutate } = useSWR<Paginated<AdminNumberIssue>>(
+    ["/admin/number-issues/", { status, search: debounced, page, page_size: 25 }],
+    { keepPreviousData: true },
+  );
   const { data: metrics, mutate: mutateMetrics } = useSWR<NumberIssueMetrics>(
     can("METRICS_VIEW") ? ["/admin/number-issues-metrics/", { days: 30 }] : null,
   );
 
   const issues = data?.results ?? [];
+  const filter = (value: string) => {
+    setStatus((current) => (current === value ? "" : value));
+    setPage(1);
+  };
+  const label = STATUS_FILTERS.find((item) => item.value === status)?.label ?? "All";
 
   return (
     <div className="space-y-4">
@@ -92,9 +105,9 @@ export default function AdminNumberIssuesPage() {
         description="Customer reports about delivered numbers - most often a service treating a number as already registered. Reports are evidence, not proof: review each one."
       />
 
-      {metrics ? <Metrics metrics={metrics} /> : null}
+      {metrics ? <Metrics metrics={metrics} status={status} onFilter={filter} /> : null}
 
-      <div className="flex flex-col gap-3 lg:flex-row lg:items-center">
+      <AdminToolbar>
         <SegmentedControl
           options={STATUS_FILTERS}
           value={status}
@@ -104,28 +117,43 @@ export default function AdminNumberIssuesPage() {
           }}
           className="lg:flex-1"
         />
-        <div className="relative lg:w-72">
-          <SearchIcon className="pointer-events-none absolute left-3.5 top-1/2 h-5 w-5 -translate-y-1/2 text-ink-faint" />
-          <Input
-            type="search"
-            aria-label="Search reports"
-            placeholder="Report, order or email"
-            value={search}
-            onChange={(event) => setSearch(event.target.value)}
-            className="pl-11"
-          />
-        </div>
-      </div>
+        <SearchBox label="Search reports" placeholder="Report, order or email" value={search} onChange={setSearch} />
+      </AdminToolbar>
 
-      <Card className="overflow-hidden">
+      <ListCard
+        title={label === "All" ? "All reports" : `${label} reports`}
+        count={data?.pagination?.count}
+        noun="reports"
+        refreshing={isValidating}
+        onRefresh={() => {
+          mutate();
+          mutateMetrics();
+        }}
+      >
         {isLoading ? (
-          <RowSkeletons />
+          <TableSkeleton />
         ) : error && !data ? (
           <LoadError what="the reports" onRetry={() => mutate()} />
         ) : issues.length === 0 ? (
           <EmptyState
             icon={<FlagIcon />}
             title={debounced || status ? "No reports match" : "No reports yet"}
+            description={debounced || status ? "Try another filter, or clear the search." : "Customer reports about numbers will appear here."}
+            action={
+              debounced || status ? (
+                <Button
+                  variant="secondary"
+                  size="sm"
+                  onClick={() => {
+                    setSearch("");
+                    setStatus("");
+                    setPage(1);
+                  }}
+                >
+                  Clear filters
+                </Button>
+              ) : undefined
+            }
           />
         ) : (
           <div className="overflow-x-auto">
@@ -145,11 +173,7 @@ export default function AdminNumberIssuesPage() {
               </thead>
               <tbody className="divide-y divide-line">
                 {issues.map((issue) => (
-                  <tr
-                    key={issue.id}
-                    onClick={() => setSelected(issue.reference)}
-                    className="cursor-pointer transition-colors hover:bg-sunken/60"
-                  >
+                  <tr key={issue.id} {...openRow(() => setSelected(issue.reference), `Open report on ${issue.order_reference}`)}>
                     <td className="tabular whitespace-nowrap px-5 py-3.5 font-medium text-ink">
                       {issue.order_reference}
                     </td>
@@ -195,7 +219,7 @@ export default function AdminNumberIssuesPage() {
             </table>
           </div>
         )}
-      </Card>
+      </ListCard>
 
       {data?.pagination ? (
         <Pagination
@@ -225,36 +249,55 @@ export default function AdminNumberIssuesPage() {
 
 /* ------------------------------------------------------------------ */
 
-function Metrics({ metrics }: { metrics: NumberIssueMetrics }) {
+function Metrics({
+  metrics,
+  status,
+  onFilter,
+}: {
+  metrics: NumberIssueMetrics;
+  status: string;
+  onFilter: (value: string) => void;
+}) {
   const rate = metrics.possible_reuse_rate_percent;
   return (
     <div className="space-y-3">
-      <div className="metric-group grid-cols-1 sm:grid-cols-2 lg:grid-cols-4">
-        <MetricTile
-          label="Reported possible reuse (30d)"
-          value={metrics.possible_reuse_reports}
-          sublabel={
-            rate === null
-              ? "No delivered orders yet"
-              : `${rate}% of ${metrics.sms_received} orders that received a code`
-          }
-        />
-        <MetricTile
+      <KpiRow>
+        <KpiCard
+          icon={<ClockIcon />}
+          tone="warn"
           label="Open reports"
           value={metrics.open_cases}
-          sublabel={`${metrics.needs_review} marked "look closer"`}
+          hint={`${metrics.needs_review} marked "look closer"`}
+          onClick={() => onFilter("OPEN")}
+          active={status === "OPEN"}
         />
-        <MetricTile
+        <KpiCard
+          icon={<FlagIcon />}
+          tone="danger"
+          label="Possible reuse (30 days)"
+          value={metrics.possible_reuse_reports}
+          hint={
+            rate === null
+              ? "No delivered orders yet"
+              : `${rate}% of ${metrics.sms_received} orders with a code`
+          }
+        />
+        <KpiCard
+          icon={<CheckCircleIcon />}
           label="Refunded / replaced"
           value={`${metrics.refunded_orders} / ${metrics.replacement_orders}`}
-          sublabel={`${cedis(metrics.refunded_amount)} refunded, ${metrics.rejected} not approved`}
+          hint={`${cedis(metrics.refunded_amount)} refunded, ${metrics.rejected} not approved`}
+          onClick={() => onFilter("REFUNDED")}
+          active={status === "REFUNDED"}
         />
-        <MetricTile
+        <KpiCard
+          icon={<ShieldIcon />}
+          tone="info"
           label="Flagged numbers avoided"
           value={metrics.numbers_turned_away}
-          sublabel={`${metrics.flagged_numbers} numbers flagged for a service`}
+          hint={`${metrics.flagged_numbers} numbers flagged for a service`}
         />
-      </div>
+      </KpiRow>
       <div className="grid grid-cols-1 gap-3 lg:grid-cols-2">
         <Breakdown title="By service" rows={metrics.by_service} />
         <Breakdown title="By provider" rows={metrics.by_provider} />
@@ -736,19 +779,5 @@ function Row({ label, value }: { label: string; value: string }) {
       <dt className="shrink-0 text-sm text-ink-muted">{label}</dt>
       <dd className="tabular break-words text-right text-sm font-medium text-ink">{value}</dd>
     </div>
-  );
-}
-
-function RowSkeletons() {
-  return (
-    <ul className="divide-y divide-line">
-      {Array.from({ length: 6 }).map((_, index) => (
-        <li key={index} className="flex items-center gap-4 px-5 py-3.5">
-          <Skeleton className="h-4 w-24" />
-          <Skeleton className="h-4 flex-1" />
-          <Skeleton className="h-6 w-24 rounded-full" />
-        </li>
-      ))}
-    </ul>
   );
 }

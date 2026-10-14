@@ -3,8 +3,10 @@
 import * as React from "react";
 import useSWR from "swr";
 
+import { KpiCard, KpiRow, ListCard } from "@/components/admin/ui";
 import { PageHeader } from "@/components/app-shell";
 import { useAuth } from "@/components/auth-provider";
+import { AlertIcon, CheckCircleIcon, ClockIcon, WalletIcon } from "@/components/icons";
 import { Alert, Badge, Button, Card, EmptyState, Field, Input, LoadError, Skeleton } from "@/components/ui/primitives";
 import { useToast } from "@/components/ui/toast";
 import { API_URL, ApiError, api } from "@/lib/api";
@@ -24,7 +26,10 @@ const KEY = "/admin/manual-deposits/";
 export default function ManualDepositsPage() {
   const { can } = useAuth();
   const canDecide = can("WALLET_ADJUST");
-  const { data, error, mutate } = useSWR<ManualTopUpQueue>(KEY, { refreshInterval: 30_000 });
+  const { data, error, isValidating, mutate } = useSWR<ManualTopUpQueue>(KEY, { refreshInterval: 30_000 });
+  const waitingTotal = (data?.waiting ?? []).reduce((sum, row) => sum + Number.parseFloat(row.amount || "0"), 0);
+  const credited = (data?.decided ?? []).filter((row) => row.status === "SUCCESS");
+  const rejected = (data?.decided ?? []).filter((row) => row.status !== "SUCCESS");
 
   return (
     <div className="space-y-4">
@@ -34,6 +39,37 @@ export default function ManualDepositsPage() {
       />
 
       {error && !data ? <LoadError what="manual top-ups" onRetry={() => mutate()} /> : null}
+
+      <KpiRow>
+        <KpiCard
+          icon={<ClockIcon />}
+          tone="warn"
+          label="Waiting for you"
+          value={data?.waiting.length}
+          hint={data ? `${cedis(waitingTotal)} claimed` : undefined}
+        />
+        <KpiCard
+          icon={<CheckCircleIcon />}
+          label="Credited recently"
+          value={data ? credited.length : undefined}
+          hint={data ? cedis(credited.reduce((sum, row) => sum + Number.parseFloat(row.amount || "0"), 0)) : undefined}
+        />
+        <KpiCard
+          icon={<AlertIcon />}
+          tone="danger"
+          label="Rejected recently"
+          value={data ? rejected.length : undefined}
+          hint="Not found on the wallet"
+        />
+        <KpiCard
+          icon={<WalletIcon />}
+          tone={data?.enabled ? "brand" : "neutral"}
+          label="Manual top-ups"
+          value={data ? (data.enabled ? "On" : "Off") : undefined}
+          hint={data?.settings.number ? `${data.settings.network} ${data.settings.number}` : "No wallet number set"}
+        />
+      </KpiRow>
+
       {!data && !error ? <Skeleton className="h-40" /> : null}
 
       {data ? (
@@ -45,10 +81,21 @@ export default function ManualDepositsPage() {
           </Alert>
 
           <section className="space-y-3">
-            <h2 className="text-sm font-semibold text-ink">Waiting for you ({data.waiting.length})</h2>
+            <div className="flex items-center justify-between gap-3">
+              <h2 className="flex items-center gap-2 text-heading text-ink">
+                Waiting for you
+                <span className="tabular rounded-full bg-warn-50 px-2 py-0.5 text-caption font-semibold text-warn-700">
+                  {data.waiting.length}
+                </span>
+              </h2>
+            </div>
             {data.waiting.length === 0 ? (
               <Card>
-                <EmptyState title="Nothing to check" description="New claims appear here, and you get a notification." />
+                <EmptyState
+                  icon={<CheckCircleIcon />}
+                  title="All caught up"
+                  description="New claims appear here, and you get a notification."
+                />
               </Card>
             ) : (
               data.waiting.map((row) => (
@@ -58,9 +105,14 @@ export default function ManualDepositsPage() {
           </section>
 
           {data.decided.length ? (
-            <section className="space-y-2">
-              <h2 className="text-sm font-semibold text-ink">Recently decided</h2>
-              <Card className="divide-y divide-line">
+            <ListCard
+              title="Recently decided"
+              count={data.decided.length}
+              noun="top-ups"
+              refreshing={isValidating}
+              onRefresh={() => mutate()}
+            >
+              <div className="divide-y divide-line">
                 {data.decided.map((row) => (
                   <div key={row.reference} className="flex items-start justify-between gap-3 px-4 py-3 text-sm">
                     <div className="min-w-0">
@@ -78,8 +130,8 @@ export default function ManualDepositsPage() {
                     </Badge>
                   </div>
                 ))}
-              </Card>
-            </section>
+              </div>
+            </ListCard>
           ) : null}
         </>
       ) : null}

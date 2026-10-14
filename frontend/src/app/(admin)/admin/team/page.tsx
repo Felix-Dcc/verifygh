@@ -3,7 +3,7 @@
 import * as React from "react";
 import useSWR from "swr";
 
-import { StatCard } from "@/components/admin/charts";
+import { KpiCard, KpiRow, ListCard } from "@/components/admin/ui";
 import { InviteStaffForm, ROLE_INFO, RoleBadge, RoleChangeForm, STAFF_ROLE_ORDER } from "@/components/admin/team";
 import { PageHeader } from "@/components/app-shell";
 import { useAuth } from "@/components/auth-provider";
@@ -24,7 +24,7 @@ export default function AdminTeamPage() {
   const { can, user: me } = useAuth();
   const toast = useToast();
   const allowed = can("USER_ROLE_CHANGE");
-  const { data, error, isLoading, mutate } = useSWR<Paginated<AdminUser>>(
+  const { data, error, isLoading, isValidating, mutate } = useSWR<Paginated<AdminUser>>(
     allowed ? ["/admin/users/", { staff: "true", page_size: 100 }] : null,
   );
   const { data: former, mutate: mutateFormer } = useSWR<Paginated<AdminUser>>(
@@ -87,18 +87,20 @@ export default function AdminTeamPage() {
         }
       />
 
-      <div className="grid grid-cols-2 gap-4 lg:grid-cols-4">
-        <StatCard label="Super admins" icon={<StarIcon />} value={data ? count("SUPER_ADMIN") : "–"} footnote="Full control" />
-        <StatCard label="Admins" icon={<ShieldIcon />} value={data ? count("ADMIN") : "–"} footnote="Day-to-day operations" />
-        <StatCard label="Support" icon={<UsersIcon />} value={data ? count("SUPPORT") : "–"} footnote="Read and resolve" />
-        <StatCard label="Pending invites" icon={<MailIcon />} value={data ? pending : "–"} footnote="Not signed in yet" />
-      </div>
+      <KpiRow>
+        <KpiCard label="Super admins" icon={<StarIcon />} tone="gold" value={data ? count("SUPER_ADMIN") : undefined} hint="Full control" />
+        <KpiCard label="Admins" icon={<ShieldIcon />} value={data ? count("ADMIN") : undefined} hint="Day-to-day operations" />
+        <KpiCard label="Support" icon={<UsersIcon />} tone="info" value={data ? count("SUPPORT") : undefined} hint="Read and resolve" />
+        <KpiCard label="Pending invites" icon={<MailIcon />} tone="warn" value={data ? pending : undefined} hint="Not signed in yet" />
+      </KpiRow>
 
-      <Card className="overflow-hidden">
-        <div className="flex items-center justify-between gap-3 border-b border-line px-4 py-3.5 sm:px-5">
-          <h2 className="text-heading text-ink">Members</h2>
-          {data ? <span className="text-caption text-ink-muted">{members.length} with access</span> : null}
-        </div>
+      <ListCard
+        title="Members"
+        count={data ? members.length : undefined}
+        noun="with access"
+        refreshing={isValidating}
+        onRefresh={() => mutate()}
+      >
         {isLoading ? (
           <ul className="divide-y divide-line">
             {Array.from({ length: 4 }).map((_, index) => (
@@ -205,7 +207,7 @@ export default function AdminTeamPage() {
             </table>
           </div>
         )}
-      </Card>
+      </ListCard>
 
       {former && former.results.length > 0 ? (
         <Card className="overflow-hidden">
