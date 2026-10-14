@@ -708,6 +708,10 @@ function StatusCell({
     <Link href={href} className="stat-card group flex items-center gap-3 p-3.5 transition-shadow hover:shadow-raised">
       <span aria-hidden className="relative flex h-9 w-9 shrink-0 items-center justify-center rounded-full bg-sunken">
         {state !== "loading" ? <span className={cn("absolute inset-1.5 rounded-full", ring)} /> : null}
+        {state === "ok" ? (
+          // Healthy and live: the dot pulses.
+          <span className="absolute h-2.5 w-2.5 animate-pulse-ring rounded-full bg-success-500" />
+        ) : null}
         <span className={cn("relative h-2.5 w-2.5 rounded-full", dot)} />
       </span>
       <span className="min-w-0 flex-1">

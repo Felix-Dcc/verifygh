@@ -7,7 +7,7 @@ import { useAuth } from "@/components/auth-provider";
 import { Logomark } from "@/components/brand";
 import { CheckCircleIcon, CopyIcon } from "@/components/icons";
 import { ServiceLogo } from "@/components/service-logo";
-import { ButtonLink } from "@/components/ui/primitives";
+import { ButtonLink, LiveDot } from "@/components/ui/primitives";
 import type { MarketHome, MarketPage, MarketRow } from "@/lib/types";
 
 import { Device, HomeIndicator, StatusBar, useInView, usePrefersReducedMotion } from "./device";
@@ -133,7 +133,7 @@ function VerificationScreen({ whatsapp }: { whatsapp?: MarketRow }) {
             <span className="text-sm font-bold tracking-tight text-ink">VerifyGH</span>
           </span>
           <span className="flex items-center gap-1 rounded-full bg-success-50 px-2 py-0.5 text-[0.625rem] font-semibold text-success-700">
-            <span className="h-1.5 w-1.5 rounded-full bg-success-500" />
+            <LiveDot className="text-success-500" />
             Active
           </span>
         </div>

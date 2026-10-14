@@ -447,8 +447,21 @@ export function Badge({
         className,
       )}
     >
-      {dot ? <span className="h-1.5 w-1.5 rounded-full bg-current" aria-hidden /> : null}
+      {dot ? tone === "success" ? <LiveDot /> : <span className="h-1.5 w-1.5 rounded-full bg-current" aria-hidden /> : null}
       {children}
+    </span>
+  );
+}
+
+/**
+ * A green dot that pulses: something is live right now (a service on sale, a
+ * provider reachable, an account active). Stops under reduced motion.
+ */
+export function LiveDot({ className }: { className?: string }) {
+  return (
+    <span className={cn("relative flex h-1.5 w-1.5", className)} aria-hidden>
+      <span className="absolute inline-flex h-full w-full animate-pulse-ring rounded-full bg-current" />
+      <span className="relative inline-flex h-1.5 w-1.5 rounded-full bg-current" />
     </span>
   );
 }
@@ -520,7 +533,8 @@ export function statusLabel(status: string): string {
 
 export function StatusBadge({ status, className }: { status: string; className?: string }) {
   const tone = STATUS_TONES[status] ?? "neutral";
-  const live = status === "WAITING_FOR_CODE" || status === "PROCESSING";
+  // In progress (blue) or switched on and running (green): both pulse.
+  const live = status === "WAITING_FOR_CODE" || status === "PROCESSING" || status === "ACTIVE";
   const label = statusLabel(status);
   return (
     <Badge tone={tone} className={className}>
