@@ -943,7 +943,8 @@ def poll_order(order: Order) -> Order:
         return order
 
     if result.state == ProviderOrderState.CODE_RECEIVED and result.code:
-        return record_code(order, result.code, reusable_until=result.reusable_until)
+        return record_code(order, result.code, reusable_until=result.reusable_until,
+                           ends_at=result.expires_at)
 
     if result.state == ProviderOrderState.EXPIRED:
         return expire_order(order)
@@ -983,22 +984,32 @@ def poll_order(order: Order) -> Order:
     return order
 
 
-def record_code(order: Order, code_dto, *, reusable_until=None) -> Order:
+def record_code(order: Order, code_dto, *, reusable_until=None, ends_at=None) -> Order:
     """Store a received code.
 
     Whether the *user* may see it is decided at serialisation time by
     `Order.may_display_code`; we still store it so support can resolve disputes.
+
+    `ends_at` is the provider's end time as it reads now. TextVerified closes a
+    verification the moment its code arrives (`endsAt` moves to then), while
+    the order kept the end it was bought with - two hours for WhatsApp - and so
+    stayed open, counting towards the customer's limit, long after the number
+    was done (VGH-9TSJ29, 15 Oct 2026). An earlier end is taken; a later one
+    never extends the order. The expiry sweep then completes it as usual.
     """
+    extra = {
+        "verification_code": (code_dto.code or "")[:32],
+        "verification_message": (code_dto.full_text or "")[:2000],
+        "code_received_at": code_dto.received_at or timezone.now(),
+        "reusable_until": reusable_until,
+    }
+    if ends_at and (order.expires_at is None or ends_at < order.expires_at):
+        extra["expires_at"] = ends_at
     order = transition(
         order,
         OrderStatus.CODE_RECEIVED,
         detail="A verification code was received.",
-        extra_fields={
-            "verification_code": (code_dto.code or "")[:32],
-            "verification_message": (code_dto.full_text or "")[:2000],
-            "code_received_at": code_dto.received_at or timezone.now(),
-            "reusable_until": reusable_until,
-        },
+        extra_fields=extra,
     )
 
     from apps.notifications.services import notify

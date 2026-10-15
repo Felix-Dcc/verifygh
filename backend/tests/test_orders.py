@@ -644,3 +644,57 @@ def test_refunded_orders_do_not_use_up_the_daily_spending_limit(user, auth, cata
 
     client.post(f"/api/v1/orders/{reference}/cancel/", {}, format="json")
     assert net_spending(wallet, created_at__gte=since) == Decimal("0.00")
+
+
+def test_a_delivered_order_closes_when_the_provider_closes_it(
+    user, auth, catalog, funded_wallet, monkeypatch
+):
+    """TextVerified ends a verification the moment its code arrives; the order
+    must not stay open on the two hours it was bought with (VGH-9TSJ29)."""
+    import dataclasses
+
+    from apps.orders.tasks import expire_stale_orders
+
+    verification_mock.force_scenario("HAPPY")
+    funded_wallet(user, "200.00")
+    order = Order.objects.get(reference=buy(auth(user)).data["reference"])
+    bought_until = timezone.now() + timezone.timedelta(hours=2)
+    Order.objects.filter(pk=order.pk).update(expires_at=bought_until)
+
+    ended = timezone.now() - timezone.timedelta(seconds=5)
+    real_status = verification_mock.MockVerificationProvider.get_order_status
+
+    def closed_on_delivery(self, provider_order_id):
+        result = real_status(self, provider_order_id)
+        return dataclasses.replace(result, expires_at=ended)
+
+    monkeypatch.setattr(verification_mock.MockVerificationProvider, "get_order_status",
+                        closed_on_delivery)
+    order = drive(order, seconds=30)
+
+    assert order.status == OrderStatus.CODE_RECEIVED
+    assert order.expires_at == ended
+    assert expire_stale_orders()["auto_completed"] == 1
+    assert Order.objects.get(pk=order.pk).status == OrderStatus.COMPLETED
+
+
+def test_a_later_provider_end_never_extends_a_delivered_order(
+    user, auth, catalog, funded_wallet, monkeypatch
+):
+    import dataclasses
+
+    verification_mock.force_scenario("HAPPY")
+    funded_wallet(user, "200.00")
+    order = Order.objects.get(reference=buy(auth(user)).data["reference"])
+    original = Order.objects.get(pk=order.pk).expires_at
+    real_status = verification_mock.MockVerificationProvider.get_order_status
+
+    def later(self, provider_order_id):
+        result = real_status(self, provider_order_id)
+        return dataclasses.replace(result, expires_at=original + timezone.timedelta(hours=5))
+
+    monkeypatch.setattr(verification_mock.MockVerificationProvider, "get_order_status", later)
+    order = drive(order, seconds=30)
+
+    assert order.status == OrderStatus.CODE_RECEIVED
+    assert order.expires_at == original
