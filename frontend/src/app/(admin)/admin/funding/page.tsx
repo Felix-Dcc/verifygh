@@ -65,7 +65,14 @@ export default function AdminFundingPage() {
         />
       ))}
       {data ? <CashFlowCard flow={data.cash_flow} /> : null}
-      {data ? <FundingAlerts alerts={data.alerts} /> : null}
+      {data ? (
+        <FundingAlerts
+          openAlerts={data.open_alerts ?? []}
+          history={data.alerts}
+          canManage={data.can_manage}
+          onChanged={() => mutate()}
+        />
+      ) : null}
     </div>
   );
 }

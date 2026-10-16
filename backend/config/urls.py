@@ -132,6 +132,8 @@ api_v1 = [
     path("admin/providers/<str:adapter_key>/authorization/",
          provider_admin.ProviderAuthorizationView.as_view(), name="admin-provider-authorization"),
     path("admin/funding/", funding_admin.FundingOverviewView.as_view(), name="admin-funding"),
+    path("admin/funding/alerts/<uuid:alert_id>/dismiss/",
+         funding_admin.FundingAlertDismissView.as_view(), name="admin-funding-alert-dismiss"),
     path("admin/funding/<str:adapter_key>/", funding_admin.FundingAccountView.as_view(),
          name="admin-funding-account"),
     path("admin/funding/<str:adapter_key>/sync/", funding_admin.FundingSyncView.as_view(),

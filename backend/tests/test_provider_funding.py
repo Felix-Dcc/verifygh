@@ -808,3 +808,213 @@ def test_a_listed_row_is_never_marked_temporarily_unavailable(api, mock_provider
     set_balance("500", mock_provider)
     rows = api.get(MARKET, {"country": "US", "include_unavailable": "true"}).data["results"]
     assert rows and not any(row["temporarily_unavailable"] for row in rows)
+
+
+# ---------------------------------------------------------------------------
+# Alert noise: no flapping, alerts resolve, the page shows what is current
+# ---------------------------------------------------------------------------
+
+
+def _alerts(kind):
+    return ProviderAlert.objects.filter(kind=kind)
+
+
+def test_a_balance_hovering_at_the_minimum_alerts_once_not_on_every_flip(mock_provider,
+                                                                         admin_user):
+    """4 Oct 2026: 4.00 low, 5.50 "recovered", 4.75 low again, an hour apart."""
+    set_balance("50", mock_provider)
+    for amount in ("4.00", "5.50", "4.75", "6.00", "4.50", "9.00"):
+        account = set_balance(amount, mock_provider)
+
+    assert account.status == BalanceStatus.LOW
+    assert _alerts(AlertKind.LOW_BALANCE).count() == 1
+    assert not _alerts(AlertKind.BALANCE_RECOVERED).exists()
+
+
+def test_a_real_top_up_recovers_and_clears_the_alert(mock_provider, admin_user):
+    set_balance("50", mock_provider)
+    set_balance("4", mock_provider)
+    account = set_balance("30", mock_provider)
+
+    assert account.status == BalanceStatus.HEALTHY
+    low = _alerts(AlertKind.LOW_BALANCE).get()
+    assert low.resolved_at is not None and low.resolution == "CLEARED"
+    recovered = _alerts(AlertKind.BALANCE_RECOVERED).get()
+    assert recovered.resolution == "INFO"  # history, never "needs attention"
+    assert not funding.open_alerts().exists()
+
+
+def test_recovery_needs_the_balance_halfway_back_to_target(mock_provider):
+    set_balance("50", mock_provider)
+    set_balance("4", mock_provider)
+    # Minimum 5, target 20: healthy again from 12.50.
+    assert funding.recovery_level(funding.account_for(mock_provider)) == Decimal("12.5")
+    assert set_balance("12.49", mock_provider).status == BalanceStatus.LOW
+    assert set_balance("12.50", mock_provider).status == BalanceStatus.HEALTHY
+
+
+def test_a_balance_hovering_at_the_critical_level_alerts_once(mock_provider, admin_user):
+    """6 Oct 2026: two "critical" alerts 17 minutes apart, both at USD 2.00."""
+    set_balance("50", mock_provider)
+    for amount in ("2.00", "2.25", "1.90", "3.00", "2.00"):
+        account = set_balance(amount, mock_provider)
+
+    assert account.status == BalanceStatus.CRITICAL
+    assert _alerts(AlertKind.CRITICAL_BALANCE).count() == 1
+
+
+def test_critical_replaces_the_low_alert_it_follows(mock_provider, admin_user):
+    set_balance("50", mock_provider)
+    set_balance("4", mock_provider)
+    set_balance("1", mock_provider)
+
+    assert _alerts(AlertKind.LOW_BALANCE).get().resolution == "SUPERSEDED"
+    assert list(funding.open_alerts().values_list("kind", flat=True)) == [
+        AlertKind.CRITICAL_BALANCE]
+
+
+def test_a_new_drop_after_a_real_recovery_is_news(mock_provider, admin_user):
+    set_balance("50", mock_provider)
+    set_balance("4", mock_provider)
+    set_balance("30", mock_provider)
+    set_balance("4", mock_provider)
+
+    assert _alerts(AlertKind.LOW_BALANCE).count() == 2
+    assert funding.open_alerts().count() == 1
+
+
+def test_resolving_an_alert_marks_its_bell_notifications_read(mock_provider, admin_user):
+    set_balance("50", mock_provider)
+    set_balance("4", mock_provider)
+    bell = Notification.objects.filter(event="PROVIDER_LOW_BALANCE", channel="IN_APP")
+    assert bell.filter(read_at__isnull=True).count() == 1
+
+    set_balance("30", mock_provider)
+
+    assert bell.filter(read_at__isnull=True).count() == 0
+
+
+def test_a_healthy_read_clears_alerts_left_open_from_before(mock_provider):
+    """Alerts raised before they could be resolved are cleared by the next check."""
+    for kind in (AlertKind.LOW_BALANCE, AlertKind.CRITICAL_BALANCE,
+                 AlertKind.PURCHASE_BLOCKED, AlertKind.SYNC_FAILED):
+        ProviderAlert.objects.create(provider=mock_provider, kind=kind, severity="WARNING",
+                                     message="old")
+    set_balance("50", mock_provider)
+
+    assert not funding.open_alerts().exists()
+
+
+def test_a_successful_read_clears_the_sync_failure_alert(mock_provider, admin_user):
+    set_balance("30", mock_provider)
+    verification_mock.set_balance("error")
+    for _ in range(3):
+        committed(funding.sync_balance, mock_provider)
+    assert _alerts(AlertKind.SYNC_FAILED).get().resolved_at is None
+
+    set_balance("30", mock_provider)
+
+    assert _alerts(AlertKind.SYNC_FAILED).get().resolution == "CLEARED"
+
+
+def test_a_failure_spike_clears_once_failures_drop(instagram_us, admin_user):
+    for index in range(5):
+        order = _order(instagram_us.provider, instagram_us.service, instagram_us.country,
+                       index + 40, status=OrderStatus.FAILED)
+        OrderEvent.objects.create(order=order, status=OrderStatus.FAILED, label="Failed")
+    committed(funding.sync_all)
+    assert _alerts(AlertKind.FAILURE_SPIKE).get().resolved_at is None
+
+    OrderEvent.objects.filter(status=OrderStatus.FAILED).update(
+        created_at=timezone.now() - timedelta(hours=2))
+    committed(funding.sync_all)
+
+    assert _alerts(AlertKind.FAILURE_SPIKE).get().resolution == "CLEARED"
+
+
+def test_a_top_up_alert_clears_when_the_money_arrives(admin_user, mock_provider):
+    set_balance("3", mock_provider)
+    top_up = committed(funding.record_top_up, funding.account_for(mock_provider),
+                       actor=admin_user, data={"amount": "10", "method": "BANK_TRANSFER"})
+    ProviderTopUp.objects.filter(pk=top_up.pk).update(
+        created_at=timezone.now() - timedelta(hours=25))
+    committed(funding.sync_all)
+    assert _alerts(AlertKind.TOP_UP_NOT_REFLECTED).get().resolved_at is None
+
+    set_balance("13", mock_provider)
+
+    assert _alerts(AlertKind.TOP_UP_NOT_REFLECTED).get().resolution == "CLEARED"
+
+
+def test_the_page_shows_open_alerts_apart_from_recent_history(api, auth, admin_user,
+                                                              mock_provider):
+    set_balance("50", mock_provider)
+    set_balance("4", mock_provider)
+    set_balance("30", mock_provider)
+    set_balance("1", mock_provider)
+    old = ProviderAlert.objects.create(provider=mock_provider, kind=AlertKind.LOW_BALANCE,
+                                       severity="WARNING", message="long ago",
+                                       resolved_at=timezone.now(), resolution="CLEARED")
+    ProviderAlert.objects.filter(pk=old.pk).update(
+        created_at=timezone.now() - timedelta(days=30))
+
+    data = auth(admin_user, ADMIN_PASSWORD).get(FUNDING).data
+
+    assert [alert["kind"] for alert in data["open_alerts"]] == [AlertKind.CRITICAL_BALANCE]
+    history = {alert["kind"]: alert for alert in data["alerts"]}
+    assert history[AlertKind.LOW_BALANCE]["resolution"] == "CLEARED"
+    assert AlertKind.BALANCE_RECOVERED in history
+    assert all(alert["message"] != "long ago" for alert in data["alerts"])
+    assert all(alert["id"] not in {o["id"] for o in data["open_alerts"]}
+               for alert in data["alerts"])
+
+
+def test_staff_can_dismiss_an_alert_with_a_reason(api, auth, admin_user, plain_admin,
+                                                  mock_provider):
+    set_balance("50", mock_provider)
+    set_balance("4", mock_provider)
+    alert = _alerts(AlertKind.LOW_BALANCE).get()
+    url = f"{FUNDING}alerts/{alert.pk}/dismiss/"
+
+    assert auth(plain_admin).post(url, {"reason": "Not mine to dismiss"},
+                                  format="json").status_code == 403
+    staff = auth(admin_user, ADMIN_PASSWORD)
+    assert staff.post(url, {"reason": ""}, format="json").status_code == 400
+
+    response = staff.post(url, {"reason": "Topping up tonight"}, format="json")
+
+    assert response.status_code == 200
+    alert.refresh_from_db()
+    assert alert.resolution == "DISMISSED" and alert.resolved_by == admin_user
+    assert AdminAction.objects.filter(action="PROVIDER_ALERT_DISMISSED", admin=admin_user,
+                                      reason="Topping up tonight").count() == 1
+    assert not funding.open_alerts().exists()
+
+
+def test_the_migration_files_past_information_as_history(mock_provider, admin_user):
+    import importlib
+
+    from django.apps import apps as registry_apps
+
+    migration = importlib.import_module("apps.funding.migrations.0003_alert_resolution")
+    info = ProviderAlert.objects.create(provider=mock_provider,
+                                        kind=AlertKind.BALANCE_RECOVERED, severity="INFO",
+                                        message="back")
+    top_up = committed(funding.record_top_up, funding.account_for(mock_provider),
+                       actor=admin_user, data={"amount": "10", "method": "CARD"})
+    ProviderTopUp.objects.filter(pk=top_up.pk).update(confirmed_at=timezone.now())
+    seen = ProviderAlert.objects.create(provider=mock_provider,
+                                        kind=AlertKind.TOP_UP_NOT_REFLECTED,
+                                        severity="WARNING", message="not seen",
+                                        metadata={"top_up_id": str(top_up.pk)})
+    still_low = ProviderAlert.objects.create(provider=mock_provider,
+                                             kind=AlertKind.LOW_BALANCE,
+                                             severity="WARNING", message="low")
+
+    migration.resolve_settled_history(registry_apps, None)
+
+    for alert in (info, seen, still_low):
+        alert.refresh_from_db()
+    assert info.resolution == "INFO"
+    assert seen.resolution == "CLEARED"
+    assert still_low.resolved_at is None  # left to the next balance check
