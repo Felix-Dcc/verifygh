@@ -755,11 +755,35 @@ class TextVerifiedProvider(VerificationProvider):
         except (KeyError, TypeError, ValueError):
             raise ValueError(f"Unsupported rental length: {days!r} days") from None
 
-    def _follow(self, link) -> dict:
-        href = str(link.get("href") or "") if isinstance(link, dict) else ""
-        if not href:
-            raise _provider_error("The verification provider did not return a link.")
-        return self._request("GET", href if href.startswith("http") else f"{self.base_url}{href}")
+    @staticmethod
+    def _is_link(payload) -> bool:
+        """True for a bare `Link` ({method, href}) rather than a record."""
+        return (isinstance(payload, dict) and bool(payload.get("href"))
+                and set(payload) <= {"method", "href"})
+
+    def _follow(self, link, *, hops: int = 3) -> dict:
+        """Follow a documented link, and any further link it answers with.
+
+        A sale's reservation link points at `GET /reservations/{id}`, which the
+        specification types as a `Link` - it answers with the link to the
+        rental rather than the rental itself. Following only once landed on
+        {method, href}, which read as "no number yet", so a rental that had
+        been bought and paid for looked unconfirmed until the sweep gave up
+        and refunded the customer (VGH-RNT-52BTF4, 16 Oct 2026). Bounded, so
+        links that point at each other cannot spin.
+        """
+        payload = None
+        for _ in range(hops):
+            href = str(link.get("href") or "") if isinstance(link, dict) else ""
+            if not href:
+                raise _provider_error("The verification provider did not return a link.")
+            payload = self._request(
+                "GET", href if href.startswith("http") else f"{self.base_url}{href}")
+            if not self._is_link(payload):
+                return payload
+            link = payload
+        logger.warning("textverified_link_chain_too_deep")
+        return payload if isinstance(payload, dict) else {}
 
     def rental_price(self, service_code: str, days: int) -> Decimal | None:
         """`POST /pricing/rentals`. None for a combination they do not sell (400)."""

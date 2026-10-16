@@ -223,3 +223,48 @@ def test_rental_states_map_and_unknown_ones_are_not_acted_on(tv, transport):
     assert tv.get_rental("rnt_1").state == RentalState.EXPIRED
     transport["routes"][("GET", path)] = FakeResponse(200, {**RENTAL, "state": "somethingNew"})
     assert tv.get_rental("rnt_1").state == RentalState.UNKNOWN
+
+
+def test_a_sale_whose_reservation_link_points_at_another_link_is_followed(tv, transport):
+    """The real shape (VGH-RNT-52BTF4): a sale's reservation link points at
+    `GET /reservations/{id}`, which answers with the link to the rental."""
+    transport["routes"][("POST", "/api/pub/v2/reservations/rental")] = FakeResponse(
+        201, {"method": "GET", "href": "/api/pub/v2/sales/sale_9"})
+    transport["routes"][("GET", "/api/pub/v2/sales/sale_9")] = FakeResponse(200, {
+        "id": "sale_9", "state": "succeeded", "total": 6.0, "backOrderReservations": [],
+        "createdAt": "2026-10-16T01:18:41Z", "updatedAt": "2026-10-16T01:18:41Z",
+        "reservations": [{"id": "lr_9", "reservationType": "nonrenewable",
+                          "serviceName": "All",
+                          "link": {"method": "GET",
+                                   "href": "/api/pub/v2/reservations/lr_9?type=Nonrenewable"}}],
+    })
+    # The documented Link answer: another link, not the rental.
+    transport["routes"][("GET", "/api/pub/v2/reservations/lr_9")] = FakeResponse(
+        200, {"method": "GET", "href": "/api/pub/v2/reservations/rental/nonrenewable/lr_9"})
+    transport["routes"][("GET", "/api/pub/v2/reservations/rental/nonrenewable/lr_9")] = \
+        FakeResponse(200, {**RENTAL, "id": "lr_9", "serviceName": "All",
+                           "state": "nonrenewableActive", "saleId": "sale_9"})
+
+    dto = tv.create_rental("allservices", 3, idempotency_key="vgh-rental:abc")
+
+    assert dto.state == RentalState.ACTIVE
+    assert dto.provider_rental_id == "lr_9"
+    assert dto.phone_number == "+12025550123"
+    assert dto.cost == Decimal("6.0")
+
+
+def test_a_link_loop_is_not_followed_for_ever(tv, transport):
+    transport["routes"][("GET", "/api/pub/v2/sales/loop")] = FakeResponse(200, {
+        "id": "loop", "state": "succeeded", "total": 1.0, "backOrderReservations": [],
+        "reservations": [{"id": "lr_x", "reservationType": "nonrenewable",
+                          "serviceName": "All",
+                          "link": {"method": "GET", "href": "/api/pub/v2/round"}}],
+    })
+    transport["routes"][("GET", "/api/pub/v2/round")] = FakeResponse(
+        200, {"method": "GET", "href": "/api/pub/v2/round"})
+
+    dto = tv.get_rental_sale("loop")
+
+    # Unknown, never mistaken for a rental we can hand over.
+    assert dto.provider_rental_id == ""
+    assert len([c for c in transport["calls"] if c["url"].endswith("/round")]) <= 3
