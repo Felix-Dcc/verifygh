@@ -348,9 +348,13 @@ def test_a_customer_sees_only_their_own_rentals(user, other_user, auth, catalog,
 def test_messages_arrive_in_the_inbox_and_the_nudge_carries_no_code(
         user, auth, catalog, funded_wallet):
     funded_wallet(user, "200.00")
+    # The nudge shows the number; pin one with no digits of the code in it, or a
+    # random number containing "123" would fail the check below by chance.
+    verification_mock.force_numbers(["+15550007890"])
     client = auth(user)
     reference = rent(client).data["reference"]
     rental = Rental.objects.get(reference=reference)
+    assert rental.phone_number == "+15550007890"
 
     verification_mock.send_rental_sms(rental.provider_rental_id,
                                       "Your WhatsApp code is 123-456", code="123456")
@@ -360,6 +364,7 @@ def test_messages_arrive_in_the_inbox_and_the_nudge_carries_no_code(
     assert detail["messages"][0]["code"] == "123456"
     assert "123-456" in detail["messages"][0]["body"]
     nudge = Notification.objects.get(user=user, event="RENTAL_MESSAGE")
+    assert "+15550007890" in nudge.body
     assert "123" not in nudge.body
 
     # Read again: nothing is stored twice.
