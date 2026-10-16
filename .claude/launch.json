@@ -12,6 +12,22 @@
       "port": 3000
     },
     {
+      "name": "backend-preview",
+      "runtimeExecutable": "backend/.venv/Scripts/python.exe",
+      "runtimeArgs": [
+        "backend/manage.py",
+        "runserver",
+        "127.0.0.1:8000",
+        "--noreload"
+      ],
+      "env": {
+        "DATABASE_URL": "postgres://postgres@localhost:55433/verifygh_preview",
+        "DJANGO_SETTINGS_MODULE": "config.settings.dev",
+        "EMAIL_BACKEND": "django.core.mail.backends.console.EmailBackend"
+      },
+      "port": 8000
+    },
+    {
       "name": "frontend-prod",
       "runtimeExecutable": "npm",
       "runtimeArgs": [
