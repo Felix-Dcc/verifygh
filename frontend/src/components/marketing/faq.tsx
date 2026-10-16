@@ -206,7 +206,7 @@ export function Faq({ embedded = false }: { embedded?: boolean }) {
           </div>
 
           {/* From lg: the Help screen on a phone, the questions floating around it */}
-          <div className="relative mt-8 hidden h-[29rem] lg:block">
+          <div className="relative mt-8 hidden h-116 lg:block">
             <Halo className="left-1/2 top-1/2 h-[110%] w-[120%] -translate-x-1/2 -translate-y-1/2" />
             <div className="absolute left-1/2 top-0 -translate-x-1/2" aria-hidden>
               <Device className="w-48">
@@ -268,7 +268,7 @@ function AskBubble({
       onClick={onAsk}
       className={cn(
         "min-h-11 rounded-2xl bg-surface text-left font-medium text-ink shadow-raised ring-1 ring-line transition-shadow hover:ring-brand-500 focus-visible:ring-2 focus-visible:ring-brand-500",
-        compact ? "max-w-[9.5rem] px-3.5 py-2 text-[0.8125rem] leading-snug" : "px-4 py-2.5 text-sm",
+        compact ? "max-w-38 px-3.5 py-2 text-[0.8125rem] leading-snug" : "px-4 py-2.5 text-sm",
         tail === "left" ? "rounded-bl-md" : "rounded-br-md",
       )}
     >

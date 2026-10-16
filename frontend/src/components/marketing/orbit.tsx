@@ -94,7 +94,7 @@ export function PhoneOrbit({ logos, children }: { logos: MarketRow[]; children: 
   }, [logos, split, reduced]);
 
   return (
-    <div ref={sceneRef} className="relative mx-auto flex w-full max-w-[30rem] justify-center py-10" aria-hidden>
+    <div ref={sceneRef} className="relative mx-auto flex w-full max-w-120 justify-center py-10" aria-hidden>
       {/* The blue light the phone stands in */}
       <span className="pointer-events-none absolute left-1/2 top-1/2 h-[80%] w-[90%] -translate-x-1/2 -translate-y-1/2 rounded-full bg-[radial-gradient(closest-side,rgba(8,120,209,0.45),rgba(40,199,247,0.12)_60%,transparent)] blur-2xl" />
 
@@ -108,7 +108,7 @@ export function PhoneOrbit({ logos, children }: { logos: MarketRow[]; children: 
           style={{ opacity: 0 }}
         >
           <span className="block rounded-[23%] shadow-[0_10px_30px_-8px_rgba(0,0,0,0.6)] ring-1 ring-white/10">
-            <ServiceLogo name={row.name} src={row.icon_url} slug={row.slug} size="lg" className="!h-9 !w-9 sm:!h-12 sm:!w-12" />
+            <ServiceLogo name={row.name} src={row.icon_url} slug={row.slug} size="lg" className="h-9! w-9! sm:h-12! sm:w-12!" />
           </span>
         </span>
       ))}

@@ -102,7 +102,7 @@ export function PricingRulesCard() {
         </div>
       ) : (
         <div className="mt-2 overflow-x-auto">
-          <table className="w-full min-w-[50rem] text-left text-sm">
+          <table className="w-full min-w-200 text-left text-sm">
             <thead className="border-y border-line bg-sunken">
               <tr className="text-caption text-ink-muted">
                 <th scope="col" className="px-5 py-3 font-medium">Rule</th>
@@ -429,7 +429,7 @@ export function PriceHistoryCard() {
         }
       />
       <div className="mt-2 overflow-x-auto">
-        <table className="w-full min-w-[52rem] text-left text-sm">
+        <table className="w-full min-w-208 text-left text-sm">
           <thead className="border-y border-line bg-sunken">
             <tr className="text-caption text-ink-muted">
               <th scope="col" className="px-5 py-3 font-medium">When</th>

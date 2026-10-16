@@ -209,7 +209,7 @@ export function Marketplace() {
               placeholder="Search WhatsApp, TikTok…"
               value={search}
               onChange={(event) => setSearch(event.target.value)}
-              className="h-12 w-full rounded-full border border-white/15 bg-white/10 pl-11 pr-4 text-base text-white placeholder:text-white/50 backdrop-blur transition-colors focus:border-aqua focus:bg-white/15 focus:outline-none focus:ring-2 focus:ring-aqua/40"
+              className="h-12 w-full rounded-full border border-white/15 bg-white/10 pl-11 pr-4 text-base text-white placeholder:text-white/50 backdrop-blur-sm transition-colors focus:border-aqua focus:bg-white/15 focus:outline-hidden focus:ring-2 focus:ring-aqua/40"
             />
           </label>
           {homeFailed || (home?.countries.length ?? 0) < 2 ? null : (
@@ -533,7 +533,7 @@ function RowSkeletons() {
 function MarketFacts({ facts }: { facts: { label: string; value: React.ReactNode | null }[] }) {
   return (
     <>
-      <dl className="divide-y divide-white/10 rounded-2xl border border-white/10 bg-white/[0.06] backdrop-blur sm:hidden lg:block">
+      <dl className="divide-y divide-white/10 rounded-2xl border border-white/10 bg-white/6 backdrop-blur-sm sm:hidden lg:block">
         {facts.map((fact) => (
           <div key={fact.label} className="flex items-center justify-between gap-3 px-4 py-3">
             <dt className="text-caption text-white/60">{fact.label}</dt>

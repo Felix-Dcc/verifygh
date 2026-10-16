@@ -147,8 +147,8 @@ function InboxPreview() {
   return (
     // Phones go straight to the form: the example is for wider screens.
     <div className="relative mx-auto hidden w-full max-w-sm md:block" aria-label="Example of a rented number's inbox">
-      <div className="absolute -inset-6 rounded-[2rem] bg-gradient-to-br from-azure/25 via-aqua/10 to-leaf/20 blur-2xl" aria-hidden />
-      <div className="relative rounded-3xl border border-white/10 bg-white/[0.06] p-4 backdrop-blur-md">
+      <div className="absolute -inset-6 rounded-[2rem] bg-linear-to-br from-azure/25 via-aqua/10 to-leaf/20 blur-2xl" aria-hidden />
+      <div className="relative rounded-3xl border border-white/10 bg-white/6 p-4 backdrop-blur-md">
         <div className="flex items-center justify-between gap-3">
           <span className="text-2xs font-semibold uppercase tracking-wider text-white/50">Example inbox</span>
           <span className="inline-flex items-center gap-1.5 rounded-full bg-leaf/15 px-2 py-0.5 text-2xs font-semibold text-leaf">
@@ -164,7 +164,7 @@ function InboxPreview() {
           {messages.map((message, index) => (
             <li
               key={message.slug}
-              className="rise-in flex items-start gap-2.5 rounded-2xl bg-white/[0.08] p-2.5 ring-1 ring-white/10"
+              className="rise-in flex items-start gap-2.5 rounded-2xl bg-white/8 p-2.5 ring-1 ring-white/10"
               style={{ animationDelay: `${200 + index * 180}ms` }}
             >
               <ServiceLogo name={message.app} src={icons[message.slug]} slug={message.slug} size="xs" />
@@ -341,7 +341,7 @@ function RentBuilder({ initialService }: { initialService: string | null }) {
                 active={mode === "all"}
                 onClick={() => setMode("all")}
                 art={
-                  <span className="flex h-7 w-7 items-center justify-center rounded-lg bg-gradient-to-br from-azure to-leaf text-white">
+                  <span className="flex h-7 w-7 items-center justify-center rounded-lg bg-linear-to-br from-azure to-leaf text-white">
                     <GlobeIcon className="h-4 w-4" />
                   </span>
                 }
@@ -383,7 +383,7 @@ function RentBuilder({ initialService }: { initialService: string | null }) {
                         placeholder={`Search ${services.length ? services.length.toLocaleString() : ""} apps…`}
                         value={query}
                         onChange={(event) => setQuery(event.target.value)}
-                        className="h-12 w-full rounded-2xl border border-line bg-sunken/50 pl-12 pr-4 text-base text-ink placeholder:text-ink-faint transition-colors focus:border-brand-400 focus:bg-surface focus:outline-none focus:ring-2 focus:ring-brand-500/25"
+                        className="h-12 w-full rounded-2xl border border-line bg-sunken/50 pl-12 pr-4 text-base text-ink placeholder:text-ink-faint transition-colors focus:border-brand-400 focus:bg-surface focus:outline-hidden focus:ring-2 focus:ring-brand-500/25"
                       />
                     </div>
                     {!catalog.data ? (
@@ -531,7 +531,7 @@ function RentBuilder({ initialService }: { initialService: string | null }) {
         <>
           <div className="h-20 lg:hidden" aria-hidden />
           <div
-            className="fixed inset-x-0 z-30 border-t border-line bg-surface/95 px-4 py-3 shadow-pop backdrop-blur lg:hidden"
+            className="fixed inset-x-0 z-30 border-t border-line bg-surface/95 px-4 py-3 shadow-pop backdrop-blur-sm lg:hidden"
             style={{ bottom: "calc(4rem + var(--safe-bottom, 0px))" }}
           >
             <div className="mx-auto flex max-w-lg items-center gap-3">
@@ -662,7 +662,7 @@ function Summary({
 
   return (
     <Card className="overflow-hidden">
-      <div className="bg-gradient-to-br from-brand-50 via-surface to-surface p-5">
+      <div className="bg-linear-to-br from-brand-50 via-surface to-surface p-5">
         <p className="text-caption font-medium text-ink-muted">Your rental</p>
         {name ? (
           <div className="mt-3 flex items-center gap-3">

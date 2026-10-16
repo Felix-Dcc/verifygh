@@ -85,7 +85,7 @@ export function LiveOrderCard({ order, now }: { order: OrderSummary; now: number
               <span
                 className={cn(
                   "block h-full rounded-full transition-[width] duration-1000 ease-linear",
-                  urgent ? "bg-warn-500" : "bg-gradient-to-r from-azure to-leaf",
+                  urgent ? "bg-warn-500" : "bg-linear-to-r from-azure to-leaf",
                 )}
                 style={{ width: `${left * 100}%` }}
               />

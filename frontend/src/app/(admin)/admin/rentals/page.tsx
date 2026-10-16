@@ -150,7 +150,7 @@ export default function AdminRentalsPage() {
           />
         ) : (
           <div className="overflow-x-auto">
-            <table className="w-full min-w-[56rem] text-left text-sm">
+            <table className="w-full min-w-4xl text-left text-sm">
               <thead className="border-b border-line bg-sunken">
                 <tr className="text-caption text-ink-muted">
                   <th scope="col" className="px-5 py-3 font-medium">Reference</th>
@@ -166,7 +166,7 @@ export default function AdminRentalsPage() {
                 {rentals.map((rental) => (
                   <tr key={rental.id} {...openRow(() => setSelected(rental), `Open rental ${rental.reference}`)}>
                     <td className="code whitespace-nowrap px-5 py-3.5 text-ink">{rental.reference}</td>
-                    <td className="max-w-[14rem] truncate px-5 py-3.5 text-ink-soft">{rental.user_email}</td>
+                    <td className="max-w-56 truncate px-5 py-3.5 text-ink-soft">{rental.user_email}</td>
                     <td className="px-5 py-3.5">
                       <span className="flex items-center gap-2.5">
                         <RentalLogo rental={rental} size="sm" />

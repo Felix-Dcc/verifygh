@@ -82,7 +82,7 @@ export function AccountMenu() {
         >
           {initials(user.full_name, user.email)}
         </span>
-        <span className="max-w-[9rem] truncate">
+        <span className="max-w-36 truncate">
           {user.full_name || user.email}
         </span>
         <svg
@@ -118,7 +118,7 @@ export function AccountMenu() {
                 href={link.href}
                 role="menuitem"
                 onClick={() => setOpen(false)}
-                className="flex min-h-11 items-center gap-2.5 px-4 text-sm text-ink-soft transition-colors hover:bg-sunken hover:text-ink focus:bg-sunken focus:outline-none sm:min-h-9"
+                className="flex min-h-11 items-center gap-2.5 px-4 text-sm text-ink-soft transition-colors hover:bg-sunken hover:text-ink focus:bg-sunken focus:outline-hidden sm:min-h-9"
               >
                 <link.icon className="h-4 w-4 text-ink-faint" />
                 {link.label}
@@ -139,7 +139,7 @@ export function AccountMenu() {
                 setOpen(false);
                 void signOut();
               }}
-              className="flex min-h-11 w-full items-center gap-2.5 px-4 text-left text-sm text-ink-soft transition-colors hover:bg-sunken hover:text-ink focus:bg-sunken focus:outline-none sm:min-h-9"
+              className="flex min-h-11 w-full items-center gap-2.5 px-4 text-left text-sm text-ink-soft transition-colors hover:bg-sunken hover:text-ink focus:bg-sunken focus:outline-hidden sm:min-h-9"
             >
               <LogoutIcon className="h-4 w-4 text-ink-faint" />
               Sign out

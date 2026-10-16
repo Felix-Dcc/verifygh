@@ -121,7 +121,7 @@ export function PaymentSection() {
                     )
                   : [0, 1, 2].map((key) => (
                       <li key={key}>
-                        <Skeleton className="h-[3.25rem] w-40 rounded-2xl" />
+                        <Skeleton className="h-13 w-40 rounded-2xl" />
                       </li>
                     ))}
             </ul>
@@ -463,7 +463,7 @@ function MoneyFlow({
               className={cn(
                 "flex h-11 w-11 shrink-0 items-center justify-center rounded-xl transition-colors duration-500",
                 node.lit
-                  ? "bg-gradient-to-br from-[#0B63B6] to-[#137A4E] text-white shadow-[0_8px_20px_-8px_rgba(8,120,209,0.7)]"
+                  ? "bg-linear-to-br from-[#0B63B6] to-[#137A4E] text-white shadow-[0_8px_20px_-8px_rgba(8,120,209,0.7)]"
                   : "bg-sunken text-ink-muted",
               )}
             >

@@ -65,7 +65,7 @@ export function CountryFlag({
       <span
         aria-hidden
         className={cn(
-          "inline-flex h-4 min-w-6 items-center justify-center rounded-sm border border-line px-0.5 text-2xs font-semibold text-ink-muted",
+          "inline-flex h-4 min-w-6 items-center justify-center rounded-xs border border-line px-0.5 text-2xs font-semibold text-ink-muted",
           className,
         )}
       >
@@ -79,7 +79,7 @@ export function CountryFlag({
       preserveAspectRatio="xMidYMid slice"
       aria-hidden
       className={cn(
-        "inline-block shrink-0 overflow-hidden rounded-sm ring-1 ring-ink/10",
+        "inline-block shrink-0 overflow-hidden rounded-xs ring-1 ring-ink/10",
         size === "sm" ? "h-3.5 w-5" : "h-4 w-6",
         className,
       )}

@@ -47,7 +47,7 @@ export function PrivacySection() {
     >
       {/* The padding holds the content inside the navy: at least --fade-in
           above and --fade-out below. */}
-      <div className="container-page pb-[21rem] pt-[21rem] sm:pb-[27rem] sm:pt-[27rem]">
+      <div className="container-page pb-84 pt-84 sm:pb-108 sm:pt-108">
         <Reveal className="mx-auto max-w-2xl text-center">
           <h2 id="privacy-heading" className="text-balance text-3xl font-extrabold tracking-[-0.03em] text-white sm:text-5xl">
             Your number. Your account. <span className="text-dawn">Protected.</span>
@@ -71,7 +71,7 @@ export function PrivacySection() {
             </GlassCard>
 
             {/* The shield, with the layers around it */}
-            <div className="relative mx-auto flex h-[19rem] w-full max-w-[26rem] items-center justify-center lg:h-[24rem] lg:w-[26rem]">
+            <div className="relative mx-auto flex h-76 w-full max-w-104 items-center justify-center lg:h-96 lg:w-104">
               <Connector className="left-0 hidden lg:block" />
               <Connector className="right-0 hidden lg:block" />
               {/* Phones: the same lines, running down the page */}
@@ -81,7 +81,7 @@ export function PrivacySection() {
               {LAYERS.map((layer, index) => (
                 <span
                   key={layer}
-                  className="absolute hidden -translate-x-1/2 -translate-y-1/2 whitespace-nowrap rounded-full border border-white/15 bg-white/[0.07] px-3 py-1.5 text-2xs font-medium text-white/80 backdrop-blur lg:block"
+                  className="absolute hidden -translate-x-1/2 -translate-y-1/2 whitespace-nowrap rounded-full border border-white/15 bg-white/[0.07] px-3 py-1.5 text-2xs font-medium text-white/80 backdrop-blur-sm lg:block"
                   style={LAYER_SLOTS[index]}
                 >
                   {layer}
@@ -93,7 +93,7 @@ export function PrivacySection() {
             <GlassCard>
               <p className="text-[0.625rem] font-bold uppercase tracking-[0.14em] text-aqua">What the app sees</p>
               <p className="code mt-2 text-xl font-semibold tracking-wide text-white">+1 (512) 555-0147</p>
-              <div className="mt-3 flex items-center gap-2.5 rounded-xl bg-white/[0.06] p-2">
+              <div className="mt-3 flex items-center gap-2.5 rounded-xl bg-white/6 p-2">
                 <ServiceLogo
                   name="WhatsApp"
                   src={whatsapp?.icon_url ?? "/service-icons/whatsapp.svg"}
@@ -127,7 +127,7 @@ export function PrivacySection() {
 
 function GlassCard({ children }: { children: React.ReactNode }) {
   return (
-    <div className="mx-auto w-full max-w-sm rounded-3xl border border-white/10 bg-white/[0.05] p-5 shadow-[0_30px_60px_-30px_rgba(0,0,0,0.8)] backdrop-blur-md">
+    <div className="mx-auto w-full max-w-sm rounded-3xl border border-white/10 bg-white/5 p-5 shadow-[0_30px_60px_-30px_rgba(0,0,0,0.8)] backdrop-blur-md">
       {children}
     </div>
   );

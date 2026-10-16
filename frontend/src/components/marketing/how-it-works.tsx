@@ -76,7 +76,7 @@ export function HowItWorks() {
         <Reveal className="mx-auto w-full max-w-xl lg:col-start-1 lg:row-start-3 lg:max-w-none">
           <ol className="relative space-y-1" aria-label="Steps">
             {/* The rail the steps hang on */}
-            <span aria-hidden className="absolute bottom-6 left-[1.5rem] top-6 w-px bg-line" />
+            <span aria-hidden className="absolute bottom-6 left-6 top-6 w-px bg-line" />
             {STEPS.map((step, index) => {
               const active = index === story.index;
               const done = index < story.index;
@@ -95,7 +95,7 @@ export function HowItWorks() {
                       className={cn(
                         "tabular relative z-10 flex h-8 w-8 shrink-0 items-center justify-center rounded-full text-caption font-bold transition-colors duration-500",
                         active
-                          ? "bg-gradient-to-br from-[#0B63B6] to-[#137A4E] text-white"
+                          ? "bg-linear-to-br from-[#0B63B6] to-[#137A4E] text-white"
                           : done
                             ? "bg-brand-50 text-brand-700"
                             : "border border-line-strong bg-canvas text-ink-muted",
@@ -120,7 +120,7 @@ export function HowItWorks() {
                             <span aria-hidden className="mt-3 block h-0.5 overflow-hidden rounded-full bg-line">
                               <span
                                 key={story.index}
-                                className="story-progress block h-full origin-left rounded-full bg-gradient-to-r from-azure to-leaf"
+                                className="story-progress block h-full origin-left rounded-full bg-linear-to-r from-azure to-leaf"
                                 style={{ ["--story-interval" as string]: `${STEP_MS}ms` }}
                               />
                             </span>
@@ -234,7 +234,7 @@ function ChooseScreen({ rows, featured, loading }: { rows: MarketRow[]; featured
         <p className="mt-3 px-0.5 text-2xs font-medium uppercase tracking-wide text-ink-muted">Popular</p>
         <div className="mt-1.5 grid grid-cols-2 gap-1.5">
           {loading || tiles.length === 0
-            ? [0, 1, 2, 3, 4, 5].map((key) => <Skeleton key={key} className="h-[4.25rem] rounded-xl" />)
+            ? [0, 1, 2, 3, 4, 5].map((key) => <Skeleton key={key} className="h-17 rounded-xl" />)
             : tiles.map((row, index) => (
                 <div
                   key={row.slug}
@@ -244,7 +244,7 @@ function ChooseScreen({ rows, featured, loading }: { rows: MarketRow[]; featured
                   )}
                 >
                   <div className="flex items-center gap-1.5">
-                    <ServiceLogo name={row.name} src={row.icon_url} slug={row.slug} size="xs" className="!h-6 !w-6" />
+                    <ServiceLogo name={row.name} src={row.icon_url} slug={row.slug} size="xs" className="h-6! w-6!" />
                     <span className="min-w-0 truncate text-[0.6875rem] font-semibold text-ink">{row.name}</span>
                   </div>
                   <span className="tabular text-caption font-bold text-ink">{cedis(row.price)}</span>

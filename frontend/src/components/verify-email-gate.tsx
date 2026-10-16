@@ -114,7 +114,7 @@ export function VerifyEmailGate() {
       </header>
 
       <main id="main" className="flex flex-1 items-start justify-center px-4 pb-10 pt-4 sm:items-center">
-        <div className="w-full max-w-[26rem]">
+        <div className="w-full max-w-104">
           <Card className="p-6 sm:p-8">
             {changing ? (
               <ChangeEmail
@@ -134,7 +134,7 @@ export function VerifyEmailGate() {
                 <h1 className="text-title text-ink">Enter the code we emailed you</h1>
                 <p className="mt-2 text-sm text-ink-muted">
                   We sent a 6-digit code to{" "}
-                  <span className="break-words font-medium text-ink">{user?.email}</span>.{" "}
+                  <span className="wrap-break-word font-medium text-ink">{user?.email}</span>.{" "}
                   <button
                     type="button"
                     onClick={() => setChanging(true)}
@@ -173,7 +173,7 @@ export function VerifyEmailGate() {
                     }}
                     placeholder="······"
                     aria-describedby="email-code-help"
-                    className="code h-14 w-full rounded-lg border border-line-strong bg-surface px-4 text-center text-title font-semibold tracking-[0.5em] text-ink transition-shadow placeholder:text-ink-faint focus:border-brand-500 focus:shadow-focus focus:outline-none"
+                    className="code h-14 w-full rounded-lg border border-line-strong bg-surface px-4 text-center text-title font-semibold tracking-[0.5em] text-ink transition-shadow placeholder:text-ink-faint focus:border-brand-500 focus:shadow-focus focus:outline-hidden"
                   />
                   <p id="email-code-help" className="mt-2 text-center text-caption text-ink-faint">
                     The code expires in 15 minutes.
@@ -263,7 +263,7 @@ function ChangeEmail({
       <div>
         <h1 className="text-title text-ink">Change your email</h1>
         <p className="mt-2 text-sm text-ink-muted">
-          Currently <span className="break-words font-medium text-ink">{current}</span>. We&apos;ll send a new
+          Currently <span className="wrap-break-word font-medium text-ink">{current}</span>. We&apos;ll send a new
           code to the address you enter.
         </p>
       </div>

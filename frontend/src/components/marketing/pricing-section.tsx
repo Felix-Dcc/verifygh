@@ -63,7 +63,7 @@ export function PricingSection() {
         </Reveal>
 
         <Reveal>
-          <div className="relative mx-auto mt-10 max-w-5xl lg:mt-6 lg:h-[34rem]">
+          <div className="relative mx-auto mt-10 max-w-5xl lg:mt-6 lg:h-136">
             <div className="relative flex justify-center lg:h-full lg:items-center">
               {/* The cedi sign, set huge behind the receipt - wider than it, so
                   the glyph shows either side even on a phone. */}
@@ -95,7 +95,7 @@ export function PricingSection() {
                     <li
                       key={row.slug}
                       // An unset --l or --r leaves that side auto, so each tag pins to one side.
-                      className="lg:absolute lg:left-[var(--l)] lg:right-[var(--r)] lg:top-[var(--t)]"
+                      className="lg:absolute lg:left-(--l) lg:right-(--r) lg:top-(--t)"
                       style={{ ["--l" as string]: slot.left, ["--r" as string]: slot.right, ["--t" as string]: slot.top }}
                     >
                       <span

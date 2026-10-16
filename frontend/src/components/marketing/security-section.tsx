@@ -206,7 +206,7 @@ function WalletScreen({ active }: { active: number }) {
           <Marker n={2} active={active} />
         </div>
 
-        <div className="relative rounded-2xl bg-gradient-to-br from-[#0B63B6] to-[#137A4E] p-2.5 pr-6 text-white sm:p-3 shadow-[0_12px_24px_-12px_rgba(8,120,209,0.8)]">
+        <div className="relative rounded-2xl bg-linear-to-br from-[#0B63B6] to-[#137A4E] p-2.5 pr-6 text-white sm:p-3 shadow-[0_12px_24px_-12px_rgba(8,120,209,0.8)]">
           <p className="text-[0.625rem] text-white/75">Available balance</p>
           <p className="tabular text-2xl font-extrabold leading-tight tracking-tight">{cedis(EXAMPLE_BALANCE)}</p>
           <p className="mt-0.5 text-[0.5625rem] text-white/70">Spending limits apply</p>
@@ -230,7 +230,7 @@ function WalletScreen({ active }: { active: number }) {
             marker={<Marker n={5} active={active} />}
           />
           <Activity
-            icon={<ServiceLogo name="TikTok" src="/service-icons/tiktok.svg" slug="tiktok" size="xs" className="!h-5 !w-5" />}
+            icon={<ServiceLogo name="TikTok" src="/service-icons/tiktok.svg" slug="tiktok" size="xs" className="h-5! w-5!" />}
             title="Purchase"
             note="TikTok · US number"
             amount={signedCedis(EXAMPLE_PURCHASE, "DEBIT")}

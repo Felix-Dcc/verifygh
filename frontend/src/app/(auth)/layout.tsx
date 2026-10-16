@@ -20,7 +20,7 @@ const POINTS = [
 export default function AuthLayout({ children }: { children: React.ReactNode }) {
   return (
     <div className="flex min-h-dvh bg-canvas">
-      <aside className="app-hero dark relative hidden w-[44%] max-w-[40rem] shrink-0 flex-col overflow-hidden p-10 text-white lg:flex xl:p-14">
+      <aside className="app-hero dark relative hidden w-[44%] max-w-160 shrink-0 flex-col overflow-hidden p-10 text-white lg:flex xl:p-14">
         <Link href="/" aria-label="VerifyGH home" className="flex min-h-11 w-fit items-center rounded-lg">
           <Logo />
         </Link>
@@ -39,7 +39,7 @@ export default function AuthLayout({ children }: { children: React.ReactNode }) 
           <ul className="mt-8 space-y-3.5">
             {POINTS.map((point) => (
               <li key={point} className="flex items-start gap-3 text-sm text-white/85">
-                <span className="mt-0.5 flex h-5 w-5 shrink-0 items-center justify-center rounded-full bg-gradient-to-br from-azure to-leaf">
+                <span className="mt-0.5 flex h-5 w-5 shrink-0 items-center justify-center rounded-full bg-linear-to-br from-azure to-leaf">
                   <CheckIcon className="h-3 w-3 text-white" />
                 </span>
                 {point}
@@ -50,7 +50,7 @@ export default function AuthLayout({ children }: { children: React.ReactNode }) 
 
         <p className="text-caption text-white/50">&copy; {new Date().getFullYear()} VerifyGH</p>
         {/* The dawn line every navy panel ends on. */}
-        <span aria-hidden className="absolute inset-x-0 bottom-0 h-px bg-gradient-to-r from-azure via-aqua to-leaf" />
+        <span aria-hidden className="absolute inset-x-0 bottom-0 h-px bg-linear-to-r from-azure via-aqua to-leaf" />
       </aside>
 
       <div className="flex min-w-0 flex-1 flex-col">
@@ -68,7 +68,7 @@ export default function AuthLayout({ children }: { children: React.ReactNode }) 
         </header>
 
         <main id="main" className="flex flex-1 items-start justify-center px-4 pb-10 pt-4 sm:items-center sm:py-10">
-          <div className="w-full max-w-[26rem]">{children}</div>
+          <div className="w-full max-w-104">{children}</div>
         </main>
 
         <footer className="container-page border-t border-line/70 py-5 lg:px-10">

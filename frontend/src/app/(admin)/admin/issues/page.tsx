@@ -157,7 +157,7 @@ export default function AdminNumberIssuesPage() {
           />
         ) : (
           <div className="overflow-x-auto">
-            <table className="w-full min-w-[64rem] text-left text-sm">
+            <table className="w-full min-w-5xl text-left text-sm">
               <thead className="border-b border-line bg-sunken">
                 <tr className="text-caption text-ink-muted">
                   <th scope="col" className="px-5 py-3 font-medium">Order</th>
@@ -177,7 +177,7 @@ export default function AdminNumberIssuesPage() {
                     <td className="tabular whitespace-nowrap px-5 py-3.5 font-medium text-ink">
                       {issue.order_reference}
                     </td>
-                    <td className="max-w-[12rem] truncate px-5 py-3.5 text-ink-soft">
+                    <td className="max-w-48 truncate px-5 py-3.5 text-ink-soft">
                       {issue.customer_email}
                     </td>
                     <td className="whitespace-nowrap px-5 py-3.5 text-ink-soft">
@@ -210,7 +210,7 @@ export default function AdminNumberIssuesPage() {
                     <td className="whitespace-nowrap px-5 py-3.5 text-ink-muted">
                       {formatDateTime(issue.created_at)}
                     </td>
-                    <td className="max-w-[14rem] truncate px-5 py-3.5 text-ink-muted">
+                    <td className="max-w-56 truncate px-5 py-3.5 text-ink-muted">
                       {issue.resolution_note || "-"}
                     </td>
                   </tr>
@@ -777,7 +777,7 @@ function Row({ label, value }: { label: string; value: string }) {
   return (
     <div className="flex items-start justify-between gap-4 px-3.5 py-2.5">
       <dt className="shrink-0 text-sm text-ink-muted">{label}</dt>
-      <dd className="tabular break-words text-right text-sm font-medium text-ink">{value}</dd>
+      <dd className="tabular wrap-break-word text-right text-sm font-medium text-ink">{value}</dd>
     </div>
   );
 }

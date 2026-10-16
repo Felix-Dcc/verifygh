@@ -462,7 +462,7 @@ function ProgrammeSwitch() {
   const [busy, setBusy] = React.useState(false);
   const [error, setError] = React.useState("");
 
-  if (!data) return <Skeleton className="h-[4.5rem] w-full rounded-2xl" />;
+  if (!data) return <Skeleton className="h-18 w-full rounded-2xl" />;
 
   const running = data.is_enabled;
   const canChange = can("PRICING_MANAGE");

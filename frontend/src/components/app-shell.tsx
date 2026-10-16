@@ -255,7 +255,7 @@ function Sidebar({ groups, variant }: { groups: NavGroup[]; variant: "user" | "a
       <div className={cn("border-t px-3 py-3", admin ? "border-white/10" : "border-line")}>
         {admin && user ? (
           <div className="mb-2 flex items-center gap-3 rounded-lg bg-white/5 px-2.5 py-2 ring-1 ring-inset ring-white/10">
-            <span className="flex h-8 w-8 shrink-0 items-center justify-center rounded-full bg-gradient-to-br from-aqua to-leaf text-caption font-semibold text-navy">
+            <span className="flex h-8 w-8 shrink-0 items-center justify-center rounded-full bg-linear-to-br from-aqua to-leaf text-caption font-semibold text-navy">
               {initials(user.full_name, user.email)}
             </span>
             <span className="min-w-0">
@@ -314,7 +314,7 @@ function SidebarLink({ item, badge, dark = false }: { item: NavItem; badge?: num
       )}
     >
       {active ? (
-        <span aria-hidden className="absolute -left-3 bottom-1.5 top-1.5 w-1 rounded-r bg-gradient-to-b from-azure to-leaf" />
+        <span aria-hidden className="absolute -left-3 bottom-1.5 top-1.5 w-1 rounded-r-md bg-linear-to-b from-azure to-leaf" />
       ) : null}
       <Icon
         className={cn(
@@ -354,7 +354,7 @@ function TopBar({ variant }: { variant: "user" | "admin" }) {
   );
 
   return (
-    <header className="sticky top-0 z-30 border-b border-line bg-surface/95 backdrop-blur supports-[backdrop-filter]:bg-surface/85">
+    <header className="sticky top-0 z-30 border-b border-line bg-surface/95 backdrop-blur-sm supports-backdrop-filter:bg-surface/85">
       <div className="flex h-14 items-center gap-3 px-4 sm:px-6 lg:px-10">
         <Link href={variant === "admin" ? "/admin" : "/dashboard"} className="rounded-md lg:hidden">
           <span className="flex min-h-11 items-center gap-2">
@@ -471,7 +471,7 @@ function ServiceSearch() {
           value={query}
           onChange={(event) => setQuery(event.target.value)}
           placeholder="Search services - WhatsApp, TikTok, Gmail"
-          className="h-9 w-full rounded-lg border border-line bg-canvas pl-9 pr-3 text-sm text-ink placeholder:text-ink-faint transition-colors focus:border-brand-500 focus:bg-surface focus:shadow-focus focus:outline-none"
+          className="h-9 w-full rounded-lg border border-line bg-canvas pl-9 pr-3 text-sm text-ink placeholder:text-ink-faint transition-colors focus:border-brand-500 focus:bg-surface focus:shadow-focus focus:outline-hidden"
         />
       </label>
     </form>
@@ -548,7 +548,7 @@ function UserMenu({ variant }: { variant: "user" | "admin" }) {
                 key={item.href}
                 role="menuitem"
                 href={item.href}
-                className="flex min-h-11 items-center px-4 text-sm text-ink-soft transition-colors hover:bg-sunken hover:text-ink focus:bg-sunken focus:outline-none sm:min-h-9"
+                className="flex min-h-11 items-center px-4 text-sm text-ink-soft transition-colors hover:bg-sunken hover:text-ink focus:bg-sunken focus:outline-hidden sm:min-h-9"
               >
                 {item.label}
               </Link>
@@ -563,7 +563,7 @@ function UserMenu({ variant }: { variant: "user" | "admin" }) {
               type="button"
               role="menuitem"
               onClick={signOut}
-              className="flex min-h-11 w-full items-center gap-2 px-4 text-left text-sm text-ink-soft transition-colors hover:bg-sunken hover:text-ink focus:bg-sunken focus:outline-none sm:min-h-9"
+              className="flex min-h-11 w-full items-center gap-2 px-4 text-left text-sm text-ink-soft transition-colors hover:bg-sunken hover:text-ink focus:bg-sunken focus:outline-hidden sm:min-h-9"
             >
               <LogoutIcon className="h-4 w-4 text-ink-faint" />
               Sign out
@@ -794,7 +794,7 @@ function AdminPageHero({
               <span
                 aria-hidden
                 className={cn(
-                  "flex h-12 w-12 shrink-0 items-center justify-center rounded-xl bg-gradient-to-br text-white shadow-lg ring-1 ring-white/20",
+                  "flex h-12 w-12 shrink-0 items-center justify-center rounded-xl bg-linear-to-br text-white shadow-lg ring-1 ring-white/20",
                   theme.tile,
                 )}
               >
@@ -814,7 +814,7 @@ function AdminPageHero({
           {action ? <div className="flex shrink-0 flex-wrap items-center gap-2">{action}</div> : null}
         </div>
       </div>
-      <span aria-hidden className={cn("absolute inset-x-0 bottom-0 h-[3px] bg-gradient-to-r opacity-90", theme.line)} />
+      <span aria-hidden className={cn("absolute inset-x-0 bottom-0 h-[3px] bg-linear-to-r opacity-90", theme.line)} />
     </section>
   );
 }
