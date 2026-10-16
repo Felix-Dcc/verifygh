@@ -48,6 +48,23 @@ def test_posting_to_a_wallet_takes_a_row_lock(user):
 
 
 @pytest.mark.django_db
+def test_a_purchase_reads_its_promo_split_under_the_wallet_lock(user, funded_wallet):
+    """A-11: the first read of the wallet in a purchase is the locking one, so
+    the promotional/cash split cannot go stale before the debits."""
+    from apps.wallet.services import charge_order
+
+    wallet = funded_wallet(user, "20.00")
+    with transaction.atomic(), CaptureQueriesContext(connection) as queries:
+        charge_order(wallet=wallet, amount=Decimal("5.00"), order_id=wallet.pk,
+                     order_reference="VGH-LOCK-SPLIT", service_name="Lock check")
+
+    wallet_reads = [q["sql"] for q in queries.captured_queries
+                    if q["sql"].lstrip().upper().startswith("SELECT")
+                    and Wallet._meta.db_table in q["sql"].split(" FROM ")[1][:80]]
+    assert wallet_reads and "FOR UPDATE" in wallet_reads[0], wallet_reads[:2]
+
+
+@pytest.mark.django_db
 def test_crediting_a_payment_takes_a_row_lock(user):
     from apps.payments.services import _lock_payment
 
