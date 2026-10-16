@@ -192,6 +192,10 @@ class SecurityToken(BaseModel):
     expires_at = models.DateTimeField()
     used_at = models.DateTimeField(null=True, blank=True)
     requested_ip = models.GenericIPAddressField(null=True, blank=True)
+    #: Issue order per user and purpose. `created_at` ties for tokens issued in
+    #: the same clock tick (about 15 ms on Windows) and the UUID key is random,
+    #: so neither can say which of two tokens is newer.
+    sequence = models.PositiveBigIntegerField(default=0)
 
     class Meta:
         db_table = "accounts_security_token"
@@ -222,13 +226,16 @@ class SecurityToken(BaseModel):
         raw = secrets.token_urlsafe(32)
         with transaction.atomic():
             type(user).objects.select_for_update().filter(pk=user.pk).first()
-            live = cls.objects.filter(user=user, purpose=purpose, used_at__isnull=True)
-            kept = list(live.order_by("-created_at")
+            issued = cls.objects.filter(user=user, purpose=purpose)
+            last = issued.aggregate(models.Max("sequence"))["sequence__max"] or 0
+            live = issued.filter(used_at__isnull=True)
+            kept = list(live.order_by("-sequence", "-created_at")
                         .values_list("pk", flat=True)[:max(keep_recent - 1, 0)])
             live.exclude(pk__in=kept).update(used_at=timezone.now())
             instance = cls.objects.create(
                 user=user,
                 purpose=purpose,
+                sequence=last + 1,
                 token_hash=cls.hash_token(raw),
                 expires_at=timezone.now() + timedelta(hours=ttl_hours),
                 requested_ip=ip or None,
