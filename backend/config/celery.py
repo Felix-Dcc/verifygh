@@ -99,6 +99,11 @@ app.conf.beat_schedule = {
         "task": "apps.rentals.tasks.purge_rental_messages",
         "schedule": crontab(minute=50, hour=3),
     },
+    # Rentals refunded for want of an answer: did the provider sell them after all?
+    "reconcile-given-up-rentals": {
+        "task": "apps.rentals.tasks.reconcile_given_up_rentals",
+        "schedule": crontab(minute="5-59/15"),
+    },
     # Catches deposits whose provider callback never arrived.
     "reconcile-recent-payments": {
         "task": "apps.payments.tasks.reconcile_recent_payments",

@@ -42,7 +42,7 @@ store them. The URL asks for the square brand icon at 128 px, with
 shows its own neutral tile, never a placeholder letter.
 
 The site's Content-Security-Policy allows that one image origin
-(`frontend/src/middleware.ts`). An image cannot run code. The privacy policy
+(`frontend/src/proxy.ts`). An image cannot run code. The privacy policy
 says Brandfetch sees a visitor's IP address and browser, as any image host does.
 
 ## Setting up Brandfetch

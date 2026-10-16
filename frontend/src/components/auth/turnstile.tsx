@@ -34,7 +34,7 @@ let loading: Promise<TurnstileApi> | null = null;
 /**
  * Loads api.js once. Added by our own (nonce-trusted) code, which the CSP's
  * 'strict-dynamic' extends trust to; the challenge itself runs in Cloudflare's
- * iframe, the one origin `frame-src` allows (src/middleware.ts).
+ * iframe, the one origin `frame-src` allows (src/proxy.ts).
  */
 function loadTurnstile(): Promise<TurnstileApi> {
   if (window.turnstile) return Promise.resolve(window.turnstile);

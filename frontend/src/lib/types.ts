@@ -1093,8 +1093,12 @@ export type ReferralAnalytics = {
   invited_repeat_buyers: number;
   invited_repeat_rate: number;
   invited_orders: number;
+  /** Rented numbers invited users received. */
+  invited_rentals: number;
+  /** Orders, rentals and extensions together. */
   invited_revenue: string;
   invited_cash_revenue: string;
+  invited_revenue_by_product: Record<"orders" | "rentals" | "extensions", { revenue: string; cash: string }>;
 };
 
 /* -------------------------------------------------------------------------

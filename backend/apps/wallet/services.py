@@ -359,8 +359,21 @@ def split_charge(wallet: Wallet, amount) -> tuple[Decimal, Decimal]:
 
 
 def _affordable_split(wallet: Wallet, amount: Decimal) -> tuple[Decimal, Decimal]:
-    """(promotional, cash) for `amount`, or raise if the wallet cannot pay it."""
-    wallet.refresh_from_db(fields=["balance", "promo_balance", "is_frozen"])
+    """(promotional, cash) for `amount`, or raise if the wallet cannot pay it.
+
+    The split is read under the wallet's row lock when the caller holds a
+    transaction (every purchase does). Read unlocked, a concurrent purchase
+    could spend the promotional credit between this read and the debits, and
+    the promo debit then failed with InsufficientFunds although cash would
+    have covered it. The lock is held to the caller's commit, so the debits
+    that follow see exactly what was split.
+    """
+    if connection.in_atomic_block:
+        locked = _lock(wallet.pk)
+        wallet.balance, wallet.promo_balance = locked.balance, locked.promo_balance
+        wallet.is_frozen = locked.is_frozen
+    else:
+        wallet.refresh_from_db(fields=["balance", "promo_balance", "is_frozen"])
     if wallet.is_frozen:
         raise WalletFrozen()
 

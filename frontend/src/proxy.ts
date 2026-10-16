@@ -153,7 +153,8 @@ function originCheck(request: NextRequest): NextResponse | null {
   return new NextResponse("Forbidden", { status: 403 });
 }
 
-export function middleware(request: NextRequest) {
+// Next 16 calls this file `proxy` (it was `middleware`); it runs on Node.
+export function proxy(request: NextRequest) {
   const redirect = legacyHostRedirect(request);
   if (redirect) return redirect;
 

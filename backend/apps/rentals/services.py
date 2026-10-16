@@ -518,11 +518,11 @@ def _fulfil(rental: Rental, *, give_up: bool) -> Rental:
                                                          "provider_code": code,
                                                          "error": exc.__class__.__name__})
         if give_up:
-            return fail_rental(
+            return _given_up(fail_rental(
                 rental, reason="Our number provider did not confirm the number.",
                 staff_detail=(f"No answer from {provider.name} after "
                               f"{settings.VERIFYGH['RENTAL_PENDING_GIVE_UP_MINUTES']} minutes. "
-                              "Check its sales list for an unconfirmed rental."))
+                              "Check its sales list for an unconfirmed rental.")))
         rental.refresh_from_db()
         return rental
     return _apply(rental, dto, give_up=give_up)
@@ -550,11 +550,11 @@ def _apply(rental: Rental, dto, *, give_up: bool = False) -> Rental:
             provider_sale_id=dto.sale_id or rental.provider_sale_id, **cost)
         rental.refresh_from_db()
         if give_up:
-            return fail_rental(
+            return _given_up(fail_rental(
                 rental, reason="Our number provider did not confirm the number.",
                 staff_detail=(f"{rental.provider.name} was still processing sale "
                               f"{rental.provider_sale_id or '(none)'} after "
-                              f"{settings.VERIFYGH['RENTAL_PENDING_GIVE_UP_MINUTES']} minutes."))
+                              f"{settings.VERIFYGH['RENTAL_PENDING_GIVE_UP_MINUTES']} minutes.")))
         return rental
 
     now = timezone.now()
@@ -1025,5 +1025,161 @@ def settle_extension(extension: RentalExtension, *, give_up: bool = False) -> Re
         return _complete_extension(extension, new_ends_at=dto.ends_at)
     if give_up or (dto is not None and dto.state in (RentalState.EXPIRED,
                                                      RentalState.REFUNDED)):
-        return _fail_extension(extension)
+        failed = _fail_extension(extension)
+        if dto is None and failed.status == ExtensionStatus.FAILED:
+            # Refunded without the provider's word: it may still have added
+            # the days. Followed up by reconcile_given_up().
+            _mark_for_reconciliation(rental, "extensions", str(failed.pk), {
+                "previous_ends_at": previous.isoformat() if previous else "",
+                "days": extension.days})
+        return failed
     return extension
+
+
+# ---------------------------------------------------------------------------
+# Reconciling purchases we gave up on
+# ---------------------------------------------------------------------------
+#
+# After RENTAL_PENDING_GIVE_UP_MINUTES without a clear answer the customer is
+# refunded, but the provider may still have completed the sale - and charged
+# us for a number nobody gets. These follow such purchases up afterwards. They
+# never touch a wallet: the customer's refund stands whatever is found.
+
+#: How long a given-up purchase is followed up before staff are asked to look.
+RECONCILE_WINDOW = timedelta(hours=48)
+
+#: Outcomes, as stored in rental.metadata["reconcile"].
+RECONCILE_PENDING = "pending"
+
+
+def _mark_for_reconciliation(rental: Rental, kind: str, key: str, info: dict) -> None:
+    meta = dict(Rental.objects.filter(pk=rental.pk).values_list("metadata", flat=True)
+                .first() or {})
+    entries = dict(meta.get("reconcile") or {})
+    bucket = dict(entries.get(kind) or {})
+    bucket[key] = {"state": RECONCILE_PENDING, "since": timezone.now().isoformat(), **info}
+    entries[kind] = bucket
+    meta["reconcile"] = entries
+    meta["reconcile_pending"] = True
+    Rental.objects.filter(pk=rental.pk).update(metadata=meta)
+
+
+def _given_up(rental: Rental) -> Rental:
+    """A rental refunded for want of an answer: follow its sale up, if it has one.
+
+    Without a sale id there is nothing safe to ask: buying again with the same
+    key could buy a number now. The staff alert already says to check.
+    """
+    if rental.status == RentalStatus.FAILED and rental.provider_sale_id:
+        _mark_for_reconciliation(rental, "sale", rental.provider_sale_id, {})
+        rental.refresh_from_db()
+    return rental
+
+
+def _expired_window(info: dict) -> bool:
+    from datetime import datetime
+
+    try:
+        since = datetime.fromisoformat(info.get("since") or "")
+    except ValueError:
+        return True
+    return timezone.now() - since > RECONCILE_WINDOW
+
+
+def _reconcile_alert(rental: Rental, title: str, body: str) -> None:
+    from apps.accounts.constants import AdminPermission
+    from apps.notifications.staff import alert_staff
+
+    try:
+        alert_staff(permission=AdminPermission.ORDER_REFUND, event="STAFF_RENTAL_RECONCILE",
+                    title=title, body=body, link=f"/admin/rentals?q={rental.reference}",
+                    reference=rental.reference)
+    except Exception:
+        logger.exception("rental_reconcile_alert_failed", extra={"rental": rental.reference})
+
+
+def _reconcile_sale(rental: Rental, sale_id: str, info: dict) -> dict:
+    client = _client(rental.provider)
+    try:
+        dto = client.get_rental_sale(sale_id)
+    except (ProviderError, ServiceUnavailable, NotImplementedError):
+        dto = None
+
+    bought = dto is not None and dto.provider_rental_id and dto.state in (
+        RentalState.ACTIVE, RentalState.EXPIRED)
+    if dto is not None and dto.state in (RentalState.FAILED, RentalState.REFUNDED):
+        return {**info, "state": "nothing_bought"}
+    if bought:
+        try:
+            accepted = client.refund_rental(dto.provider_rental_id)
+        except (ProviderError, ServiceUnavailable, NotImplementedError):
+            accepted = None
+        if accepted:
+            logger.warning("rental_reconcile_recovered", extra={"rental": rental.reference})
+            return {**info, "state": "recovered", "provider_rental_id": dto.provider_rental_id}
+        if accepted is False or _expired_window(info):
+            _reconcile_alert(
+                rental, f"Rental {rental.reference}: provider kept the money",
+                f"We refunded the customer when {rental.provider.name} gave no answer, but it "
+                f"did sell number {dto.phone_number or '(unknown)'} on sale {sale_id} and "
+                "would not refund it. Ask the provider for a refund.")
+            return {**info, "state": "unrecovered", "provider_rental_id": dto.provider_rental_id}
+        return info
+    if _expired_window(info):
+        _reconcile_alert(
+            rental, f"Rental {rental.reference}: sale still unclear",
+            f"{rental.provider.name} has not said what happened to sale {sale_id} in "
+            "48 hours. The customer was refunded; check the provider's sales list.")
+        return {**info, "state": "unresolved"}
+    return info
+
+
+def _reconcile_extension(rental: Rental, extension_id: str, info: dict) -> dict:
+    from datetime import datetime
+
+    try:
+        dto = _client(rental.provider).get_rental(rental.provider_rental_id)
+    except (ProviderError, ServiceUnavailable, NotImplementedError):
+        dto = None
+    try:
+        previous = datetime.fromisoformat(info.get("previous_ends_at") or "")
+    except ValueError:
+        previous = None
+    if dto is not None and dto.ends_at and previous:
+        wanted = previous + timedelta(days=int(info.get("days") or 0))
+        added = dto.ends_at >= wanted - timedelta(hours=1)
+        if not added:
+            return {**info, "state": "not_applied"}
+        # Extensions are not refundable upstream: all that is left is to say so.
+        _reconcile_alert(
+            rental, f"Rental {rental.reference}: extension made after its refund",
+            f"{rental.provider.name} did add the {info.get('days')} days we refunded when it "
+            "gave no answer. The customer has the days and their money; the cost is ours.")
+        return {**info, "state": "applied_after_refund"}
+    if _expired_window(info):
+        _reconcile_alert(
+            rental, f"Rental {rental.reference}: extension still unclear",
+            f"{rental.provider.name} has not answered about a refunded extension in 48 hours. "
+            "Check the rental's end date with the provider.")
+        return {**info, "state": "unresolved"}
+    return info
+
+
+def reconcile_given_up(rental: Rental) -> dict:
+    """Follow up every purchase on this rental that was refunded without an answer."""
+    meta = dict(rental.metadata or {})
+    entries = dict(meta.get("reconcile") or {})
+    for kind, handler in (("sale", _reconcile_sale), ("extensions", _reconcile_extension)):
+        bucket = dict(entries.get(kind) or {})
+        for key, info in bucket.items():
+            if info.get("state") == RECONCILE_PENDING:
+                bucket[key] = handler(rental, key, info)
+        if bucket:
+            entries[kind] = bucket
+    meta["reconcile"] = entries
+    meta["reconcile_pending"] = any(
+        info.get("state") == RECONCILE_PENDING
+        for bucket in entries.values() for info in bucket.values())
+    Rental.objects.filter(pk=rental.pk).update(metadata=meta)
+    rental.refresh_from_db()
+    return entries
