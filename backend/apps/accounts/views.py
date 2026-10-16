@@ -10,6 +10,7 @@ from django.http import HttpResponseRedirect
 from django.urls import reverse
 from django.utils import timezone
 from rest_framework import status
+from rest_framework.exceptions import UnsupportedMediaType
 from rest_framework.parsers import JSONParser
 from rest_framework.permissions import AllowAny, IsAuthenticated
 from rest_framework.response import Response
@@ -87,6 +88,22 @@ def _auth_response(user: User, status_code: int = status.HTTP_200_OK, *,
 #: attacker's account (login CSRF) and watch them top it up. A JSON body cannot
 #: be sent cross-site without a preflight, which CORS refuses.
 JSON_ONLY = [JSONParser]
+
+
+def require_json_for_cookies(request) -> None:
+    """Refuse a cookie-driven request that a page on another site could have sent.
+
+    Refresh and logout act on the browser's own cookies, which SameSite=None
+    sends with any cross-site form post: another site could sign a visitor
+    out, or rotate their session at will. A cross-site page cannot send an
+    application/json body without a CORS preflight, which CORS refuses, and our
+    frontend always sends one. A client that passes its token in the body (no
+    cookie) is not a browser being tricked, so it is not held to this.
+    """
+    uses_cookies = (settings.AUTH_COOKIE_REFRESH in request.COOKIES
+                    or settings.AUTH_COOKIE_ACCESS in request.COOKIES)
+    if uses_cookies and request.content_type != "application/json":
+        raise UnsupportedMediaType(request.content_type or "none")
 
 
 class RegisterView(APIView):
@@ -211,6 +228,7 @@ class RefreshView(APIView):
     authentication_classes: list = []
 
     def post(self, request):
+        require_json_for_cookies(request)
         raw = request.COOKIES.get(settings.AUTH_COOKIE_REFRESH) or request.data.get("refresh")
         if not raw:
             raise AuthenticationRequired("Your session has expired. Please sign in again.")
@@ -278,6 +296,7 @@ class LogoutView(APIView):
     authentication_classes: list = []
 
     def post(self, request):
+        require_json_for_cookies(request)
         # Clearing the cookie only stops *this* browser sending it. Blacklisting
         # revokes the token itself, so a copy taken elsewhere is dead too.
         raw = request.COOKIES.get(settings.AUTH_COOKIE_REFRESH) or request.data.get("refresh")
