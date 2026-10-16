@@ -2,6 +2,7 @@
 
 A-09  logout and refresh accepted cross-site form posts
 A-11  the promotional/cash split of a purchase was read without the wallet lock
+A-14  the referral funnel left invited users' rentals out of buyers and revenue
 """
 
 from __future__ import annotations
@@ -115,3 +116,41 @@ def test_the_split_uses_the_locked_balance_not_a_stale_one(user, funded_wallet):
 
     assert charge.promo == Decimal("0.00")
     assert charge.cash == Decimal("5.00")
+
+
+# ---------------------------------------------------------------------------
+# A-14: the referral funnel counts rentals
+# ---------------------------------------------------------------------------
+
+
+def test_the_referral_funnel_counts_an_invited_users_rental_and_extension(
+        user, other_user, admin_user, auth, catalog, funded_wallet,
+        django_capture_on_commit_callbacks):
+    from apps.referrals.models import Referral
+    from apps.referrals.services import code_for
+    from apps.rentals.models import Rental, RentalExtension
+    from apps.verification import mock as verification_mock
+
+    Referral.objects.create(referrer=user, referred_user=other_user, code=code_for(user).code)
+    funded_wallet(other_user, "400.00")
+    verification_mock.force_rental_mode("QUIET")
+    friend = auth(other_user, "Correct-Horse-Battery-2")
+    with django_capture_on_commit_callbacks(execute=True):
+        reference = friend.post("/api/v1/rentals/", {"service": "whatsapp", "days": 30},
+                                format="json").data["reference"]
+    friend.post(f"/api/v1/rentals/{reference}/extend/", {"days": 7}, format="json")
+    rental = Rental.objects.get(reference=reference)
+    extension = RentalExtension.objects.get()
+
+    data = auth(admin_user, "Correct-Horse-Battery-3").get(
+        "/api/v1/admin/referrals-analytics/").data
+
+    assert data["invited_buyers"] == 1
+    assert data["invited_rentals"] == 1
+    assert data["invited_orders"] == 0
+    assert Decimal(data["invited_revenue"]) == rental.price + extension.price
+    assert Decimal(data["invited_cash_revenue"]) == rental.cash_amount + extension.cash_amount
+    by_product = data["invited_revenue_by_product"]
+    assert Decimal(by_product["rentals"]["revenue"]) == rental.price
+    assert Decimal(by_product["extensions"]["revenue"]) == extension.price
+    assert Decimal(by_product["orders"]["revenue"]) == 0

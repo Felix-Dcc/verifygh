@@ -305,10 +305,20 @@ def _percent(part: int, whole: int) -> float:
 def _referred_funnel() -> dict:
     """What invited people went on to do: top up, buy, come back - and pay.
 
-    Revenue counts delivered, unrefunded orders only, and its cash part is
-    money the customer actually paid - the figure to set against the bonuses.
+    Revenue counts what they received and kept: delivered, unrefunded orders,
+    rented numbers handed over, and extensions made. Its cash part is money the
+    customer actually paid - the figure to set against the bonuses. Rentals
+    were left out until October 2026, which understated invited revenue.
     """
+    from collections import Counter
+
     from apps.orders.models import Order, RefundStatus
+    from apps.rentals.models import (
+        DELIVERED_RENTAL_STATUSES,
+        ExtensionStatus,
+        Rental,
+        RentalExtension,
+    )
     from apps.wallet.models import FundType, LedgerDirection, LedgerEntryType, WalletLedgerEntry
 
     invited = Referral.objects.values("referred_user")
@@ -322,9 +332,22 @@ def _referred_funnel() -> dict:
     )
     delivered = Order.objects.filter(user__in=invited, code_received_at__isnull=False) \
         .exclude(refund_status=RefundStatus.COMPLETED)
-    buyers = delivered.values("user").distinct().count()
-    repeat = delivered.values("user").annotate(n=Count("id")).filter(n__gte=2).count()
-    totals = delivered.aggregate(revenue=Sum("price"), cash=Sum("cash_amount"))
+    rentals = Rental.objects.filter(user__in=invited, status__in=DELIVERED_RENTAL_STATUSES)
+    extensions = RentalExtension.objects.filter(rental__user__in=invited,
+                                                status=ExtensionStatus.COMPLETED)
+    # A buyer bought a number or rented one; an extension adds days to a
+    # rental already counted, so it is money here, not another purchase.
+    purchases = Counter()
+    for rows in (delivered, rentals):
+        for row in rows.values("user").annotate(n=Count("id")):
+            purchases[row["user"]] += row["n"]
+    buyers = len(purchases)
+    repeat = sum(1 for n in purchases.values() if n >= 2)
+    parts = {name: rows.aggregate(revenue=Sum("price"), cash=Sum("cash_amount"))
+             for name, rows in (("orders", delivered), ("rentals", rentals),
+                                ("extensions", extensions))}
+    totals = {key: sum((part[key] or Decimal("0.00") for part in parts.values()),
+                       Decimal("0.00")) for key in ("revenue", "cash")}
     return {
         "invited_verified": verified,
         "invited_verified_rate": _percent(verified, invited_count),
@@ -334,8 +357,14 @@ def _referred_funnel() -> dict:
         "invited_repeat_buyers": repeat,
         "invited_repeat_rate": _percent(repeat, buyers),
         "invited_orders": delivered.count(),
-        "invited_revenue": str(quantize(totals["revenue"] or Decimal("0.00"))),
-        "invited_cash_revenue": str(quantize(totals["cash"] or Decimal("0.00"))),
+        "invited_rentals": rentals.count(),
+        "invited_revenue": str(quantize(totals["revenue"])),
+        "invited_cash_revenue": str(quantize(totals["cash"])),
+        "invited_revenue_by_product": {
+            name: {"revenue": str(quantize(part["revenue"] or Decimal("0.00"))),
+                   "cash": str(quantize(part["cash"] or Decimal("0.00")))}
+            for name, part in parts.items()
+        },
     }
 
 
