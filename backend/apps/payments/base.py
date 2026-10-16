@@ -90,7 +90,7 @@ class PaymentProvider(abc.ABC):
     def __init__(self, config: dict | None = None):
         self.config = config or {}
 
-    def submit_otp(self, *, reference: str, otp: str) -> "ChargeDTO":
+    def submit_otp(self, *, reference: str, otp: str) -> ChargeDTO:
         """Send a one-time code the customer gave us to the provider.
 
         Only meaningful for providers whose flow can stop at OTP_REQUIRED. The

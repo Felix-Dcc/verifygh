@@ -409,10 +409,11 @@ def _offering(slug="tiktok", country="US") -> ProviderService:
 
 
 def _rule(**fields) -> PricingRule:
-    defaults = dict(name="t", markup_type=MarkupType.PERCENTAGE, markup_percent=Decimal("0"),
-                    markup_fixed=Decimal("0"), payment_fee_percent=Decimal("0"),
-                    risk_buffer_percent=Decimal("0"), rounding=Rounding.NONE,
-                    min_price=Decimal("0.00"), max_price=Decimal("500.00"))
+    defaults = {"name": "t", "markup_type": MarkupType.PERCENTAGE,
+                "markup_percent": Decimal("0"), "markup_fixed": Decimal("0"),
+                "payment_fee_percent": Decimal("0"), "risk_buffer_percent": Decimal("0"),
+                "rounding": Rounding.NONE, "min_price": Decimal("0.00"),
+                "max_price": Decimal("500.00")}
     defaults.update(fields)
     return PricingRule(**defaults)
 

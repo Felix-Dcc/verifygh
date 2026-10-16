@@ -117,9 +117,7 @@ def test_the_verification_email_has_both_a_text_and_an_html_body(api):
 
     message = mail.outbox[0]
     assert "Verify" in message.body or "verify" in message.body
-    html = dict(
-        (content_type, content) for content, content_type in message.alternatives
-    )
+    html = {content_type: content for content, content_type in message.alternatives}
     assert "text/html" in html, "no HTML alternative was attached"
 
     token = token_from_last_email()

@@ -299,7 +299,8 @@ def _risk_flags(order, user, ip: str | None) -> list[dict]:
     ).count()
     if delivered >= 4 and reports / delivered >= 0.5:
         flags.append({"code": "HIGH_REPORT_RATIO",
-                      "detail": f"{reports} reports against {delivered} delivered orders in 90 days."})
+                      "detail": f"{reports} reports against {delivered} delivered orders "
+                                "in 90 days."})
 
     if ip:
         shared = (
@@ -308,7 +309,8 @@ def _risk_flags(order, user, ip: str | None) -> list[dict]:
         )
         if shared:
             flags.append({"code": "SHARED_IP",
-                          "detail": f"{shared} other account(s) reported from this address this week."})
+                          "detail": f"{shared} other account(s) reported from this address "
+                                    "this week."})
 
     if user.created_at and now - user.created_at < timedelta(days=1):
         flags.append({"code": "NEW_ACCOUNT", "detail": "Account is less than a day old."})
