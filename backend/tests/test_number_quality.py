@@ -12,7 +12,6 @@ from decimal import Decimal
 import pytest
 from rest_framework.test import APIClient
 
-from apps.accounts.constants import Role
 from apps.accounts.models import User
 from apps.audit.models import AdminAction, AuditLog, SuspiciousActivity
 from apps.numbers import services as numbers

@@ -17,7 +17,7 @@ from datetime import datetime, time, timedelta
 from decimal import Decimal
 
 from django.db import transaction
-from django.db.models import Count, DecimalField, ExpressionWrapper, F, Q, Sum
+from django.db.models import Count, Q, Sum
 from django.db.models.functions import TruncDate
 from django.utils import timezone
 from rest_framework import mixins, viewsets
@@ -29,6 +29,7 @@ from rest_framework.views import APIView
 from apps.accounts import staff
 from apps.accounts.constants import STAFF_ROLES, AdminPermission, Role
 from apps.accounts.models import LoginAttempt, User
+from apps.adminapi.earnings import EARNING, cost_of, earning_rows, revenue_of
 from apps.adminapi.serializers import (
     AdminActionSerializer,
     AdminCountrySerializer,
@@ -57,7 +58,7 @@ from apps.audit.services import record_admin_action, resolve_flag
 from apps.catalog.models import Country, ProviderService, Service
 from apps.common.errors import Conflict, NotFound, ValidationFailed
 from apps.common.idempotency import generate
-from apps.common.permissions import HasPermissionCode, IsSupport
+from apps.common.permissions import HasPermissionCode, IsSupport, can_see_costs
 from apps.orders.models import Order, OrderStatus, Refund, RefundReason
 from apps.orders.services import cancel_order as cancel_order_service
 from apps.orders.services import issue_refund
@@ -70,41 +71,14 @@ from apps.wallet.services import adjust, get_or_create_wallet, verify_wallet_int
 
 logger = logging.getLogger("verifygh.admin")
 
-MONEY = DecimalField(max_digits=18, decimal_places=4)
-
-#: Provider cost in GHS, from the rate frozen on each row. Orders, rentals and
-#: rental extensions all carry `provider_cost` and `exchange_rate`.
-COST_IN_GHS = ExpressionWrapper(F("provider_cost") * F("exchange_rate"), output_field=MONEY)
-
-
-def _earning_rows(*window, **when):
-    """What the business actually earned from, as (queryset, ...) to be summed.
-
-    Three things are sold: verification orders, number rentals and extensions
-    of a rental. Only the ones the customer received count - a delivered code,
-    a number handed over, time actually added - so a refunded purchase never
-    shows as revenue. `window` (Q objects) and `when` filter each on
-    `created_at`, e.g. created_at__date=today.
-    """
-    from apps.rentals.models import DELIVERED_RENTAL_STATUSES, ExtensionStatus
-    from apps.rentals.models import Rental as RentalModel
-    from apps.rentals.models import RentalExtension as ExtensionModel
-
-    return (
-        Order.objects.filter(
-            *window, status__in=[OrderStatus.COMPLETED, OrderStatus.CODE_RECEIVED], **when),
-        RentalModel.objects.filter(*window, status__in=DELIVERED_RENTAL_STATUSES, **when),
-        ExtensionModel.objects.filter(*window, status=ExtensionStatus.COMPLETED, **when),
-    )
-
-
 def _earnings(**when) -> dict:
     """Revenue and provider cost across everything sold, plus each part."""
-    orders, rentals, extensions = _earning_rows(**when)
+    orders, rentals, extensions = earning_rows(**when)
     parts = {}
     revenue = cost = Decimal("0.00")
     for name, rows in (("orders", orders), ("rentals", rentals), ("extensions", extensions)):
-        totals = rows.aggregate(revenue=Sum("price"), cost=Sum(COST_IN_GHS), count=Count("id"))
+        totals = rows.aggregate(revenue=Sum(revenue_of(rows.model)),
+                                cost=Sum(cost_of(rows.model)), count=Count("id"))
         part_revenue = totals["revenue"] or Decimal("0.00")
         part_cost = totals["cost"] or Decimal("0.00")
         parts[name] = {"revenue": part_revenue, "cost": part_cost,
@@ -155,10 +129,7 @@ class AdminOverviewView(AdminBase, APIView):
         revenue_today = earned_today["revenue"]
         provider_cost = earned["cost"]
 
-        refunds = Refund.objects.filter(status="COMPLETED").aggregate(
-            total=Sum("amount"), count=Count("id")
-        )
-        refund_total = refunds["total"] or Decimal("0.00")
+        refunds = _refunds()
 
         gross_margin = Decimal(revenue) - Decimal(provider_cost)
         margin_percent = (
@@ -166,6 +137,12 @@ class AdminOverviewView(AdminBase, APIView):
             if revenue
             else Decimal("0.00")
         )
+        # Provider cost and margin are PRICING_VIEW's to see (admins up), not
+        # every role that can open the dashboard: SUPPORT gets revenue only.
+        show_cost = can_see_costs(request.user)
+
+        def cost(value):
+            return str(Decimal(value).quantize(Decimal("0.01"))) if show_cost else None
 
         return Response(
             {
@@ -178,17 +155,16 @@ class AdminOverviewView(AdminBase, APIView):
                 "revenue": {
                     "total": str(Decimal(revenue).quantize(Decimal("0.01"))),
                     "today": str(Decimal(revenue_today).quantize(Decimal("0.01"))),
-                    "provider_cost": str(Decimal(provider_cost).quantize(Decimal("0.01"))),
-                    "gross_margin": str(gross_margin.quantize(Decimal("0.01"))),
-                    "margin_percent": str(margin_percent),
+                    "provider_cost": cost(provider_cost),
+                    "gross_margin": cost(gross_margin),
+                    "margin_percent": str(margin_percent) if show_cost else None,
                     "currency": "GHS",
                     # The same money split by what was sold, so a change in the
                     # headline can be traced to the part that moved.
                     "by_product": {
                         name: {
                             "revenue": str(Decimal(part["revenue"]).quantize(Decimal("0.01"))),
-                            "provider_cost": str(
-                                Decimal(part["cost"]).quantize(Decimal("0.01"))),
+                            "provider_cost": cost(part["cost"]),
                             "count": part["count"],
                             "today": str(Decimal(
                                 earned_today["parts"][name]["revenue"]
@@ -240,7 +216,7 @@ class AdminOverviewView(AdminBase, APIView):
                     "count": payments.count(),
                     "failed": Payment.objects.filter(status=PaymentStatus.FAILED).count(),
                 },
-                "refunds": {"total": str(refund_total), "count": refunds["count"] or 0},
+                "refunds": refunds,
                 "flags": {
                     "open": SuspiciousActivity.objects.filter(resolved=False).count(),
                     "high": SuspiciousActivity.objects.filter(
@@ -251,8 +227,6 @@ class AdminOverviewView(AdminBase, APIView):
         )
 
 
-#: Orders that earned revenue: the customer got (or is reading) their code.
-EARNING = [OrderStatus.COMPLETED, OrderStatus.CODE_RECEIVED]
 #: Orders that ended without earning. REFUNDED is counted apart from these.
 UNSUCCESSFUL = [OrderStatus.FAILED, OrderStatus.EXPIRED, OrderStatus.CANCELLED]
 
@@ -302,8 +276,9 @@ def _period(start, end) -> dict:
     )
     # Money is everything sold: orders, rentals and extensions, by day.
     earned: dict = {}
-    for rows in _earning_rows(window):
-        for day, row in _by_day(rows, revenue=Sum("price"), cost=Sum(COST_IN_GHS)).items():
+    for rows in earning_rows(window):
+        for day, row in _by_day(rows, revenue=Sum(revenue_of(rows.model)),
+                                cost=Sum(cost_of(rows.model))).items():
             entry = earned.setdefault(day, {"revenue": Decimal("0"), "cost": Decimal("0")})
             entry["revenue"] += Decimal(row["revenue"] or 0)
             entry["cost"] += Decimal(row["cost"] or 0)
@@ -384,17 +359,22 @@ class AdminChartsView(AdminBase, APIView):
         previous = _period(end - timedelta(days=2 * days), end - timedelta(days=days))
 
         from apps.rentals.models import (
-            ALL_SERVICES, DELIVERED_RENTAL_STATUSES, Rental, RentalExtension, RentalStatus,
+            ALL_SERVICES,
+            DELIVERED_RENTAL_STATUSES,
+            Rental,
+            RentalExtension,
+            RentalStatus,
         )
 
         # One line for the whole business: orders, rentals and extensions, by
         # day. `orders` counts orders and rentals delivered that day; an
         # extension adds days to a rental already counted, so only its money.
         by_day: dict = {}
-        for rows in _earning_rows(created_at__gte=since):
+        for rows in earning_rows(created_at__gte=since):
             counts_as_order = rows.model is not RentalExtension
             for row in (rows.annotate(day=TruncDate("created_at")).values("day")
-                        .annotate(revenue=Sum("price"), rows=Count("id")).order_by("day")):
+                        .annotate(revenue=Sum(revenue_of(rows.model)), rows=Count("id"))
+                        .order_by("day")):
                 entry = by_day.setdefault(row["day"], {"day": row["day"],
                                                        "revenue": Decimal("0.00"),
                                                        "orders": 0})
@@ -424,17 +404,29 @@ class AdminChartsView(AdminBase, APIView):
 
         # Top services by orders placed. A rental counts for its app; an "any
         # app" rental has no service, so it is ranked as one row of its own.
+        # Revenue is only what was earned (the same rule as the headline), not
+        # the price of every order placed - failed and refunded ones included.
         services: dict = {}
+
+        def service_entry(slug, name):
+            slug = slug or ALL_SERVICES
+            return services.setdefault(slug, {
+                "service__slug": slug, "service__name": name or "Any app",
+                "orders": 0, "revenue": Decimal("0.00")})
+
         for rows in (Order.objects.filter(created_at__gte=since),
                      Rental.objects.filter(created_at__gte=since)):
             for row in (rows.values("service__slug", "service__name")
-                        .annotate(orders=Count("id"), revenue=Sum("price")).order_by()):
-                slug = row["service__slug"] or ALL_SERVICES
-                entry = services.setdefault(slug, {
-                    "service__slug": slug, "service__name": row["service__name"] or "Any app",
-                    "orders": 0, "revenue": Decimal("0.00")})
-                entry["orders"] += row["orders"]
-                entry["revenue"] += Decimal(row["revenue"] or 0)
+                        .annotate(orders=Count("id")).order_by()):
+                service_entry(row["service__slug"], row["service__name"])["orders"] += \
+                    row["orders"]
+        for rows in earning_rows(created_at__gte=since):
+            prefix = "rental__" if rows.model is RentalExtension else ""
+            slug_field, name_field = f"{prefix}service__slug", f"{prefix}service__name"
+            for row in (rows.values(slug_field, name_field)
+                        .annotate(revenue=Sum(revenue_of(rows.model))).order_by()):
+                service_entry(row[slug_field], row[name_field])["revenue"] += \
+                    Decimal(row["revenue"] or 0)
         popular = sorted(services.values(),
                          key=lambda row: (-row["orders"], row["service__name"]))[:10]
 
@@ -488,11 +480,44 @@ class AdminChartsView(AdminBase, APIView):
                 "failure_rate": round((failed_orders / total_orders * 100), 2)
                 if total_orders
                 else 0.0,
-                "series": current["series"],
-                "totals": current["totals"],
-                "previous_totals": previous["totals"],
+                "series": _without_costs(current["series"], request.user),
+                "totals": _without_costs([current["totals"]], request.user)[0],
+                "previous_totals": _without_costs([previous["totals"]], request.user)[0],
             }
         )
+
+
+def _without_costs(rows: list[dict], user) -> list[dict]:
+    """The rows, with provider cost and profit blanked unless `user` may see them."""
+    if can_see_costs(user):
+        return rows
+    return [{**row, "cost": None, "profit": None} for row in rows]
+
+
+def _refunds() -> dict:
+    """Everything given back to customers' wallets, by what was bought.
+
+    Order refunds have Refund rows; a rental's refund is recorded on the rental
+    (refunded_amount), and an extension is refunded in full when it FAILED.
+    Counting Refund rows alone left every rental refund out of this tile.
+    """
+    from apps.rentals.models import ExtensionStatus, Rental, RentalExtension
+
+    parts = {
+        "orders": Refund.objects.filter(status="COMPLETED").aggregate(
+            total=Sum("amount"), count=Count("id")),
+        "rentals": Rental.objects.filter(refunded_at__isnull=False).aggregate(
+            total=Sum("refunded_amount"), count=Count("id")),
+        "extensions": RentalExtension.objects.filter(status=ExtensionStatus.FAILED).aggregate(
+            total=Sum("price"), count=Count("id")),
+    }
+    by_product = {name: {"total": str(_money(part["total"])), "count": part["count"] or 0}
+                  for name, part in parts.items()}
+    return {
+        "total": str(sum((_money(part["total"]) for part in parts.values()), Decimal("0.00"))),
+        "count": sum(part["count"] for part in by_product.values()),
+        "by_product": by_product,
+    }
 
 
 # ---------------------------------------------------------------------------
@@ -758,7 +783,8 @@ class AdminUserViewSet(AdminBase, mixins.ListModelMixin, mixins.RetrieveModelMix
         queryset = Order.objects.select_related("service", "country", "provider").filter(
             user_id=pk
         ).order_by("-created_at")[:100]
-        return Response(AdminOrderSerializer(queryset, many=True).data)
+        return Response(AdminOrderSerializer(queryset, many=True,
+                                             context={"request": request}).data)
 
     @action(detail=True, methods=["get"])
     def transactions(self, request, pk=None):
@@ -867,7 +893,7 @@ class AdminOrderViewSet(AdminBase, mixins.ListModelMixin, mixins.RetrieveModelMi
             reason=serializer.validated_data["reason"],
             before=before, after={"status": order.status}, request=request,
         )
-        return Response(AdminOrderSerializer(order).data)
+        return Response(AdminOrderSerializer(order, context={"request": request}).data)
 
     @action(detail=True, methods=["post"])
     def refund(self, request, reference=None):
@@ -907,7 +933,7 @@ class AdminOrderViewSet(AdminBase, mixins.ListModelMixin, mixins.RetrieveModelMi
             after={"amount": str(amount), "refund_status": order.refund_status},
             request=request,
         )
-        return Response(AdminOrderSerializer(order).data)
+        return Response(AdminOrderSerializer(order, context={"request": request}).data)
 
 
 class AdminRefundViewSet(AdminBase, mixins.ListModelMixin, viewsets.GenericViewSet):

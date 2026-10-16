@@ -86,7 +86,8 @@ def tiktok_us(catalog):
 
 
 def reload(offering) -> ProviderService:
-    return ProviderService.objects.select_related("service", "country", "provider").get(pk=offering.pk)
+    return ProviderService.objects.select_related(
+        "service", "country", "provider").get(pk=offering.pk)
 
 
 # ---------------------------------------------------------------------------
@@ -426,7 +427,8 @@ def test_admins_can_see_pricing_but_not_change_it(admin_viewer, tiktok_us):
     assert admin_viewer.get(f"{P}/offerings/").status_code == 200
 
     for method, url, body in [
-        ("put", f"{P}/fx/", {"currency": "USD", "mode": "MANUAL", "manual_rate": "1", "reason": "xxxxx"}),
+        ("put", f"{P}/fx/",
+         {"currency": "USD", "mode": "MANUAL", "manual_rate": "1", "reason": "xxxxx"}),
         ("put", f"{P}/policy/", {"auto_publish_prices": False, "reason": "xxxxx"}),
         ("post", f"{P}/offerings/{tiktok_us.pk}/override/", {"price": "9", "reason": "xxxxx"}),
         ("post", f"{P}/publish/", {"reason": "xxxxx"}),

@@ -220,7 +220,9 @@ export default function AdminOrdersPage() {
                       {cedis(order.price)}
                     </td>
                     <td className="tabular whitespace-nowrap px-5 py-3.5 text-right text-ink-muted">
-                      ${Number.parseFloat(order.provider_cost).toFixed(2)}
+                      {order.provider_cost === null
+                        ? "-"
+                        : `$${Number.parseFloat(order.provider_cost).toFixed(2)}`}
                     </td>
                     <td className="px-5 py-3.5">
                       <span className="flex items-center gap-1.5">
@@ -352,7 +354,8 @@ function OrderDialog({
               ) : null}
             </dl>
 
-            <PricingSnapshot order={order} />
+            {/* Cost and margin come back null for staff without PRICING_VIEW. */}
+            {order.provider_cost !== null ? <PricingSnapshot order={order} /> : null}
 
             <p className="text-caption text-ink-muted">
               The verification code itself is never shown here. Support can confirm that a message
@@ -506,8 +509,8 @@ function OrderDialog({
  */
 function PricingSnapshot({ order }: { order: AdminOrder }) {
   const snap = order.price_breakdown ?? {};
-  const cost = Number.parseFloat(order.provider_cost);
-  const rate = Number.parseFloat(order.exchange_rate);
+  const cost = Number.parseFloat(order.provider_cost ?? "0");
+  const rate = Number.parseFloat(order.exchange_rate ?? "0");
   const ghsCost = snap.base_cost ? Number.parseFloat(snap.base_cost) : cost * rate;
   const price = Number.parseFloat(order.price);
   const profit = price - ghsCost;

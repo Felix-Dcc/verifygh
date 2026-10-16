@@ -227,12 +227,17 @@ export default function AdminRentalsPage() {
                 label: "Paid with",
                 value: `${cedis(selected.cash_amount)} cash, ${cedis(selected.promo_amount)} promotional`,
               },
-              {
-                label: "Provider cost",
-                value: `${usd(selected.provider_cost)} at ${Number(selected.exchange_rate).toFixed(2)} = ${cedis(
-                  Number(selected.provider_cost) * Number(selected.exchange_rate),
-                )}`,
-              },
+              // Null for staff without PRICING_VIEW.
+              ...(selected.provider_cost !== null
+                ? [
+                    {
+                      label: "Provider cost",
+                      value: `${usd(selected.provider_cost)} at ${Number(selected.exchange_rate).toFixed(2)} = ${cedis(
+                        Number(selected.provider_cost) * Number(selected.exchange_rate),
+                      )}`,
+                    },
+                  ]
+                : []),
               ...(Number(selected.refunded_amount) > 0
                 ? [{ label: "Refunded", value: <span className="tabular">{cedis(selected.refunded_amount)}</span> }]
                 : []),

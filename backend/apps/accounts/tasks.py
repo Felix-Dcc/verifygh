@@ -91,7 +91,7 @@ def send_verification_email_task(self, user_id: str, ip: str = "") -> dict:
             "verification_email_task_failed",
             extra={"user_id": str(user_id), "error": exc.__class__.__name__},
         )
-        raise self.retry(exc=exc)
+        raise self.retry(exc=exc) from exc
 
     if not sent:
         # notify() records the provider failure on the Notification row rather

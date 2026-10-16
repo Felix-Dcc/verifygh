@@ -107,7 +107,7 @@ def deposits_blocked_reason() -> str:
     # One message whatever the cause. Which of the three preconditions failed is
     # an operational detail: a customer can do nothing with "no exchange rate",
     # and it advertises how the platform is wired.
-    logger.warning("deposits_blocked", extra={k: v for k, v in readiness.items()})
+    logger.warning("deposits_blocked", extra=dict(readiness))
     return (
         "Top-ups are paused while we restock verification numbers. "
         "Your existing balance is safe and is not affected."
@@ -127,7 +127,8 @@ def initiate_deposit(*, user, amount, phone: str, network: str, request=None,
 
     # As for purchases and manual top-ups: money goes only into a wallet whose
     # owner we can reach, and who can then spend it.
-    if settings.VERIFYGH.get("REQUIRE_EMAIL_VERIFICATION_FOR_DEPOSIT", True)             and not user.is_email_verified:
+    if (settings.VERIFYGH.get("REQUIRE_EMAIL_VERIFICATION_FOR_DEPOSIT", True)
+            and not user.is_email_verified):
         from apps.common.errors import EmailNotVerified
 
         raise EmailNotVerified("Verify your email address before adding funds.")
@@ -827,7 +828,8 @@ def _credit_payment(payment: Payment, event) -> Payment:
 
             process_for_user(payment.user)
         except Exception:
-            logger.exception("referral_after_deposit_failed", extra={"reference": payment.reference})
+            logger.exception("referral_after_deposit_failed",
+                             extra={"reference": payment.reference})
 
     transaction.on_commit(_referral)
 

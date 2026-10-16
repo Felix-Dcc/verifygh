@@ -28,7 +28,7 @@ from decimal import ROUND_CEILING, Decimal, InvalidOperation
 
 from django.conf import settings
 from django.db import transaction
-from django.db.models import DecimalField, ExpressionWrapper, F, Sum
+from django.db.models import Sum
 from django.utils import timezone
 
 from apps.accounts.constants import ROLE_PERMISSIONS, AdminPermission
@@ -884,11 +884,14 @@ def cash_flow() -> dict:
     """Customer money, our money at providers, and what we actually earned - kept apart."""
     from apps.orders.models import ACTIVE_ORDER_STATUSES, Order
     from apps.rentals.models import (
-        DELIVERED_RENTAL_STATUSES, ExtensionStatus, Rental, RentalExtension, RentalStatus,
+        DELIVERED_RENTAL_STATUSES,
+        ExtensionStatus,
+        Rental,
+        RentalExtension,
+        RentalStatus,
     )
     from apps.wallet.models import Wallet
 
-    money = DecimalField(max_digits=18, decimal_places=6)
     wallets = Wallet.objects.aggregate(cash=Sum("balance"), promo=Sum("promo_balance"))
     cash = Decimal(wallets["cash"] or 0)
     promo = Decimal(wallets["promo"] or 0)
@@ -903,14 +906,14 @@ def cash_flow() -> dict:
         ZERO,
     )
 
+    from apps.adminapi.earnings import cost_of, revenue_of
+
     def earned(*querysets):
+        # Net of refunds on delivered orders, as on the dashboard.
         revenue = cost = ZERO
         for queryset in querysets:
-            totals = queryset.aggregate(
-                revenue=Sum("price"),
-                cost=Sum(ExpressionWrapper(F("provider_cost") * F("exchange_rate"),
-                                           output_field=money)),
-            )
+            totals = queryset.aggregate(revenue=Sum(revenue_of(queryset.model)),
+                                        cost=Sum(cost_of(queryset.model)))
             revenue += Decimal(totals["revenue"] or 0)
             cost += Decimal(totals["cost"] or 0)
         return revenue, cost

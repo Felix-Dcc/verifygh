@@ -3,6 +3,7 @@ from __future__ import annotations
 from django.utils import timezone
 from rest_framework import serializers
 
+from apps.adminapi.serializers import HidesCostsMixin
 from apps.rentals import services
 from apps.rentals.models import Rental, RentalExtension, RentalMessage
 
@@ -115,7 +116,9 @@ class RentalDetailSerializer(RentalListSerializer):
         return services.LIVE_SYNC_SECONDS if rental.status in ("ACTIVE", "PENDING") else 0
 
 
-class AdminRentalSerializer(RentalListSerializer):
+class AdminRentalSerializer(HidesCostsMixin, RentalListSerializer):
+    cost_fields = ("provider_cost", "provider_currency", "exchange_rate")
+
     user_email = serializers.EmailField(source="user.email", read_only=True)
     provider_name = serializers.CharField(source="provider.name", read_only=True)
 

@@ -10,7 +10,7 @@ from rest_framework.permissions import AllowAny
 from rest_framework.response import Response
 from rest_framework.views import APIView
 
-from apps.catalog.models import Country, ProviderService, Service, ServiceCategory
+from apps.catalog.models import Country, Service, ServiceCategory
 from apps.catalog.serializers import CountrySerializer
 from apps.common.errors import NotFound
 from apps.pricing.engine import NoPricingRule, quote_many
@@ -436,6 +436,7 @@ class ServiceLogoView(APIView):
             raise NotFound("No logo.")
         response = HttpResponse(bytes(service.logo_data), content_type=service.logo_content_type)
         response["Cache-Control"] = "public, max-age=31536000, immutable"
-        response["Content-Security-Policy"] = "default-src 'none'; style-src 'unsafe-inline'; sandbox"
+        response["Content-Security-Policy"] = (
+            "default-src 'none'; style-src 'unsafe-inline'; sandbox")
         response["X-Content-Type-Options"] = "nosniff"
         return response

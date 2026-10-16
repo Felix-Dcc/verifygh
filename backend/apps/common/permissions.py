@@ -70,3 +70,16 @@ class HasPermissionCode(BasePermission):
         if required is None:
             return True
         return user.has_admin_permission(required)
+
+
+def can_see_costs(user) -> bool:
+    """Whether `user` may see provider cost, FX, margin and profit.
+
+    PRICING_VIEW decides, as it does for the pricing and funding pages. The
+    dashboards, order and rental views are open to SUPPORT for revenue and
+    status; the cost side of them is not.
+    """
+    from apps.accounts.constants import AdminPermission
+
+    return bool(user and getattr(user, "is_authenticated", False)
+                and user.has_admin_permission(AdminPermission.PRICING_VIEW))

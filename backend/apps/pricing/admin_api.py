@@ -131,7 +131,8 @@ class PricingSummaryView(AdminBase, APIView):
     def get(self, request):
         offerings = services.listed_offerings()
         published, recommended = _quotes(offerings)
-        active = [o for o in offerings if str(o.pk) in published and o.is_enabled and o.is_available]
+        active = [o for o in offerings
+                  if str(o.pk) in published and o.is_enabled and o.is_available]
         quotes = [published[str(o.pk)] for o in active]
 
         def average(values):
@@ -212,8 +213,10 @@ class PricingOfferingViewSet(AdminBase, viewsets.ViewSet):
             "service": lambda r: (r["service"]["name"].lower(), r["country"]["code"]),
             "margin": lambda r: Decimal(r.get("gross_margin_percent") or "-1000"),
             "-margin": lambda r: -Decimal(r.get("gross_margin_percent") or "-1000"),
-            "price": lambda r: Decimal(r.get("customer_price") or r.get("recommended_price") or "0"),
-            "-price": lambda r: -Decimal(r.get("customer_price") or r.get("recommended_price") or "0"),
+            "price": lambda r: Decimal(
+                r.get("customer_price") or r.get("recommended_price") or "0"),
+            "-price": lambda r: -Decimal(
+                r.get("customer_price") or r.get("recommended_price") or "0"),
             "cost": lambda r: Decimal(r.get("provider_cost") or "0"),
             "-cost": lambda r: -Decimal(r.get("provider_cost") or "0"),
         }
@@ -244,8 +247,10 @@ class PricingOfferingViewSet(AdminBase, viewsets.ViewSet):
             rule = {"id": str(resolved.pk), "name": resolved.name,
                     "scope": {"service": offering.service.slug if resolved.service_id else None,
                               "country": offering.country.code if resolved.country_id else None,
-                              "provider": offering.provider.adapter_key if resolved.provider_id else None},
-                    "markup_type": resolved.markup_type, "markup_percent": str(resolved.markup_percent),
+                              "provider": (offering.provider.adapter_key
+                                           if resolved.provider_id else None)},
+                    "markup_type": resolved.markup_type,
+                    "markup_percent": str(resolved.markup_percent),
                     "markup_fixed": str(resolved.markup_fixed)}
         except NoPricingRule:
             pass
@@ -259,7 +264,8 @@ class PricingOfferingViewSet(AdminBase, viewsets.ViewSet):
                      "enabled": other.is_enabled and other.provider.is_enabled,
                      "priority": other.provider.priority, "this": other.pk == offering.pk}
             try:
-                entry["ghs_cost"] = str(quantize(other.cost_amount * pricing_fx(other.cost_currency).rate))
+                entry["ghs_cost"] = str(quantize(
+                    other.cost_amount * pricing_fx(other.cost_currency).rate))
             except Exception:
                 entry["ghs_cost"] = None
             comparison.append(entry)
@@ -431,7 +437,8 @@ class PricingPublishView(AdminBase, APIView):
         result = publish_prices(actor=request.user, reason=reason,
                                 offering_ids=ids if isinstance(ids, list) else None)
         record_admin_action(admin=request.user, action="PRICING_PUBLISH", target=None,
-                            reason=reason, after={**result, "scope": "selected" if ids else "all pending"},
+                            reason=reason,
+                            after={**result, "scope": "selected" if ids else "all pending"},
                             request=request)
         return Response(result)
 
@@ -477,7 +484,8 @@ class ProviderCostHistoryViewSet(AdminBase, mixins.ListModelMixin, viewsets.Gene
                  "provider_key": c.provider_key,
                  "old_cost": str(c.old_cost) if c.old_cost is not None else None,
                  "new_cost": str(c.new_cost), "currency": c.currency, "source": c.source,
-                 "sync_method": c.sync_method, "changed_by_email": getattr(c.changed_by, "email", None),
+                 "sync_method": c.sync_method,
+                 "changed_by_email": getattr(c.changed_by, "email", None),
                  "reason": c.reason, "created_at": c.created_at} for c in page]
         return self.get_paginated_response(data)
 
@@ -493,7 +501,8 @@ class PricingAuditViewSet(AdminBase, mixins.ListModelMixin, viewsets.GenericView
 
     def list(self, request):
         page = self.paginate_queryset(self.get_queryset())
-        data = [{"id": str(a.pk), "admin_email": getattr(a.admin, "email", None), "action": a.action,
+        data = [{"id": str(a.pk), "admin_email": getattr(a.admin, "email", None),
+                 "action": a.action,
                  "reason": a.reason, "before": a.before, "after": a.after,
                  "created_at": a.created_at} for a in page]
         return self.get_paginated_response(data)

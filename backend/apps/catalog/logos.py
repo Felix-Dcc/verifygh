@@ -97,7 +97,8 @@ def _check_png(data: bytes) -> None:
     width, height = struct.unpack(">II", data[16:24])
     if min(width, height) < MIN_PNG_SIDE:
         raise ValidationFailed(
-            f"PNG logos must be at least {MIN_PNG_SIDE} x {MIN_PNG_SIDE} pixels - use an SVG if you can."
+            f"PNG logos must be at least {MIN_PNG_SIDE} x {MIN_PNG_SIDE} pixels - "
+            "use an SVG if you can."
         )
 
 

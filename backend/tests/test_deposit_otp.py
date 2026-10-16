@@ -209,8 +209,9 @@ def buyer(db):
 
 @pytest.fixture
 def awaiting_otp(buyer):
-    from django.utils import timezone
     from datetime import timedelta
+
+    from django.utils import timezone
 
     return Payment.objects.create(
         user=buyer, reference="VGH-PAY-OTP00001", provider="paystack",

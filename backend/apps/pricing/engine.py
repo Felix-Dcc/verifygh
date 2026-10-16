@@ -39,7 +39,15 @@ from django.utils import timezone
 from apps.catalog.models import ProviderService
 from apps.common.errors import ServiceUnavailable
 from apps.common.money import ZERO, quantize, round_to
-from apps.pricing.models import FXMode, MarkupType, PriceOverride, PricingFXRate, PricingPolicy, PricingRule, Rounding
+from apps.pricing.models import (
+    FXMode,
+    MarkupType,
+    PriceOverride,
+    PricingFXRate,
+    PricingPolicy,
+    PricingRule,
+    Rounding,
+)
 from apps.pricing.rates import current_rate, latest_rate_row
 
 logger = logging.getLogger("verifygh.pricing")

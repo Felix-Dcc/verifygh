@@ -69,8 +69,8 @@ class AdminIssueViewSet(AdminBase, mixins.ListModelMixin, mixins.RetrieveModelMi
         self.check_permissions(request)
         serializer = AdminIssueActionSerializer(data=request.data)
         serializer.is_valid(raise_exception=True)
-        issue = fn(self._issue(), admin=request.user,
-                   reason=serializer.validated_data["reason"], request=request)
+        fn(self._issue(), admin=request.user,
+           reason=serializer.validated_data["reason"], request=request)
         return Response(AdminIssueDetailSerializer(self._issue()).data)
 
     @action(detail=True, methods=["post"])

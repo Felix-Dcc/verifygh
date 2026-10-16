@@ -468,14 +468,15 @@ export type AdminOverview = {
     /** Everything sold: verification orders, rentals and rental extensions. */
     total: string;
     today: string;
-    provider_cost: string;
-    gross_margin: string;
-    margin_percent: string;
+    /** Cost and margin are null for staff without PRICING_VIEW (SUPPORT). */
+    provider_cost: string | null;
+    gross_margin: string | null;
+    margin_percent: string | null;
     currency: string;
     /** The same money split by what was sold. */
     by_product: Record<
       "orders" | "rentals" | "extensions",
-      { revenue: string; provider_cost: string; count: number; today: string }
+      { revenue: string; provider_cost: string | null; count: number; today: string }
     >;
   };
   /** Verification orders only - what the Orders page lists. */
@@ -497,7 +498,12 @@ export type AdminOverview = {
     rentals: { total: number; today: number; pending: number; live_numbers: number };
   };
   payments: { momo_total: string; momo_today: string; count: number; failed: number };
-  refunds: { total: string; count: number };
+  /** Everything returned to wallets: order, rental and extension refunds. */
+  refunds: {
+    total: string;
+    count: number;
+    by_product: Record<"orders" | "rentals" | "extensions", { total: string; count: number }>;
+  };
   flags: { open: number; high: number };
 };
 
@@ -518,8 +524,9 @@ export type AdminCharts = {
 export type AdminChartDay = {
   date: string;
   revenue: string;
-  cost: string;
-  profit: string;
+  /** Null for staff without PRICING_VIEW. */
+  cost: string | null;
+  profit: string | null;
   /** Orders placed, verification orders and rentals together. */
   orders: number;
   /** How many of `orders` were rentals. */
@@ -536,8 +543,9 @@ export type AdminChartDay = {
 
 export type AdminChartTotals = {
   revenue: string;
-  cost: string;
-  profit: string;
+  /** Null for staff without PRICING_VIEW. */
+  cost: string | null;
+  profit: string | null;
   /** Orders placed, verification orders and rentals together. */
   orders: number;
   /** How many of `orders` were rentals. */
@@ -725,8 +733,11 @@ export type NumberIssueMetrics = {
 export type AdminOrder = {
   id: string;
   reference: string;
-  /** The pricing snapshot frozen at purchase (see PriceQuote); older orders hold fewer fields. */
-  price_breakdown?: Partial<PriceQuote> & { applied?: Record<string, string | boolean> };
+  /**
+   * The pricing snapshot frozen at purchase (see PriceQuote); older orders hold fewer fields.
+   * Null, like the other cost fields, for staff without PRICING_VIEW.
+   */
+  price_breakdown?: (Partial<PriceQuote> & { applied?: Record<string, string | boolean> }) | null;
   user_id: string;
   user_email: string;
   service_name: string;
@@ -738,9 +749,9 @@ export type AdminOrder = {
   phone_number: string;
   price: string;
   currency: string;
-  provider_cost: string;
-  provider_currency: string;
-  exchange_rate: string;
+  provider_cost: string | null;
+  provider_currency: string | null;
+  exchange_rate: string | null;
   status: OrderStatus;
   refund_status: string;
   failure_reason: string;
@@ -1420,9 +1431,10 @@ export interface AdminRental extends RentalSummary {
   user_email: string;
   provider_name: string;
   provider_service_name: string;
-  provider_cost: string;
-  provider_currency: string;
-  exchange_rate: string;
+  /** Null for staff without PRICING_VIEW. */
+  provider_cost: string | null;
+  provider_currency: string | null;
+  exchange_rate: string | null;
   provider_rental_id: string;
   provider_sale_id: string;
   failure_reason: string;

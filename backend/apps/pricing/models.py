@@ -224,7 +224,8 @@ class PricingFXRate(TimeStampedModel):
     quote_currency = models.CharField(max_length=3, default="GHS")
     mode = models.CharField(max_length=10, choices=FXMode.choices, default=FXMode.MANUAL)
     manual_rate = models.DecimalField(max_digits=16, decimal_places=6, null=True, blank=True)
-    adjustment_percent = models.DecimalField(max_digits=6, decimal_places=2, default=Decimal("0.00"))
+    adjustment_percent = models.DecimalField(max_digits=6, decimal_places=2,
+                                             default=Decimal("0.00"))
     updated_by = models.ForeignKey(
         settings.AUTH_USER_MODEL, null=True, blank=True, on_delete=models.SET_NULL,
         related_name="+",
@@ -269,7 +270,7 @@ class PricingPolicy(TimeStampedModel):
         db_table = "pricing_policy"
 
     @classmethod
-    def get(cls) -> "PricingPolicy":
+    def get(cls) -> PricingPolicy:
         policy, _ = cls.objects.get_or_create(pk=1)
         return policy
 

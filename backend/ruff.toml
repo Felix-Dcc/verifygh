@@ -9,3 +9,5 @@ ignore = ["B008", "DJ001"]
 # Generated files: never hand-edited, so style rules add noise, not value.
 "*/migrations/*" = ["E501", "I001"]
 "config/settings/*" = ["F403", "F405"]
+# Hostile SVG payloads, kept on one line each so every case reads whole.
+"tests/test_service_logos.py" = ["E501"]

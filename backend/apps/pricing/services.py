@@ -147,7 +147,8 @@ def simulate(offerings, *, rules=None, fx: dict | None = None, policy=None) -> S
 
     policy = policy or PricingPolicy.get()
     current_rules = list(PricingRule.objects.filter(is_active=True))
-    now_pick, then_pick = _picker(current_rules), _picker(rules if rules is not None else current_rules)
+    now_pick = _picker(current_rules)
+    then_pick = _picker(rules if rules is not None else current_rules)
     now_fx = {c: pricing_fx(c) for c in {o.cost_currency for o in offerings}}
     then_fx = {**now_fx, **(fx or {})}
     overrides = {o.offering_id: o for o in PriceOverride.objects.filter(
@@ -210,7 +211,8 @@ def preview(offering: ProviderService, data: dict) -> dict:
     candidate.service, candidate.country, candidate.provider = (
         offering.service, offering.country, offering.provider)
     if data.get("provider_cost") not in (None, ""):
-        candidate.cost_amount = to_decimal(data["provider_cost"], "Provider cost", minimum=Decimal("0.0001"))
+        candidate.cost_amount = to_decimal(data["provider_cost"], "Provider cost",
+                                           minimum=Decimal("0.0001"))
 
     from apps.pricing.engine import active_override, resolve_rule
 
@@ -222,13 +224,14 @@ def preview(offering: ProviderService, data: dict) -> dict:
         rule.markup_type = data.get("markup_type", rule.markup_type)
         if rule.markup_type not in MarkupType.values:
             raise ValidationFailed("Choose a markup type.")
-        rule.markup_percent = to_decimal(data.get("markup_percent", rule.markup_percent), "Markup %")
+        rule.markup_percent = to_decimal(data.get("markup_percent", rule.markup_percent),
+                                         "Markup %")
         rule.markup_fixed = to_decimal(data.get("markup_fixed", rule.markup_fixed), "Fixed markup")
 
     fx = pricing_fx(offering.cost_currency)
     if data.get("fx_rate") not in (None, ""):
-        fx = FX(fx.currency, to_decimal(data["fx_rate"], "Pricing FX rate", minimum=Decimal("0.0001")),
-                "PREVIEW", fx.market_rate, fx.market_rate_id)
+        rate = to_decimal(data["fx_rate"], "Pricing FX rate", minimum=Decimal("0.0001"))
+        fx = FX(fx.currency, rate, "PREVIEW", fx.market_rate, fx.market_rate_id)
 
     override = active_override(offering)
     if "override_price" in data:
@@ -402,7 +405,8 @@ def _fx_candidate(currency: str, mode: str, manual_rate, adjustment) -> tuple[FX
         row = current_rate(currency, "GHS")  # raises if there is no fresh market rate
         rate = (Decimal(row.rate) * (100 + adjustment) / 100).quantize(Decimal("0.000001"))
         fx = FX(currency, rate, FXMode.AUTOMATIC, row.rate, str(row.id), adjustment)
-        fields = {"mode": mode, "manual_rate": manual_rate or None, "adjustment_percent": adjustment}
+        fields = {"mode": mode, "manual_rate": manual_rate or None,
+                  "adjustment_percent": adjustment}
     return fx, fields
 
 
@@ -411,7 +415,8 @@ def preview_fx(*, currency: str, mode: str, manual_rate=None, adjustment=0) -> d
     offerings = listed_offerings(cost_currency=fx.currency)
     policy = PricingPolicy.get()
     sim = simulate(offerings, fx={fx.currency: fx}, policy=policy)
-    return {"pricing_rate": str(fx.rate), "market_rate": str(fx.market_rate) if fx.market_rate else None,
+    return {"pricing_rate": str(fx.rate),
+            "market_rate": str(fx.market_rate) if fx.market_rate else None,
             **sim.summary(offerings, policy)}
 
 
@@ -517,7 +522,8 @@ def _markup_fields(data: dict) -> dict:
     }
 
 
-def _candidate_rules(rule_fields: dict, markup: dict) -> tuple[list[PricingRule], PricingRule | None]:
+def _candidate_rules(rule_fields: dict,
+                     markup: dict) -> tuple[list[PricingRule], PricingRule | None]:
     """The active rules as they would be with this scope's markup set."""
     rules = list(PricingRule.objects.filter(is_active=True))
     existing = next((r for r in rules if r.service_id == getattr(rule_fields["service"], "pk", None)
@@ -578,7 +584,8 @@ def apply_markup(*, scope: dict, data: dict, reason: str, actor, request=None) -
     _enforce_minimum(simulate(offerings, rules=rules, policy=policy), offerings, policy)
 
     label = " / ".join(filter(None, [
-        getattr(rule_fields["service"], "name", None), getattr(rule_fields["country"], "code", None),
+        getattr(rule_fields["service"], "name", None),
+        getattr(rule_fields["country"], "code", None),
         getattr(rule_fields["provider"], "name", None)])) or "Global default"
     with transaction.atomic():
         if existing is not None:

@@ -7,7 +7,7 @@ from decimal import Decimal
 import pytest
 
 from apps.catalog.models import Country, Provider, ProviderService, Service
-from apps.orders.models import Order, OrderStatus
+from apps.orders.models import Order
 from apps.verification.textverified import TextVerifiedProvider
 from apps.wallet.services import get_or_create_wallet
 
