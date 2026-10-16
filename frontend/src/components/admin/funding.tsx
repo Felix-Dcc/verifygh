@@ -91,11 +91,18 @@ export type FundingAlert = {
   severity: "INFO" | "WARNING" | "CRITICAL";
   message: string;
   created_at: string;
+  /** Null while the alert still needs attention. */
+  resolved_at: string | null;
+  resolution: "" | "CLEARED" | "SUPERSEDED" | "DISMISSED" | "INFO";
+  resolution_label: string;
 };
 
 export type FundingOverview = {
   accounts: FundingAccount[];
   cash_flow: CashFlow;
+  /** Alerts that still need attention, newest first. */
+  open_alerts: FundingAlert[];
+  /** Everything else from the last 14 days. */
   alerts: FundingAlert[];
   top_up_methods: { value: string; label: string }[];
   can_manage: boolean;
@@ -670,31 +677,123 @@ export function CashFlowCard({ flow }: { flow: CashFlow }) {
  * Alerts
  * ---------------------------------------------------------------------- */
 
-export function FundingAlerts({ alerts }: { alerts: FundingAlert[] }) {
+function alertTone(alert: FundingAlert) {
+  return alert.severity === "CRITICAL" ? "danger" : alert.severity === "WARNING" ? "warn" : "info";
+}
+
+/**
+ * Open alerts first, each with a way to dismiss it; the last 14 days of
+ * resolved ones folded away underneath. An alert closes on its own when what
+ * it reported is over (the balance recovered, it could be read again, a newer
+ * alert replaced it), so the list holds only what still needs a person.
+ */
+export function FundingAlerts({
+  openAlerts,
+  history,
+  canManage,
+  onChanged,
+}: {
+  openAlerts: FundingAlert[];
+  history: FundingAlert[];
+  canManage: boolean;
+  onChanged: () => void;
+}) {
+  const toast = useToast();
+  const [dismissing, setDismissing] = React.useState<FundingAlert | null>(null);
+  const [reason, setReason] = React.useState("");
+  const [busy, setBusy] = React.useState(false);
+
+  async function dismiss() {
+    if (!dismissing) return;
+    setBusy(true);
+    try {
+      await api.post(`/admin/funding/alerts/${dismissing.id}/dismiss/`, { reason });
+      toast.success("Alert dismissed");
+      setDismissing(null);
+      setReason("");
+      onChanged();
+    } catch (caught) {
+      toast.error("Could not dismiss the alert", caught instanceof ApiError ? caught.message : "Please try again.");
+    } finally {
+      setBusy(false);
+    }
+  }
+
   return (
     <Card>
-      <CardHeader title="Recent alerts" description="The real reasons behind anything customers saw as “temporarily unavailable”." />
-      <div className="p-4 sm:p-5">
-        {alerts.length === 0 ? (
-          <EmptyState title="No alerts" description="Nothing has needed attention." />
+      <CardHeader
+        title="Alerts"
+        description="What needs attention at your providers right now. Alerts close themselves once the problem is over."
+      />
+      <div className="space-y-4 p-4 sm:p-5">
+        {openAlerts.length === 0 ? (
+          <EmptyState title="Nothing needs attention" description="Every provider alert has been resolved." />
         ) : (
           <ul className="divide-y divide-line">
-            {alerts.map((alert) => (
-              <li key={alert.id} className="py-3 first:pt-0 last:pb-0">
-                <div className="flex flex-wrap items-center gap-2">
-                  <Badge tone={alert.severity === "CRITICAL" ? "danger" : alert.severity === "WARNING" ? "warn" : "info"}>
-                    {alert.kind_label}
-                  </Badge>
-                  <span className="text-caption text-ink-muted">
-                    {alert.provider} · {formatDateTime(alert.created_at)}
-                  </span>
+            {openAlerts.map((alert) => (
+              <li key={alert.id} className="flex flex-col gap-2 py-3 first:pt-0 last:pb-0 sm:flex-row sm:items-start sm:justify-between">
+                <div className="min-w-0">
+                  <div className="flex flex-wrap items-center gap-2">
+                    <Badge tone={alertTone(alert)}>{alert.kind_label}</Badge>
+                    <span className="text-caption text-ink-muted">
+                      {alert.provider} · {formatDateTime(alert.created_at)}
+                    </span>
+                  </div>
+                  <p className="mt-1 text-sm text-ink-soft">{alert.message}</p>
                 </div>
-                <p className="mt-1 text-sm text-ink-soft">{alert.message}</p>
+                {canManage ? (
+                  <Button variant="secondary" size="sm" onClick={() => setDismissing(alert)} className="shrink-0">
+                    Dismiss
+                  </Button>
+                ) : null}
               </li>
             ))}
           </ul>
         )}
+
+        {history.length ? (
+          <details className="group rounded-xl border border-line">
+            <summary className="cursor-pointer select-none px-3.5 py-2.5 text-sm font-medium text-ink-soft">
+              Resolved in the last 14 days ({history.length})
+            </summary>
+            <ul className="divide-y divide-line border-t border-line">
+              {history.map((alert) => (
+                <li key={alert.id} className="px-3.5 py-2.5">
+                  <div className="flex flex-wrap items-center gap-2">
+                    <span className="text-sm font-medium text-ink">{alert.kind_label}</span>
+                    <span className="text-caption text-ink-muted">
+                      {alert.provider} · {formatDateTime(alert.created_at)}
+                      {alert.resolution && alert.resolution !== "INFO" ? ` · ${alert.resolution_label.toLowerCase()}` : ""}
+                    </span>
+                  </div>
+                  <p className="mt-0.5 text-caption text-ink-muted">{alert.message}</p>
+                </li>
+              ))}
+            </ul>
+          </details>
+        ) : null}
       </div>
+
+      <Dialog
+        open={dismissing !== null}
+        onClose={() => setDismissing(null)}
+        title="Dismiss this alert?"
+        description="It leaves the list and its notifications are marked read. Use this when you have dealt with it; the reason goes in the audit log."
+        footer={
+          <>
+            <Button variant="secondary" onClick={() => setDismissing(null)}>
+              Cancel
+            </Button>
+            <Button onClick={dismiss} loading={busy} disabled={reason.trim().length < 5}>
+              Dismiss alert
+            </Button>
+          </>
+        }
+      >
+        <Field label="Reason" htmlFor="alert-dismiss-reason" required hint="At least 5 characters.">
+          <Input id="alert-dismiss-reason" value={reason} onChange={(e) => setReason(e.target.value)} />
+        </Field>
+      </Dialog>
     </Card>
   );
 }

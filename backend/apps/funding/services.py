@@ -37,6 +37,7 @@ from apps.common.errors import APIError, ProviderError, ServiceUnavailable, Vali
 from apps.funding.models import (
     AccountMode,
     AlertKind,
+    AlertResolution,
     AlertSeverity,
     BalanceStatus,
     ProviderAccount,
@@ -130,13 +131,43 @@ def account_for(provider) -> ProviderAccount:
     return account
 
 
-def grade(account: ProviderAccount) -> str:
+def recovery_level(account: ProviderAccount) -> Decimal:
+    """Where a low balance counts as healthy again: halfway from minimum to target.
+
+    Without a margin, a balance hovering at the minimum - purchases taking a
+    little, holds releasing a little - flipped low/healthy on every sync and
+    raised a fresh pair of alerts each time (5.50 "recovered", 4.75 "low"
+    again an hour later). A real top-up clears this level easily.
+    """
+    gap = max(account.target_balance - account.minimum_balance, ZERO)
+    return account.minimum_balance + gap / 2
+
+
+def critical_exit_level(account: ProviderAccount) -> Decimal:
+    """Where a critical balance stops being critical: halfway to the minimum."""
+    gap = max(account.minimum_balance - account.critical_balance, ZERO)
+    return account.critical_balance + gap / 2
+
+
+def grade(account: ProviderAccount, previous: str = "") -> str:
+    """The balance's status. `previous` adds hysteresis on the way back up.
+
+    Going down, the levels are exact. Coming back up, a balance must clear
+    recovery_level() to be healthy again (and critical_exit_level() to stop
+    being critical), so it cannot flap around a threshold. Only the status
+    and its alerts use this; the purchase guard reads the balance itself.
+    """
     spendable = account.spendable
     if spendable is None:
         return BalanceStatus.UNKNOWN
     if spendable <= account.critical_balance:
         return BalanceStatus.CRITICAL
+    if previous == BalanceStatus.CRITICAL and spendable < critical_exit_level(account):
+        return BalanceStatus.CRITICAL
     if spendable < account.minimum_balance:
+        return BalanceStatus.LOW
+    if previous in (BalanceStatus.LOW, BalanceStatus.CRITICAL) \
+            and spendable < recovery_level(account):
         return BalanceStatus.LOW
     return BalanceStatus.HEALTHY
 
@@ -204,7 +235,7 @@ def sync_balance(provider) -> ProviderAccount:
         account.last_sync_attempt_at = now
         account.last_sync_error = ""
         account.consecutive_sync_failures = 0
-        account.status = grade(account)
+        account.status = grade(account, previous)
         account.save()
 
     logger.info("provider_balance_synced", extra={
@@ -214,6 +245,8 @@ def sync_balance(provider) -> ProviderAccount:
     if account.spendable != previous_spendable:
         # What the marketplace may show depends on this balance.
         refresh_marketplace()
+    # The balance was read, so "could not be read" is over.
+    resolve_alerts(provider, SYNC_KINDS)
     _alert_on_status_change(account, previous)
     _confirm_top_ups(account)
     return account
@@ -282,11 +315,12 @@ def _alert_on_status_change(account: ProviderAccount, previous: str) -> None:
     cooldown = int(_cfg("PROVIDER_ALERT_COOLDOWN_MINUTES"))
 
     if status == BalanceStatus.CRITICAL:
-        # Fires on the way down, then again every few hours until fixed.
+        # Once on the way down, then a reminder every few hours until fixed.
+        # The cooldown counts only open alerts, so a new episode after a real
+        # recovery alerts at once, while a re-entry within one does not.
         raise_alert(provider, AlertKind.CRITICAL_BALANCE, AlertSeverity.CRITICAL,
                     f"Critical: {details} Purchases that the balance cannot cover are "
-                    "being refused.", metadata=metadata,
-                    cooldown_minutes=0 if previous != BalanceStatus.CRITICAL else cooldown * 6)
+                    "being refused.", metadata=metadata, cooldown_minutes=cooldown * 6)
     elif status == BalanceStatus.LOW and previous not in (BalanceStatus.LOW,
                                                            BalanceStatus.CRITICAL):
         raise_alert(provider, AlertKind.LOW_BALANCE, AlertSeverity.WARNING,
@@ -296,6 +330,10 @@ def _alert_on_status_change(account: ProviderAccount, previous: str) -> None:
         raise_alert(provider, AlertKind.BALANCE_RECOVERED, AlertSeverity.INFO,
                     f"{provider.name} balance is back to {_money(account, account.spendable)}.",
                     metadata=metadata, cooldown_minutes=0)
+    if status == BalanceStatus.HEALTHY:
+        # Every sync, not only on the change: also clears alerts left open
+        # from before alerts could be resolved.
+        resolve_alerts(provider, BALANCE_KINDS)
 
 
 # ---------------------------------------------------------------------------
@@ -312,22 +350,101 @@ def alert_recipients():
     return User.objects.filter(role__in=roles, is_active=True, is_suspended=False)
 
 
+#: Alerts a healthy balance clears.
+BALANCE_KINDS = (AlertKind.LOW_BALANCE, AlertKind.CRITICAL_BALANCE,
+                 AlertKind.PURCHASE_BLOCKED, AlertKind.PROVIDER_REFUSED)
+#: Alerts a successful balance read clears.
+SYNC_KINDS = (AlertKind.SYNC_FAILED, AlertKind.API_UNAVAILABLE)
+#: A new alert of these kinds also closes the open ones it makes redundant.
+SUPERSEDES = {AlertKind.CRITICAL_BALANCE: (AlertKind.LOW_BALANCE,)}
+#: One open alert per kind, the newest - except these, which are each about
+#: something different (one recorded top-up each).
+INDEPENDENT_KINDS = (AlertKind.TOP_UP_NOT_REFLECTED,)
+
+
+def open_alerts():
+    """Alerts that still ask for attention, newest first."""
+    return ProviderAlert.objects.filter(resolved_at__isnull=True).exclude(
+        severity=AlertSeverity.INFO)
+
+
+def resolve_alerts(provider, kinds, resolution: str = AlertResolution.CLEARED, *,
+                   actor=None, exclude=None, **filters) -> int:
+    """Close the open alerts of `kinds` for `provider`; returns how many.
+
+    The staff notifications they sent are marked read with them, so the bell
+    stops counting a problem that is over.
+    """
+    queryset = ProviderAlert.objects.filter(provider=provider, kind__in=list(kinds),
+                                            resolved_at__isnull=True, **filters)
+    if exclude is not None:
+        queryset = queryset.exclude(pk=exclude.pk)
+    ids = list(queryset.values_list("pk", flat=True))
+    if not ids:
+        return 0
+    now = timezone.now()
+    ProviderAlert.objects.filter(pk__in=ids).update(resolved_at=now, resolution=resolution,
+                                                    resolved_by=actor)
+    _mark_alert_notifications_read(ids, now)
+    logger.info("provider_alerts_resolved", extra={
+        "provider": provider.adapter_key, "count": len(ids), "resolution": resolution})
+    return len(ids)
+
+
+def _mark_alert_notifications_read(alert_ids, now) -> None:
+    from apps.notifications.models import Channel, Notification
+
+    Notification.objects.filter(
+        metadata__alert_id__in=[str(pk) for pk in alert_ids], channel=Channel.IN_APP,
+        read_at__isnull=True,
+    ).update(read_at=now)
+
+
+def dismiss_alert(alert: ProviderAlert, *, actor, reason, request=None) -> ProviderAlert:
+    """Staff close an open alert by hand, with a reason, in the audit log."""
+    reason = require_reason(reason)
+    if alert.resolved_at is not None:
+        return alert
+    with transaction.atomic():
+        resolve_alerts(alert.provider, [alert.kind], AlertResolution.DISMISSED, actor=actor,
+                       pk=alert.pk)
+        record_admin_action(admin=actor, action="PROVIDER_ALERT_DISMISSED", target=alert,
+                            reason=reason, before={"kind": alert.kind,
+                                                   "message": alert.message[:200]},
+                            request=request)
+    alert.refresh_from_db()
+    return alert
+
+
 def raise_alert(provider, kind: str, severity: str, message: str, *,
                 metadata: dict | None = None,
                 cooldown_minutes: int | None = None) -> ProviderAlert | None:
-    """Record an alert and tell staff, at most once per kind per cooldown."""
+    """Record an alert and tell staff, at most once per kind per cooldown.
+
+    The cooldown counts open alerts only: once a problem is over, the next
+    occurrence is news. A new alert closes the older open one of its kind,
+    so the page shows each problem once, as it stands now.
+    """
     if cooldown_minutes is None:
         cooldown_minutes = int(_cfg("PROVIDER_ALERT_COOLDOWN_MINUTES"))
     if cooldown_minutes > 0 and ProviderAlert.objects.filter(
-        provider=provider, kind=kind,
+        provider=provider, kind=kind, resolved_at__isnull=True,
         created_at__gte=timezone.now() - timedelta(minutes=cooldown_minutes),
     ).exists():
         return None
 
+    informational = severity == AlertSeverity.INFO
     alert = ProviderAlert.objects.create(
         provider=provider, kind=kind, severity=severity, message=message[:400],
         metadata=metadata or {},
+        resolved_at=timezone.now() if informational else None,
+        resolution=AlertResolution.INFO if informational else "",
     )
+    if not informational:
+        if kind not in INDEPENDENT_KINDS:
+            resolve_alerts(provider, [kind], AlertResolution.SUPERSEDED, exclude=alert)
+        if SUPERSEDES.get(kind):
+            resolve_alerts(provider, SUPERSEDES[kind], AlertResolution.SUPERSEDED)
     logger.warning("provider_funding_alert", extra={
         "provider": provider.adapter_key, "kind": kind, "severity": severity,
     })
@@ -541,6 +658,7 @@ def check_failure_spike(provider) -> ProviderAlert | None:
         created_at__gte=timezone.now() - timedelta(minutes=minutes),
     ).count()
     if failed < threshold:
+        resolve_alerts(provider, [AlertKind.FAILURE_SPIKE])
         return None
     return raise_alert(
         provider, AlertKind.FAILURE_SPIKE, AlertSeverity.WARNING,
@@ -575,9 +693,9 @@ def inactivity(provider, account: ProviderAccount) -> dict:
 
 def check_inactivity(provider, account: ProviderAccount) -> ProviderAlert | None:
     state = inactivity(provider, account)
-    if state["deletion_on"] is None or not account.available or account.available <= 0:
-        return None
-    if state["days_since"] < int(_cfg("PROVIDER_INACTIVITY_WARNING_DAYS")):
+    if (state["deletion_on"] is None or not account.available or account.available <= 0
+            or state["days_since"] < int(_cfg("PROVIDER_INACTIVITY_WARNING_DAYS"))):
+        resolve_alerts(provider, [AlertKind.INACTIVITY])
         return None
     return raise_alert(
         provider, AlertKind.INACTIVITY, AlertSeverity.WARNING,
@@ -602,6 +720,12 @@ def _confirm_top_ups(account: ProviderAccount) -> None:
         if arrived:
             ProviderTopUp.objects.filter(pk=top_up.pk).update(
                 confirmed_at=account.last_synced_at, confirmed_balance=account.available)
+            _resolve_top_up_alert(account.provider, top_up)
+
+
+def _resolve_top_up_alert(provider, top_up: ProviderTopUp) -> None:
+    resolve_alerts(provider, [AlertKind.TOP_UP_NOT_REFLECTED],
+                   metadata__top_up_id=str(top_up.pk))
 
 
 #: A top-up recorded within this long after the balance rose by (about) its
@@ -643,6 +767,7 @@ def confirm_top_up(top_up: ProviderTopUp, *, actor, reason: str = "", request=No
                    "balance": str(account.available)},
             request=request,
         )
+        _resolve_top_up_alert(account.provider, top_up)
     top_up.refresh_from_db()
     return top_up
 
@@ -703,7 +828,7 @@ def update_account(account: ProviderAccount, *, data: dict, reason, actor,
         if not (account.critical_balance <= account.minimum_balance <= account.target_balance):
             raise ValidationFailed(
                 "Levels must go critical <= minimum <= target.")
-        account.status = grade(account)
+        account.status = grade(account, previous)
         account.save()
         record_admin_action(admin=actor, action="PROVIDER_FUNDING_SETTINGS", target=account,
                             reason=reason, before=before, after=_account_state(account),

@@ -156,11 +156,23 @@ class AlertSeverity(models.TextChoices):
     CRITICAL = "CRITICAL", "Critical"
 
 
+class AlertResolution(models.TextChoices):
+    CLEARED = "CLEARED", "Cleared"
+    SUPERSEDED = "SUPERSEDED", "Replaced by a newer alert"
+    DISMISSED = "DISMISSED", "Dismissed"
+    INFO = "INFO", "For information"
+
+
 class ProviderAlert(BaseModel):
     """Something about a provider account that staff need to know.
 
     The real reason lives here. Customers only ever see "temporarily
     unavailable".
+
+    An alert is open until what it reports is over - the balance recovered,
+    the balance could be read again, a newer alert of the same kind replaced
+    it, or staff dismissed it. Informational alerts are born resolved. Only
+    open alerts ask for attention; the rest are history.
     """
 
     provider = models.ForeignKey("catalog.Provider", on_delete=models.CASCADE,
@@ -169,6 +181,11 @@ class ProviderAlert(BaseModel):
     severity = models.CharField(max_length=10, choices=AlertSeverity.choices)
     message = models.CharField(max_length=400)
     metadata = models.JSONField(default=dict, blank=True)
+    resolved_at = models.DateTimeField(null=True, blank=True, db_index=True)
+    resolution = models.CharField(max_length=12, choices=AlertResolution.choices, blank=True,
+                                  default="")
+    resolved_by = models.ForeignKey(settings.AUTH_USER_MODEL, null=True, blank=True,
+                                    on_delete=models.SET_NULL, related_name="+")
 
     class Meta:
         db_table = "funding_provider_alert"

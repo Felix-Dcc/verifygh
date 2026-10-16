@@ -9,6 +9,9 @@ website.
 
 from __future__ import annotations
 
+from datetime import timedelta
+
+from django.utils import timezone
 from rest_framework.response import Response
 from rest_framework.views import APIView
 
@@ -47,7 +50,15 @@ def _alert(alert: ProviderAlert) -> dict:
         "severity": alert.severity,
         "message": alert.message,
         "created_at": alert.created_at,
+        "resolved_at": alert.resolved_at,
+        "resolution": alert.resolution,
+        "resolution_label": alert.get_resolution_display() if alert.resolution else "",
     }
+
+
+#: How far back the page's alert history goes. Older alerts stay in the
+#: database and the audit trail; the page is for what is current.
+ALERT_HISTORY = timedelta(days=14)
 
 
 def _account(adapter_key: str):
@@ -63,15 +74,35 @@ class FundingOverviewView(AdminBase, APIView):
     def get(self, request):
         accounts = [services.account_report(services.account_for(provider))
                     for provider in services._funded_providers()]
-        alerts = ProviderAlert.objects.select_related("provider")[:30]
+        # What needs attention now, and - apart from it - the recent history.
+        # Listing every alert ever raised buried the one that mattered.
+        open_alerts = list(services.open_alerts().select_related("provider")[:50])
+        history = (ProviderAlert.objects.select_related("provider")
+                   .filter(created_at__gte=timezone.now() - ALERT_HISTORY)
+                   .exclude(pk__in=[alert.pk for alert in open_alerts])[:30])
         return Response({
             "accounts": accounts,
             "cash_flow": services.cash_flow(),
-            "alerts": [_alert(alert) for alert in alerts],
+            "open_alerts": [_alert(alert) for alert in open_alerts],
+            "alerts": [_alert(alert) for alert in history],
             "top_up_methods": [{"value": value, "label": label}
                                for value, label in TopUpMethod.choices],
             "can_manage": request.user.has_admin_permission(AdminPermission.PROVIDER_MANAGE),
         })
+
+
+class FundingAlertDismissView(AdminBase, APIView):
+    """Close an open alert by hand: staff have dealt with it."""
+
+    required_permission = AdminPermission.PROVIDER_MANAGE
+
+    def post(self, request, alert_id: str):
+        alert = ProviderAlert.objects.select_related("provider").filter(pk=alert_id).first()
+        if alert is None:
+            raise NotFound("No such alert.")
+        alert = services.dismiss_alert(alert, actor=request.user,
+                                       reason=request.data.get("reason"), request=request)
+        return Response(_alert(alert))
 
 
 class FundingAccountView(AdminBase, APIView):
