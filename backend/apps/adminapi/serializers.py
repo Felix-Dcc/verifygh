@@ -8,6 +8,7 @@ from apps.accounts.constants import STAFF_ROLES, Role
 from apps.accounts.models import User
 from apps.audit.models import AdminAction, AuditLog, SuspiciousActivity
 from apps.catalog.models import Country, ProviderService, Service
+from apps.common.permissions import can_see_costs
 from apps.orders.models import Order, Refund
 from apps.payments.models import Payment
 from apps.pricing.models import ExchangeRate, PricingRule
@@ -30,7 +31,8 @@ class AdminUserSerializer(serializers.ModelSerializer):
         fields = [
             "id", "email", "full_name", "phone", "role", "is_active", "is_suspended",
             "suspension_reason", "is_email_verified", "is_phone_verified", "risk_score",
-            "balance", "promo_balance", "order_count", "open_flags", "invite_pending", "former_staff", "has_password",
+            "balance", "promo_balance", "order_count", "open_flags", "invite_pending",
+            "former_staff", "has_password",
             "last_login", "created_at",
         ]
         read_only_fields = fields
@@ -109,7 +111,29 @@ class WalletAdjustmentSerializer(serializers.Serializer):
     reason = serializers.CharField(max_length=500, min_length=5)
 
 
-class AdminOrderSerializer(serializers.ModelSerializer):
+class HidesCostsMixin:
+    """Blank provider cost, FX and margin for staff without PRICING_VIEW.
+
+    SUPPORT can read orders and rentals (ORDER_VIEW) but not what they cost us:
+    that is PRICING_VIEW's, as on the pricing and funding pages. Without a
+    request in the context nothing says who is looking, so the costs are hidden.
+    """
+
+    cost_fields: tuple[str, ...] = ()
+
+    def to_representation(self, instance):
+        data = super().to_representation(instance)
+        request = self.context.get("request")
+        if not can_see_costs(getattr(request, "user", None)):
+            for name in self.cost_fields:
+                if name in data:
+                    data[name] = None
+        return data
+
+
+class AdminOrderSerializer(HidesCostsMixin, serializers.ModelSerializer):
+    cost_fields = ("provider_cost", "provider_currency", "exchange_rate", "price_breakdown")
+
     user_email = serializers.CharField(source="user.email", read_only=True)
     user_id = serializers.UUIDField(source="user.id", read_only=True)
     service_name = serializers.CharField(source="service.name", read_only=True)

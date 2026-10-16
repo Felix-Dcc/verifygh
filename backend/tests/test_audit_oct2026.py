@@ -168,6 +168,72 @@ def test_the_refunded_tile_adds_order_and_rental_refunds(
 
 
 # ---------------------------------------------------------------------------
+# A-03: provider cost and profit are PRICING_VIEW's
+# ---------------------------------------------------------------------------
+
+
+def test_support_sees_revenue_but_not_cost_or_profit_on_the_dashboard(
+        user, support_user, auth, catalog, funded_wallet):
+    funded_wallet(user, "200.00")
+    order = _delivered_order(auth(user))
+    support = auth(support_user, SUPPORT_PASSWORD)
+
+    revenue = support.get("/api/v1/admin/overview/").data["revenue"]
+    assert Decimal(revenue["total"]) == Decimal(order.price)
+    assert revenue["provider_cost"] is None
+    assert revenue["gross_margin"] is None
+    assert revenue["margin_percent"] is None
+    assert all(part["provider_cost"] is None for part in revenue["by_product"].values())
+
+    charts = support.get("/api/v1/admin/charts/?days=7").data
+    assert Decimal(charts["totals"]["revenue"]) == Decimal(order.price)
+    for row in [*charts["series"], charts["totals"], charts["previous_totals"]]:
+        assert row["cost"] is None
+        assert row["profit"] is None
+
+
+def test_support_sees_no_cost_on_orders_or_rentals(
+        user, support_user, auth, catalog, funded_wallet):
+    funded_wallet(user, "400.00")
+    client = auth(user)
+    order = _delivered_order(client)
+    rental = Rental.objects.get(reference=_rent(client).data["reference"])
+    support = auth(support_user, SUPPORT_PASSWORD)
+
+    listed = support.get("/api/v1/admin/orders/").data["results"][0]
+    detail = support.get(f"/api/v1/admin/orders/{order.reference}/").data
+    for row in (listed, detail):
+        assert row["reference"] == order.reference
+        assert row["price"] == str(order.price)
+        for field in ("provider_cost", "provider_currency", "exchange_rate", "price_breakdown"):
+            assert row[field] is None, field
+
+    by_user = support.get(f"/api/v1/admin/users/{user.id}/orders/").data[0]
+    assert by_user["provider_cost"] is None
+
+    rental_row = support.get(f"/api/v1/admin/rentals/{rental.reference}/").data
+    assert rental_row["price"] == str(rental.price)
+    for field in ("provider_cost", "provider_currency", "exchange_rate"):
+        assert rental_row[field] is None, field
+
+
+def test_admins_still_see_cost_and_profit(user, admin_user, auth, catalog, funded_wallet):
+    funded_wallet(user, "400.00")
+    client = auth(user)
+    order = _delivered_order(client)
+    rental = Rental.objects.get(reference=_rent(client).data["reference"])
+    staff = auth(admin_user, ADMIN_PASSWORD)
+
+    detail = staff.get(f"/api/v1/admin/orders/{order.reference}/").data
+    assert Decimal(detail["provider_cost"]) == Decimal(order.provider_cost)
+    assert detail["price_breakdown"]
+    assert Decimal(staff.get(f"/api/v1/admin/rentals/{rental.reference}/")
+                   .data["provider_cost"]) == Decimal(rental.provider_cost)
+    assert staff.get("/api/v1/admin/overview/").data["revenue"]["gross_margin"] is not None
+    assert staff.get("/api/v1/admin/charts/?days=7").data["totals"]["profit"] is not None
+
+
+# ---------------------------------------------------------------------------
 # A-04: popular services count earned revenue only
 # ---------------------------------------------------------------------------
 

@@ -41,7 +41,10 @@ function greeting(): string {
 }
 
 export default function AdminOverviewPage() {
-  const { user } = useAuth();
+  const { user, can } = useAuth();
+  // Provider cost and profit are PRICING_VIEW's; the API sends them as null
+  // to everyone else (SUPPORT), so their tiles and lines are left out.
+  const showCost = can("PRICING_VIEW");
   const [range, setRange] = React.useState<Range>("14");
 
   const {
@@ -152,12 +155,20 @@ export default function AdminOverviewPage() {
       <div className="grid grid-cols-1 gap-4 xl:grid-cols-3">
         <ChartCard
           className="xl:col-span-2"
-          title="Revenue and profit"
-          description="Earned on orders that delivered a code and on rented numbers, and what was left after provider cost."
+          title={showCost ? "Revenue and profit" : "Revenue"}
+          description={
+            showCost
+              ? "Earned on orders that delivered a code and on rented numbers, and what was left after provider cost."
+              : "Earned on orders that delivered a code and on rented numbers."
+          }
           legend={[
             { label: "Revenue", color: CHART_COLORS.brand },
-            { label: "Profit", color: CHART_COLORS.info },
-            { label: "Provider cost", color: CHART_COLORS.muted, dashed: true },
+            ...(showCost
+              ? [
+                  { label: "Profit", color: CHART_COLORS.info },
+                  { label: "Provider cost", color: CHART_COLORS.muted, dashed: true },
+                ]
+              : []),
           ]}
         >
           {charts ? (
@@ -172,19 +183,23 @@ export default function AdminOverviewPage() {
                   color: CHART_COLORS.brand,
                   area: true,
                 },
-                {
-                  key: "profit",
-                  label: "Profit",
-                  values: charts.series.map((day) => num(day.profit)),
-                  color: CHART_COLORS.info,
-                },
-                {
-                  key: "cost",
-                  label: "Provider cost",
-                  values: charts.series.map((day) => num(day.cost)),
-                  color: CHART_COLORS.muted,
-                  dashed: true,
-                },
+                ...(showCost
+                  ? [
+                      {
+                        key: "profit",
+                        label: "Profit",
+                        values: charts.series.map((day) => num(day.profit)),
+                        color: CHART_COLORS.info,
+                      },
+                      {
+                        key: "cost",
+                        label: "Provider cost",
+                        values: charts.series.map((day) => num(day.cost)),
+                        color: CHART_COLORS.muted,
+                        dashed: true,
+                      },
+                    ]
+                  : []),
               ]}
               formatValue={(value) => cedis(value)}
               height={260}
@@ -355,17 +370,21 @@ export default function AdminOverviewPage() {
                     num(overview.revenue.by_product.extensions.revenue),
                 )} from rentals`}
               />
-              <MetricTile
-                label="Gross margin"
-                value={cedis(overview.revenue.gross_margin)}
-                sublabel={`${overview.revenue.margin_percent}% after provider cost`}
-                tone={Number.parseFloat(overview.revenue.gross_margin) >= 0 ? "positive" : "negative"}
-              />
-              <MetricTile
-                label="Provider cost"
-                value={cedis(overview.revenue.provider_cost)}
-                sublabel="Converted at each sale's frozen rate"
-              />
+              {overview.revenue.gross_margin !== null ? (
+                <>
+                  <MetricTile
+                    label="Gross margin"
+                    value={cedis(overview.revenue.gross_margin)}
+                    sublabel={`${overview.revenue.margin_percent}% after provider cost`}
+                    tone={Number.parseFloat(overview.revenue.gross_margin) >= 0 ? "positive" : "negative"}
+                  />
+                  <MetricTile
+                    label="Provider cost"
+                    value={cedis(overview.revenue.provider_cost)}
+                    sublabel="Converted at each sale's frozen rate"
+                  />
+                </>
+              ) : null}
               <MetricTile
                 label="Refunded"
                 value={cedis(overview.refunds.total)}
@@ -514,15 +533,17 @@ function PeriodStats({ charts }: { charts: AdminCharts }) {
         spark={days.map((day) => num(day.revenue))}
         href="/admin/orders"
       />
-      <StatCard
-        label="Profit"
-        icon={<BoltIcon />}
-        value={cedis(now.profit)}
-        delta={<Delta current={num(now.profit)} previous={num(before.profit)} />}
-        footnote={margin === null ? "No revenue in this period" : `${margin}% margin after provider cost`}
-        spark={days.map((day) => num(day.profit))}
-        sparkColor={CHART_COLORS.info}
-      />
+      {now.profit !== null ? (
+        <StatCard
+          label="Profit"
+          icon={<BoltIcon />}
+          value={cedis(now.profit)}
+          delta={<Delta current={num(now.profit)} previous={num(before.profit)} />}
+          footnote={margin === null ? "No revenue in this period" : `${margin}% margin after provider cost`}
+          spark={days.map((day) => num(day.profit))}
+          sparkColor={CHART_COLORS.info}
+        />
+      ) : null}
       <StatCard
         label="Orders"
         icon={<ReceiptIcon />}

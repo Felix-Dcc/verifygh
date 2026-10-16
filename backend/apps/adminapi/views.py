@@ -58,7 +58,7 @@ from apps.audit.services import record_admin_action, resolve_flag
 from apps.catalog.models import Country, ProviderService, Service
 from apps.common.errors import Conflict, NotFound, ValidationFailed
 from apps.common.idempotency import generate
-from apps.common.permissions import HasPermissionCode, IsSupport
+from apps.common.permissions import HasPermissionCode, IsSupport, can_see_costs
 from apps.orders.models import Order, OrderStatus, Refund, RefundReason
 from apps.orders.services import cancel_order as cancel_order_service
 from apps.orders.services import issue_refund
@@ -137,6 +137,12 @@ class AdminOverviewView(AdminBase, APIView):
             if revenue
             else Decimal("0.00")
         )
+        # Provider cost and margin are PRICING_VIEW's to see (admins up), not
+        # every role that can open the dashboard: SUPPORT gets revenue only.
+        show_cost = can_see_costs(request.user)
+
+        def cost(value):
+            return str(Decimal(value).quantize(Decimal("0.01"))) if show_cost else None
 
         return Response(
             {
@@ -149,17 +155,16 @@ class AdminOverviewView(AdminBase, APIView):
                 "revenue": {
                     "total": str(Decimal(revenue).quantize(Decimal("0.01"))),
                     "today": str(Decimal(revenue_today).quantize(Decimal("0.01"))),
-                    "provider_cost": str(Decimal(provider_cost).quantize(Decimal("0.01"))),
-                    "gross_margin": str(gross_margin.quantize(Decimal("0.01"))),
-                    "margin_percent": str(margin_percent),
+                    "provider_cost": cost(provider_cost),
+                    "gross_margin": cost(gross_margin),
+                    "margin_percent": str(margin_percent) if show_cost else None,
                     "currency": "GHS",
                     # The same money split by what was sold, so a change in the
                     # headline can be traced to the part that moved.
                     "by_product": {
                         name: {
                             "revenue": str(Decimal(part["revenue"]).quantize(Decimal("0.01"))),
-                            "provider_cost": str(
-                                Decimal(part["cost"]).quantize(Decimal("0.01"))),
+                            "provider_cost": cost(part["cost"]),
                             "count": part["count"],
                             "today": str(Decimal(
                                 earned_today["parts"][name]["revenue"]
@@ -475,11 +480,18 @@ class AdminChartsView(AdminBase, APIView):
                 "failure_rate": round((failed_orders / total_orders * 100), 2)
                 if total_orders
                 else 0.0,
-                "series": current["series"],
-                "totals": current["totals"],
-                "previous_totals": previous["totals"],
+                "series": _without_costs(current["series"], request.user),
+                "totals": _without_costs([current["totals"]], request.user)[0],
+                "previous_totals": _without_costs([previous["totals"]], request.user)[0],
             }
         )
+
+
+def _without_costs(rows: list[dict], user) -> list[dict]:
+    """The rows, with provider cost and profit blanked unless `user` may see them."""
+    if can_see_costs(user):
+        return rows
+    return [{**row, "cost": None, "profit": None} for row in rows]
 
 
 def _refunds() -> dict:
@@ -771,7 +783,8 @@ class AdminUserViewSet(AdminBase, mixins.ListModelMixin, mixins.RetrieveModelMix
         queryset = Order.objects.select_related("service", "country", "provider").filter(
             user_id=pk
         ).order_by("-created_at")[:100]
-        return Response(AdminOrderSerializer(queryset, many=True).data)
+        return Response(AdminOrderSerializer(queryset, many=True,
+                                             context={"request": request}).data)
 
     @action(detail=True, methods=["get"])
     def transactions(self, request, pk=None):
@@ -880,7 +893,7 @@ class AdminOrderViewSet(AdminBase, mixins.ListModelMixin, mixins.RetrieveModelMi
             reason=serializer.validated_data["reason"],
             before=before, after={"status": order.status}, request=request,
         )
-        return Response(AdminOrderSerializer(order).data)
+        return Response(AdminOrderSerializer(order, context={"request": request}).data)
 
     @action(detail=True, methods=["post"])
     def refund(self, request, reference=None):
@@ -920,7 +933,7 @@ class AdminOrderViewSet(AdminBase, mixins.ListModelMixin, mixins.RetrieveModelMi
             after={"amount": str(amount), "refund_status": order.refund_status},
             request=request,
         )
-        return Response(AdminOrderSerializer(order).data)
+        return Response(AdminOrderSerializer(order, context={"request": request}).data)
 
 
 class AdminRefundViewSet(AdminBase, mixins.ListModelMixin, viewsets.GenericViewSet):
