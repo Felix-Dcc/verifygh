@@ -883,29 +883,49 @@ def _ghs(value) -> str:
 def cash_flow() -> dict:
     """Customer money, our money at providers, and what we actually earned - kept apart."""
     from apps.orders.models import ACTIVE_ORDER_STATUSES, Order
+    from apps.rentals.models import (
+        DELIVERED_RENTAL_STATUSES, ExtensionStatus, Rental, RentalExtension, RentalStatus,
+    )
     from apps.wallet.models import Wallet
 
     money = DecimalField(max_digits=18, decimal_places=6)
     wallets = Wallet.objects.aggregate(cash=Sum("balance"), promo=Sum("promo_balance"))
     cash = Decimal(wallets["cash"] or 0)
     promo = Decimal(wallets["promo"] or 0)
-    in_progress = Decimal(Order.objects.filter(status__in=ACTIVE_ORDER_STATUSES)
-                          .aggregate(total=Sum("price"))["total"] or 0)
+    # Taken from wallets but not yet delivered: orders, rentals and extensions
+    # still waiting on the provider. Each either lands as revenue or comes back.
+    in_progress = sum(
+        (Decimal(rows.aggregate(total=Sum("price"))["total"] or 0) for rows in (
+            Order.objects.filter(status__in=ACTIVE_ORDER_STATUSES),
+            Rental.objects.filter(status=RentalStatus.PENDING),
+            RentalExtension.objects.filter(status=ExtensionStatus.PENDING),
+        )),
+        ZERO,
+    )
 
-    def earned(queryset):
-        totals = queryset.aggregate(
-            revenue=Sum("price"),
-            cost=Sum(ExpressionWrapper(F("provider_cost") * F("exchange_rate"),
-                                       output_field=money)),
-        )
-        revenue = Decimal(totals["revenue"] or 0)
-        cost = Decimal(totals["cost"] or 0)
+    def earned(*querysets):
+        revenue = cost = ZERO
+        for queryset in querysets:
+            totals = queryset.aggregate(
+                revenue=Sum("price"),
+                cost=Sum(ExpressionWrapper(F("provider_cost") * F("exchange_rate"),
+                                           output_field=money)),
+            )
+            revenue += Decimal(totals["revenue"] or 0)
+            cost += Decimal(totals["cost"] or 0)
         return revenue, cost
 
-    delivered = Order.objects.filter(code_received_at__isnull=False)
+    # Everything sold and delivered, dated by when it was delivered: a code
+    # received, a rented number handed over, days added to a rental (an
+    # extension completes as it is bought, so its creation is its delivery).
+    orders = Order.objects.filter(code_received_at__isnull=False)
+    rentals = Rental.objects.filter(status__in=DELIVERED_RENTAL_STATUSES)
+    extensions = RentalExtension.objects.filter(status=ExtensionStatus.COMPLETED)
     since = timezone.now() - timedelta(days=30)
-    revenue_30, cost_30 = earned(delivered.filter(code_received_at__gte=since))
-    revenue_all, cost_all = earned(delivered)
+    revenue_30, cost_30 = earned(orders.filter(code_received_at__gte=since),
+                                 rentals.filter(activated_at__gte=since),
+                                 extensions.filter(created_at__gte=since))
+    revenue_all, cost_all = earned(orders, rentals, extensions)
 
     provider_ghs = ZERO
     needed_ghs = ZERO

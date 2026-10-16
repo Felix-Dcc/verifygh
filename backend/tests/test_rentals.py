@@ -612,3 +612,147 @@ def test_the_cancel_button_goes_once_a_message_closes_the_refund_window(
 
     assert len(detail["messages"]) == 1
     assert detail["can_cancel"] is False
+
+
+# ---------------------------------------------------------------------------
+# The admin dashboard counts rentals as revenue, not only orders
+# ---------------------------------------------------------------------------
+
+
+def test_the_dashboard_counts_rental_money_as_revenue(
+    user, admin_user, auth, catalog, funded_wallet, api
+):
+    """A rental is a sale; the headline figures must not leave it out."""
+    from decimal import Decimal
+
+    funded_wallet(user, "400.00")
+    reference = rent(auth(user)).data["reference"]
+    rental = Rental.objects.get(reference=reference)
+    cost = (Decimal(rental.provider_cost) * Decimal(rental.exchange_rate)).quantize(
+        Decimal("0.01"))
+
+    staff = auth(admin_user, "Correct-Horse-Battery-3")
+    revenue = staff.get("/api/v1/admin/overview/").data["revenue"]
+
+    assert Decimal(revenue["total"]) == WHATSAPP_30
+    assert Decimal(revenue["today"]) == WHATSAPP_30
+    assert Decimal(revenue["provider_cost"]) == cost
+    assert Decimal(revenue["gross_margin"]) == WHATSAPP_30 - cost
+    # ...and it is still clear which part of the business earned it.
+    by_product = revenue["by_product"]
+    assert Decimal(by_product["rentals"]["revenue"]) == WHATSAPP_30
+    assert by_product["rentals"]["count"] == 1
+    assert Decimal(by_product["orders"]["revenue"]) == 0
+
+
+def test_a_refunded_rental_is_never_counted_as_revenue(
+    user, admin_user, auth, catalog, funded_wallet
+):
+    from decimal import Decimal
+
+    funded_wallet(user, "400.00")
+    verification_mock.force_rental_mode("REFUSE")
+    response = rent(auth(user))
+    assert Rental.objects.get(reference=response.data["reference"]).status == RentalStatus.FAILED
+
+    revenue = auth(admin_user, "Correct-Horse-Battery-3").get(
+        "/api/v1/admin/overview/").data["revenue"]
+
+    assert Decimal(revenue["total"]) == 0
+    assert revenue["by_product"]["rentals"]["count"] == 0
+
+
+def test_an_extension_adds_to_revenue_once_it_is_made(
+    user, admin_user, auth, catalog, funded_wallet
+):
+    from decimal import Decimal
+
+    funded_wallet(user, "400.00")
+    client = auth(user)
+    reference = rent(client).data["reference"]
+    client.post(f"/api/v1/rentals/{reference}/extend/", {"days": 7}, format="json")
+    assert RentalExtension.objects.get().status == ExtensionStatus.COMPLETED
+
+    revenue = auth(admin_user, "Correct-Horse-Battery-3").get(
+        "/api/v1/admin/overview/").data["revenue"]
+
+    assert Decimal(revenue["total"]) == WHATSAPP_30 + WHATSAPP_7
+    assert Decimal(revenue["by_product"]["extensions"]["revenue"]) == WHATSAPP_7
+
+
+def test_the_revenue_chart_includes_rentals_but_counts_orders_separately(
+    user, admin_user, auth, catalog, funded_wallet
+):
+    from decimal import Decimal
+
+    funded_wallet(user, "400.00")
+    rent(auth(user))
+
+    charts = auth(admin_user, "Correct-Horse-Battery-3").get(
+        "/api/v1/admin/charts/?days=7").data
+
+    total = sum(Decimal(row["revenue"]) for row in charts["revenue"])
+    assert total == WHATSAPP_30
+    # The rental is revenue, but it is not an order.
+    assert sum(row["orders"] for row in charts["revenue"]) == 0
+
+
+def test_the_profit_trend_and_period_totals_include_rentals(
+    user, admin_user, auth, catalog, funded_wallet
+):
+    """The "Revenue and profit" chart and its KPI tiles, not just the headline."""
+    funded_wallet(user, "400.00")
+    client = auth(user)
+    reference = rent(client).data["reference"]
+    client.post(f"/api/v1/rentals/{reference}/extend/", {"days": 7}, format="json")
+    rental = Rental.objects.get(reference=reference)
+    extension = RentalExtension.objects.get()
+    cost = (Decimal(rental.provider_cost) * Decimal(rental.exchange_rate)
+            + Decimal(extension.provider_cost) * Decimal(extension.exchange_rate)
+            ).quantize(Decimal("0.01"))
+
+    charts = auth(admin_user, "Correct-Horse-Battery-3").get(
+        "/api/v1/admin/charts/?days=7").data
+
+    totals = charts["totals"]
+    assert Decimal(totals["revenue"]) == WHATSAPP_30 + WHATSAPP_7
+    assert Decimal(totals["cost"]) == cost
+    assert Decimal(totals["profit"]) == WHATSAPP_30 + WHATSAPP_7 - cost
+    today = charts["series"][-1]
+    assert Decimal(today["profit"]) == Decimal(totals["profit"])
+    # The order counts stay about orders.
+    assert totals["orders"] == 0
+    assert totals["completed"] == 0
+
+
+def test_a_refunded_rental_stays_out_of_the_profit_trend(
+    user, admin_user, auth, catalog, funded_wallet
+):
+    funded_wallet(user, "400.00")
+    verification_mock.force_rental_mode("REFUSE")
+    rent(auth(user))
+
+    totals = auth(admin_user, "Correct-Horse-Battery-3").get(
+        "/api/v1/admin/charts/?days=7").data["totals"]
+
+    assert Decimal(totals["revenue"]) == 0
+    assert Decimal(totals["profit"]) == 0
+
+
+def test_the_funding_view_counts_rental_earnings(user, catalog, funded_wallet, auth):
+    """Gross profit on the Funding page, and the cost share behind its shortfall."""
+    from apps.funding import services as funding
+
+    funded_wallet(user, "400.00")
+    rental = Rental.objects.get(reference=rent(auth(user)).data["reference"])
+    cost = (Decimal(rental.provider_cost) * Decimal(rental.exchange_rate)).quantize(
+        Decimal("0.01"))
+
+    flow = funding.cash_flow()
+
+    for period in ("earnings_30d", "earnings_all_time"):
+        assert Decimal(flow[period]["revenue"]) == WHATSAPP_30
+        assert Decimal(flow[period]["provider_cost"]) == cost
+        assert Decimal(flow[period]["gross_profit"]) == WHATSAPP_30 - cost
+    # Nothing is still waiting on the provider.
+    assert Decimal(flow["customer_funds"]["orders_in_progress"]) == 0

@@ -465,12 +465,18 @@ export type CatalogHealth = {
 export type AdminOverview = {
   users: { total: number; active_30d: number; new_today: number; suspended: number };
   revenue: {
+    /** Everything sold: verification orders, rentals and rental extensions. */
     total: string;
     today: string;
     provider_cost: string;
     gross_margin: string;
     margin_percent: string;
     currency: string;
+    /** The same money split by what was sold. */
+    by_product: Record<
+      "orders" | "rentals" | "extensions",
+      { revenue: string; provider_cost: string; count: number; today: string }
+    >;
   };
   orders: {
     total: number;

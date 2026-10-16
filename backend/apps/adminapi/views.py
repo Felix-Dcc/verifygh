@@ -72,6 +72,47 @@ logger = logging.getLogger("verifygh.admin")
 
 MONEY = DecimalField(max_digits=18, decimal_places=4)
 
+#: Provider cost in GHS, from the rate frozen on each row. Orders, rentals and
+#: rental extensions all carry `provider_cost` and `exchange_rate`.
+COST_IN_GHS = ExpressionWrapper(F("provider_cost") * F("exchange_rate"), output_field=MONEY)
+
+
+def _earning_rows(*window, **when):
+    """What the business actually earned from, as (queryset, ...) to be summed.
+
+    Three things are sold: verification orders, number rentals and extensions
+    of a rental. Only the ones the customer received count - a delivered code,
+    a number handed over, time actually added - so a refunded purchase never
+    shows as revenue. `window` (Q objects) and `when` filter each on
+    `created_at`, e.g. created_at__date=today.
+    """
+    from apps.rentals.models import DELIVERED_RENTAL_STATUSES, ExtensionStatus
+    from apps.rentals.models import Rental as RentalModel
+    from apps.rentals.models import RentalExtension as ExtensionModel
+
+    return (
+        Order.objects.filter(
+            *window, status__in=[OrderStatus.COMPLETED, OrderStatus.CODE_RECEIVED], **when),
+        RentalModel.objects.filter(*window, status__in=DELIVERED_RENTAL_STATUSES, **when),
+        ExtensionModel.objects.filter(*window, status=ExtensionStatus.COMPLETED, **when),
+    )
+
+
+def _earnings(**when) -> dict:
+    """Revenue and provider cost across everything sold, plus each part."""
+    orders, rentals, extensions = _earning_rows(**when)
+    parts = {}
+    revenue = cost = Decimal("0.00")
+    for name, rows in (("orders", orders), ("rentals", rentals), ("extensions", extensions)):
+        totals = rows.aggregate(revenue=Sum("price"), cost=Sum(COST_IN_GHS), count=Count("id"))
+        part_revenue = totals["revenue"] or Decimal("0.00")
+        part_cost = totals["cost"] or Decimal("0.00")
+        parts[name] = {"revenue": part_revenue, "cost": part_cost,
+                       "count": totals["count"] or 0}
+        revenue += Decimal(part_revenue)
+        cost += Decimal(part_cost)
+    return {"revenue": Decimal(revenue), "cost": Decimal(cost), "parts": parts}
+
 
 class AdminBase:
     permission_classes = [IsAuthenticated, IsSupport, HasPermissionCode]
@@ -94,22 +135,12 @@ class AdminOverviewView(AdminBase, APIView):
         orders = Order.objects.all()
         payments = Payment.objects.filter(status=PaymentStatus.SUCCESS)
 
-        revenue = orders.filter(
-            status__in=[OrderStatus.COMPLETED, OrderStatus.CODE_RECEIVED]
-        ).aggregate(total=Sum("price"))["total"] or Decimal("0.00")
-
-        revenue_today = orders.filter(
-            status__in=[OrderStatus.COMPLETED, OrderStatus.CODE_RECEIVED],
-            created_at__date=today,
-        ).aggregate(total=Sum("price"))["total"] or Decimal("0.00")
-
-        # Provider cost in GHS, using the rate frozen on each order.
-        cost_expression = ExpressionWrapper(
-            F("provider_cost") * F("exchange_rate"), output_field=MONEY
-        )
-        provider_cost = orders.filter(
-            status__in=[OrderStatus.COMPLETED, OrderStatus.CODE_RECEIVED]
-        ).aggregate(total=Sum(cost_expression))["total"] or Decimal("0.0000")
+        # Everything sold: verification orders, number rentals and extensions.
+        earned = _earnings()
+        earned_today = _earnings(created_at__date=today)
+        revenue = earned["revenue"]
+        revenue_today = earned_today["revenue"]
+        provider_cost = earned["cost"]
 
         refunds = Refund.objects.filter(status="COMPLETED").aggregate(
             total=Sum("amount"), count=Count("id")
@@ -132,12 +163,26 @@ class AdminOverviewView(AdminBase, APIView):
                     "suspended": User.objects.filter(is_suspended=True).count(),
                 },
                 "revenue": {
-                    "total": str(revenue),
-                    "today": str(revenue_today),
+                    "total": str(Decimal(revenue).quantize(Decimal("0.01"))),
+                    "today": str(Decimal(revenue_today).quantize(Decimal("0.01"))),
                     "provider_cost": str(Decimal(provider_cost).quantize(Decimal("0.01"))),
                     "gross_margin": str(gross_margin.quantize(Decimal("0.01"))),
                     "margin_percent": str(margin_percent),
                     "currency": "GHS",
+                    # The same money split by what was sold, so a change in the
+                    # headline can be traced to the part that moved.
+                    "by_product": {
+                        name: {
+                            "revenue": str(Decimal(part["revenue"]).quantize(Decimal("0.01"))),
+                            "provider_cost": str(
+                                Decimal(part["cost"]).quantize(Decimal("0.01"))),
+                            "count": part["count"],
+                            "today": str(Decimal(
+                                earned_today["parts"][name]["revenue"]
+                            ).quantize(Decimal("0.01"))),
+                        }
+                        for name, part in earned["parts"].items()
+                    },
                 },
                 "orders": {
                     "total": orders.count(),
@@ -206,18 +251,23 @@ def _period(start, end) -> dict:
     lower = timezone.make_aware(datetime.combine(start, time.min), tz)
     upper = timezone.make_aware(datetime.combine(end, time.min), tz)
     window = Q(created_at__gte=lower, created_at__lt=upper)
-    cost = ExpressionWrapper(F("provider_cost") * F("exchange_rate"), output_field=MONEY)
     earning = Q(status__in=EARNING)
 
+    # Order counts are orders only; the donut and success rate are about codes.
     orders = _by_day(
         Order.objects.filter(window),
         total=Count("id"),
         completed=Count("id", filter=earning),
         refunded=Count("id", filter=Q(status=OrderStatus.REFUNDED)),
         failed=Count("id", filter=Q(status__in=UNSUCCESSFUL)),
-        revenue=Sum("price", filter=earning),
-        cost=Sum(cost, filter=earning),
     )
+    # Money is everything sold: orders, rentals and extensions, by day.
+    earned: dict = {}
+    for rows in _earning_rows(window):
+        for day, row in _by_day(rows, revenue=Sum("price"), cost=Sum(COST_IN_GHS)).items():
+            entry = earned.setdefault(day, {"revenue": Decimal("0"), "cost": Decimal("0")})
+            entry["revenue"] += Decimal(row["revenue"] or 0)
+            entry["cost"] += Decimal(row["cost"] or 0)
     deposits = _by_day(
         Payment.objects.filter(window, status=PaymentStatus.SUCCESS),
         amount=Sum("amount"), count=Count("id"),
@@ -231,7 +281,8 @@ def _period(start, end) -> dict:
     day = start
     while day < end:
         o, d, s = orders.get(day, {}), deposits.get(day, {}), signups.get(day, {})
-        revenue, spent = _money(o.get("revenue")), _money(o.get("cost"))
+        e = earned.get(day, {})
+        revenue, spent = _money(e.get("revenue")), _money(e.get("cost"))
         total = o.get("total", 0)
         series.append({
             "date": str(day),
@@ -289,16 +340,21 @@ class AdminChartsView(AdminBase, APIView):
         current = _period(end - timedelta(days=days), end)
         previous = _period(end - timedelta(days=2 * days), end - timedelta(days=days))
 
-        revenue_series = list(
-            Order.objects.filter(
-                created_at__gte=since,
-                status__in=[OrderStatus.COMPLETED, OrderStatus.CODE_RECEIVED],
-            )
-            .annotate(day=TruncDate("created_at"))
-            .values("day")
-            .annotate(revenue=Sum("price"), orders=Count("id"))
-            .order_by("day")
-        )
+        # One line for the whole business: orders, rentals and extensions, by
+        # day. `orders` stays the order count, so the chart's "orders" label
+        # still means orders and is not inflated by rentals.
+        by_day: dict = {}
+        for rows in _earning_rows(created_at__gte=since):
+            counts_orders = rows.model is Order
+            for row in (rows.annotate(day=TruncDate("created_at")).values("day")
+                        .annotate(revenue=Sum("price"), rows=Count("id")).order_by("day")):
+                entry = by_day.setdefault(row["day"], {"day": row["day"],
+                                                       "revenue": Decimal("0.00"),
+                                                       "orders": 0})
+                entry["revenue"] += Decimal(row["revenue"] or 0)
+                if counts_orders:
+                    entry["orders"] += row["rows"]
+        revenue_series = [by_day[day] for day in sorted(by_day)]
 
         orders_series = list(
             Order.objects.filter(created_at__gte=since)

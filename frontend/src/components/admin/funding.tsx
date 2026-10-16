@@ -603,7 +603,7 @@ export function CashFlowCard({ flow }: { flow: CashFlow }) {
           <div className="metric-group grid-cols-2 lg:grid-cols-4">
             <MetricTile label="Wallet cash" value={cedis(flow.customer_funds.wallet_cash)} sublabel="Deposits not yet spent" />
             <MetricTile label="Promotional credit" value={cedis(flow.customer_funds.wallet_promotional)} sublabel="Spendable, not withdrawable" />
-            <MetricTile label="Orders in progress" value={cedis(flow.customer_funds.orders_in_progress)} sublabel="Charged, refundable until delivered" />
+            <MetricTile label="In progress" value={cedis(flow.customer_funds.orders_in_progress)} sublabel="Orders and rentals charged, refundable until delivered" />
             <MetricTile label="Total liability" value={cedis(liabilities)} sublabel={flow.customer_funds.note} />
           </div>
         </section>
@@ -644,7 +644,7 @@ export function CashFlowCard({ flow }: { flow: CashFlow }) {
         </section>
 
         <section className="space-y-2">
-          <h3 className="text-label text-ink">What we earned (delivered orders)</h3>
+          <h3 className="text-label text-ink">What we earned (delivered orders and rentals)</h3>
           <div className="metric-group grid-cols-2 lg:grid-cols-4">
             <MetricTile label="Revenue, 30 days" value={cedis(flow.earnings_30d.revenue)} />
             <MetricTile label="Provider cost, 30 days" value={cedis(flow.earnings_30d.provider_cost)} />

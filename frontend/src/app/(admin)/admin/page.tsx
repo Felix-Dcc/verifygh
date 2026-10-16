@@ -153,7 +153,7 @@ export default function AdminOverviewPage() {
         <ChartCard
           className="xl:col-span-2"
           title="Revenue and profit"
-          description="Earned on orders that delivered a code, and what was left after provider cost."
+          description="Earned on orders that delivered a code and on rented numbers, and what was left after provider cost."
           legend={[
             { label: "Revenue", color: CHART_COLORS.brand },
             { label: "Profit", color: CHART_COLORS.info },
@@ -337,7 +337,7 @@ export default function AdminOverviewPage() {
         </ChartCard>
       </div>
 
-      <Section title="All time" description="Since launch, straight from orders, refunds and payments.">
+      <Section title="All time" description="Since launch, straight from orders, rentals, refunds and payments.">
         {overviewError && !overview ? (
           <Card>
             <LoadError what="the overview figures" onRetry={() => retryOverview()} />
@@ -350,7 +350,10 @@ export default function AdminOverviewPage() {
               <MetricTile
                 label="Revenue"
                 value={cedis(overview.revenue.total)}
-                sublabel={`${cedis(overview.revenue.today)} today`}
+                sublabel={`${cedis(overview.revenue.today)} today · ${cedis(
+                  num(overview.revenue.by_product.rentals.revenue) +
+                    num(overview.revenue.by_product.extensions.revenue),
+                )} from rentals`}
               />
               <MetricTile
                 label="Gross margin"
@@ -361,7 +364,7 @@ export default function AdminOverviewPage() {
               <MetricTile
                 label="Provider cost"
                 value={cedis(overview.revenue.provider_cost)}
-                sublabel="Converted at the order's frozen rate"
+                sublabel="Converted at each sale's frozen rate"
               />
               <MetricTile
                 label="Refunded"
