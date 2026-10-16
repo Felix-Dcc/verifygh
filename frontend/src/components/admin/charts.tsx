@@ -64,7 +64,7 @@ function compact(value: number): string {
 }
 
 /** The width of an element, kept current. Charts draw at real pixels. */
-function useWidth<T extends HTMLElement>(): [React.RefObject<T>, number] {
+function useWidth<T extends HTMLElement>(): [React.RefObject<T | null>, number] {
   const ref = React.useRef<T>(null);
   const [width, setWidth] = React.useState(0);
   React.useLayoutEffect(() => {
