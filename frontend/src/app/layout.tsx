@@ -32,7 +32,7 @@ const mono = IBM_Plex_Mono({
 /**
  * Every page renders per request, never at build time.
  *
- * The Content-Security-Policy (src/middleware.ts) allows scripts only with a
+ * The Content-Security-Policy (src/proxy.ts) allows scripts only with a
  * nonce that is fresh for each request. A page prerendered at build time has
  * its HTML frozen before any request exists, so its scripts carry no nonce and
  * the browser blocks all of them - the app loads but never hydrates. Development
@@ -93,10 +93,10 @@ export const viewport: Viewport = {
   ],
 };
 
-export default function RootLayout({ children }: { children: React.ReactNode }) {
+export default async function RootLayout({ children }: { children: React.ReactNode }) {
   // Reading the request headers is what ties rendering to the request. Next
   // picks the nonce up from the CSP header and stamps it on its own scripts.
-  const nonce = headers().get("x-nonce") ?? undefined;
+  const nonce = (await headers()).get("x-nonce") ?? undefined;
 
   return (
     // The head script adds "dark" before React hydrates, so the server's

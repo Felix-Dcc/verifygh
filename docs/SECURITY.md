@@ -247,7 +247,7 @@ used to go around Cloudflare. Rate limits key on the same resolved IP.
 
 ### Content-Security-Policy
 
-**Frontend** (`frontend/src/middleware.ts`) — a fresh nonce per request:
+**Frontend** (`frontend/src/proxy.ts`) — a fresh nonce per request:
 
 ```
 script-src 'self' 'nonce-<per request>' 'strict-dynamic'

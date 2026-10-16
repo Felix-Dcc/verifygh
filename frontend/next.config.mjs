@@ -1,5 +1,11 @@
+import path from "node:path";
+import { fileURLToPath } from "node:url";
+
 /** @type {import('next').NextConfig} */
 const nextConfig = {
+  // The repository root has its own package-lock.json (the Railway SDK), which
+  // Next 16 would otherwise take for the workspace root.
+  turbopack: { root: path.dirname(fileURLToPath(import.meta.url)) },
   reactStrictMode: true,
   poweredByHeader: false,
   async headers() {

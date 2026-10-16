@@ -303,7 +303,7 @@ export default defineRailway(() => {
       NEXT_PUBLIC_API_URL: `https://${API_DOMAIN}/api/v1`,
       NEXT_PUBLIC_BRAND_NAME: "VerifyGH",
       // Where the Railway-generated hostname redirects to; signing in cannot
-      // work on that hostname (see frontend/src/middleware.ts).
+      // work on that hostname (see frontend/src/proxy.ts).
       NEXT_PUBLIC_SITE_ORIGIN: `https://${WEB_DOMAIN}`,
       // Server-side only (read by middleware, never bundled for the browser):
       // the same origin lock as the API. See docs/CLOUDFLARE.md.
