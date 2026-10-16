@@ -754,6 +754,8 @@ export type AdminOrder = {
   exchange_rate: string | null;
   status: OrderStatus;
   refund_status: string;
+  /** Everything given back for this order, whatever its status. */
+  refunded_amount: string;
   failure_reason: string;
   has_code: boolean;
   expires_at: string | null;

@@ -7,7 +7,7 @@ handed over, time actually added - and from that, money given back:
 * A refund on a delivered order (staff goodwill on a CODE_RECEIVED order, or an
   upheld number-issue report on a COMPLETED one) leaves the order's status where
   it was, so counting `price` alone kept the refunded cedis in revenue. Revenue
-  is the price less any completed refund.
+  is the price less `Order.refunded_amount`.
 * Provider cost stays - we still paid it - unless the provider refunded us for
   that verification (`provider_refund_accepted`).
 
@@ -32,11 +32,7 @@ EARNING = [OrderStatus.COMPLETED, OrderStatus.CODE_RECEIVED]
 
 _REFUNDED = Q(refund__status=RefundStatus.COMPLETED)
 
-_ORDER_REVENUE = ExpressionWrapper(
-    F("price") - Case(When(_REFUNDED, then=F("refund__amount")),
-                      default=Value(0), output_field=MONEY),
-    output_field=MONEY,
-)
+_ORDER_REVENUE = ExpressionWrapper(F("price") - F("refunded_amount"), output_field=MONEY)
 _ORDER_COST = ExpressionWrapper(
     COST_IN_GHS - Case(When(_REFUNDED & Q(refund__provider_refund_accepted=True),
                             then=COST_IN_GHS),

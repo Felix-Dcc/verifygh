@@ -1272,7 +1272,9 @@ def issue_refund(order: Order, *, reason: str, amount=None, actor=None, note: st
         logger.info("refund_declined_service_rendered", extra={"order": order.reference})
         return order
 
-    refund_amount = quantize(amount if amount is not None else order.price)
+    # Never more than was paid; the database refuses it too (order_refund_within_price).
+    refund_amount = min(quantize(amount if amount is not None else order.price),
+                        quantize(order.price))
     if refund_amount <= 0:
         return order
 
@@ -1330,7 +1332,8 @@ def issue_refund(order: Order, *, reason: str, amount=None, actor=None, note: st
 
             # The order's final status becomes REFUNDED, but the reason it got
             # there stays readable in failure_reason and in the event timeline.
-            order_updates = {"refund_status": RefundStatus.COMPLETED}
+            order_updates = {"refund_status": RefundStatus.COMPLETED,
+                             "refunded_amount": refund_amount}
             if OrderStatus.REFUNDED in ALLOWED_TRANSITIONS.get(order.status, set()):
                 order_updates["status"] = OrderStatus.REFUNDED
             Order.objects.filter(pk=order.pk).update(**order_updates)
