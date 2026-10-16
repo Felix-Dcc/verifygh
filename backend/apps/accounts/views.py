@@ -10,6 +10,7 @@ from django.http import HttpResponseRedirect
 from django.urls import reverse
 from django.utils import timezone
 from rest_framework import status
+from rest_framework.parsers import JSONParser
 from rest_framework.permissions import AllowAny, IsAuthenticated
 from rest_framework.response import Response
 from rest_framework.views import APIView
@@ -80,12 +81,21 @@ def _auth_response(user: User, status_code: int = status.HTTP_200_OK, *,
     return response
 
 
+#: For the views that sign a browser in. An HTML form on another site can post
+#: a urlencoded or multipart body with no CORS preflight, and these views need
+#: no session - so without this, another site could sign a visitor into the
+#: attacker's account (login CSRF) and watch them top it up. A JSON body cannot
+#: be sent cross-site without a preflight, which CORS refuses.
+JSON_ONLY = [JSONParser]
+
+
 class RegisterView(APIView):
     permission_classes = [AllowAny]
     # Authenticates from the request body, not from the session. Ignoring the
     # access cookie keeps the CSRF gate out of a flow it has no part in.
     authentication_classes: list = []
     throttle_classes = [RegisterThrottle]
+    parser_classes = JSON_ONLY
 
     def post(self, request):
         # Before anything else: the form's own errors ("an account with this
@@ -139,6 +149,7 @@ class LoginView(APIView):
     # Per-(IP, email) stops guessing one account's password; per-IP stops one
     # address trying a leaked credential list against thousands of accounts.
     throttle_classes = [LoginIPThrottle, LoginThrottle]
+    parser_classes = JSON_ONLY
 
     def post(self, request):
         # Before any password is tried, so a bot's guesses neither reach the

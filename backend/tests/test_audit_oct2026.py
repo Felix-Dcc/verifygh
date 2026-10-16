@@ -10,6 +10,7 @@ A-05  sign-in accepted cross-site form posts (login CSRF)
 from __future__ import annotations
 
 from decimal import Decimal
+from urllib.parse import urlencode
 
 import pytest
 
@@ -253,3 +254,29 @@ def test_popular_services_revenue_leaves_out_failed_orders(
     instagram = next(row for row in charts["popular_services"] if row["slug"] == "instagram")
     assert instagram["orders"] == 2
     assert Decimal(instagram["revenue"]) == Decimal(delivered.price)
+
+
+# ---------------------------------------------------------------------------
+# A-05: sign-in endpoints take JSON only
+# ---------------------------------------------------------------------------
+
+
+@pytest.mark.parametrize("url", ["/api/v1/auth/login/", "/api/v1/auth/register/"])
+@pytest.mark.parametrize("content_type", ["application/x-www-form-urlencoded",
+                                          "multipart/form-data; boundary=x", "text/plain"])
+def test_sign_in_endpoints_refuse_a_cross_site_form_post(api, user, url, content_type):
+    """An HTML form on another site can post these bodies without a CORS
+    preflight; JSON cannot be sent cross-site without one. Refusing them stops
+    another site signing a visitor into the attacker's account."""
+    body = urlencode({"email": user.email, "password": "Correct-Horse-Battery-1",
+                      "accepted_terms": "true"})
+    response = api.post(url, body, content_type=content_type)
+    assert response.status_code == 415
+    assert "vgh_access" not in response.cookies
+
+
+def test_sign_in_still_works_with_json(api, user):
+    response = api.post("/api/v1/auth/login/",
+                        {"email": user.email, "password": "Correct-Horse-Battery-1"},
+                        format="json")
+    assert response.status_code == 200
