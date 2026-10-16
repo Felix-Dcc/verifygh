@@ -60,6 +60,19 @@ def get_or_create_wallet(user) -> Wallet:
     return wallet
 
 
+def lock_wallet(wallet: Wallet) -> Wallet:
+    """Take the wallet's row lock for the rest of the caller's transaction.
+
+    Per-user limits (orders in progress, daily spend, open rentals, pending
+    top-ups) are counts over other rows, which no constraint can enforce.
+    Checked outside a lock, two simultaneous requests both passed and both
+    went through. Every money path for a user already locks this row, so
+    taking it first and re-checking the limit after makes the same user's
+    requests queue - and the limit exact - without slowing anyone else.
+    """
+    return _lock(wallet.pk)
+
+
 def _lock(wallet_id) -> Wallet:
     """Lock the wallet row where the backend supports it.
 

@@ -39,7 +39,7 @@ from apps.payments.models import (
     PaymentWebhookEvent,
 )
 from apps.payments.registry import get_payment_provider
-from apps.wallet.services import credit_deposit, get_or_create_wallet
+from apps.wallet.services import credit_deposit, get_or_create_wallet, lock_wallet
 
 logger = logging.getLogger("verifygh.payments")
 
@@ -161,27 +161,38 @@ def initiate_deposit(*, user, amount, phone: str, network: str, request=None,
     reference = payment_reference()
     ttl_minutes = settings.VERIFYGH["PAYMENT_TTL_MINUTES"]
 
-    payment = Payment.objects.create(
-        user=user,
-        reference=reference,
-        provider=provider.key,
-        amount=amount,
-        currency="GHS",
-        phone=phone,
-        network=network,
-        status=PaymentStatus.PENDING,
-        expires_at=timezone.now() + timedelta(minutes=ttl_minutes),
-        ip_address=getattr(request, "client_ip", None) or None,
-        metadata={
-            "user_agent": (request.META.get("HTTP_USER_AGENT", "")[:200] if request else ""),
-            # How the network was decided, and what the prefix alone would have
-            # said. Previously the prefix silently replaced the customer's choice
-            # and left no trace of it, so a ported number that failed looked
-            # identical to one the customer had chosen correctly.
-            "network_source": network_source or "unknown",
-            "prefix_network": detected_network,
-        },
-    )
+    with transaction.atomic():
+        # The limits again under the wallet lock: deposits started together
+        # each passed the checks above and all got through (A-12).
+        locked = lock_wallet(wallet)
+        if _pending_deposit_count(user) >= MAX_PENDING_DEPOSITS:
+            raise _too_many_pending()
+        if locked.balance + amount > balance_cap:
+            raise LimitExceeded(
+                f"That would take your balance above the {format_ghs(balance_cap)} limit.",
+                code="WALLET_CAP_EXCEEDED",
+            )
+        payment = Payment.objects.create(
+            user=user,
+            reference=reference,
+            provider=provider.key,
+            amount=amount,
+            currency="GHS",
+            phone=phone,
+            network=network,
+            status=PaymentStatus.PENDING,
+            expires_at=timezone.now() + timedelta(minutes=ttl_minutes),
+            ip_address=getattr(request, "client_ip", None) or None,
+            metadata={
+                "user_agent": (request.META.get("HTTP_USER_AGENT", "")[:200] if request else ""),
+                # How the network was decided, and what the prefix alone would have
+                # said. Previously the prefix silently replaced the customer's choice
+                # and left no trace of it, so a ported number that failed looked
+                # identical to one the customer had chosen correctly.
+                "network_source": network_source or "unknown",
+                "prefix_network": detected_network,
+            },
+        )
 
     try:
         charge = provider.initiate_charge(
@@ -449,26 +460,38 @@ def _open_checkout(user, provider, amount) -> Payment | None:
     return candidate
 
 
-def _check_pending_deposits(user) -> None:
-    """Stop a user stacking up prompts they never approve."""
+#: How many unfinished deposits one user may have in 15 minutes.
+MAX_PENDING_DEPOSITS = 3
+
+
+def _pending_deposit_count(user) -> int:
     # All the unfinished states. Counting only the original two let a customer
     # stack up any number of payments stuck waiting for a code.
-    pending = Payment.objects.filter(
+    return Payment.objects.filter(
         user=user,
         status__in=AWAITING_PAYMENT_STATUSES,
         created_at__gte=timezone.now() - timedelta(minutes=15),
     ).count()
-    if pending >= 3:
+
+
+def _too_many_pending() -> LimitExceeded:
+    return LimitExceeded(
+        "You have unfinished payments. Complete or cancel them before starting another.",
+        code="TOO_MANY_PENDING_DEPOSITS",
+    )
+
+
+def _check_pending_deposits(user) -> None:
+    """Stop a user stacking up prompts they never approve."""
+    pending = _pending_deposit_count(user)
+    if pending >= MAX_PENDING_DEPOSITS:
         flag(
             user=user,
             kind=SuspiciousActivity.Kind.DEPOSIT_ANOMALY,
             level=SuspicionLevel.LOW,
             description=f"{pending} deposits left pending in 15 minutes.",
         )
-        raise LimitExceeded(
-            "You have unfinished payments. Complete or cancel them before starting another.",
-            code="TOO_MANY_PENDING_DEPOSITS",
-        )
+        raise _too_many_pending()
 
 
 # ---------------------------------------------------------------------------

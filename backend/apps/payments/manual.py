@@ -149,7 +149,27 @@ def start(*, user, amount, request=None) -> Payment:
     if not minimum <= amount <= maximum:
         raise ValidationFailed(
             f"Manual top-ups are between {format_ghs(minimum)} and {format_ghs(maximum)}.")
+    from apps.wallet.services import lock_wallet
+
     wallet = get_or_create_wallet(user)
+    _check_manual_limits(user, wallet, amount)
+    with transaction.atomic():
+        # Again under the wallet lock, so requests sent together cannot all
+        # slip past the open-request and daily limits (A-12).
+        _check_manual_limits(user, lock_wallet(wallet), amount)
+        payment = Payment.objects.create(
+            user=user, reference=payment_reference(), provider=KEY, amount=amount,
+            currency="GHS", phone="", network=MomoNetwork.AT, status=PaymentStatus.PENDING,
+            expires_at=timezone.now() + REQUEST_TTL,
+            ip_address=getattr(request, "client_ip", None) or None,
+            metadata={"manual": True, "claimed_amount": str(amount)},
+        )
+    logger.info("manual_deposit_started", extra={"reference": payment.reference,
+                                                 "amount": str(amount)})
+    return payment
+
+
+def _check_manual_limits(user, wallet, amount) -> None:
     if wallet.balance + amount > quantize(_cfg("MAX_WALLET_BALANCE")):
         raise LimitExceeded("That would take your balance above the wallet limit.",
                             code="WALLET_CAP_EXCEEDED")
@@ -164,17 +184,6 @@ def start(*, user, amount, request=None) -> Payment:
         raise LimitExceeded(
             f"Manual top-ups are limited to {format_ghs(_cfg('MANUAL_DEPOSIT_DAILY_LIMIT'))} "
             "a day.", code="DAILY_TOPUP_LIMIT")
-
-    payment = Payment.objects.create(
-        user=user, reference=payment_reference(), provider=KEY, amount=amount, currency="GHS",
-        phone="", network=MomoNetwork.AT, status=PaymentStatus.PENDING,
-        expires_at=timezone.now() + REQUEST_TTL,
-        ip_address=getattr(request, "client_ip", None) or None,
-        metadata={"manual": True, "claimed_amount": str(amount)},
-    )
-    logger.info("manual_deposit_started", extra={"reference": payment.reference,
-                                                 "amount": str(amount)})
-    return payment
 
 
 def _evidence(files) -> list[tuple[bytes, str]]:
