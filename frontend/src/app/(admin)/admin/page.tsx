@@ -86,8 +86,8 @@ export default function AdminOverviewPage() {
         {overview ? (
           <dl className="relative mt-6 grid grid-cols-2 gap-x-6 gap-y-4 border-t border-white/10 pt-5 sm:grid-cols-4">
             <HeroFigure label="Revenue today" value={cedis(overview.revenue.today)} />
-            <HeroFigure label="Orders today" value={String(overview.orders.today)} />
-            <HeroFigure label="Live orders" value={String(overview.orders.active)} />
+            <HeroFigure label="Orders today" value={String(overview.sales.today)} />
+            <HeroFigure label="Live orders" value={String(overview.sales.active)} />
             <HeroFigure label="New users today" value={String(overview.users.new_today)} />
           </dl>
         ) : (
@@ -194,7 +194,7 @@ export default function AdminOverviewPage() {
           )}
         </ChartCard>
 
-        <ChartCard title="Order outcomes" description={`Every order placed in the last ${range} days.`}>
+        <ChartCard title="Order outcomes" description={`Every order and rental placed in the last ${range} days.`}>
           {charts ? (
             <Donut
               label="Order outcomes"
@@ -222,7 +222,7 @@ export default function AdminOverviewPage() {
         <ChartCard
           className="xl:col-span-2"
           title="Orders by day"
-          description="How each day's orders ended."
+          description="How each day's orders and rentals ended."
           legend={[
             { label: "Delivered", color: CHART_COLORS.brand },
             { label: "Refunded", color: CHART_COLORS.info },
@@ -383,13 +383,15 @@ export default function AdminOverviewPage() {
               />
               <MetricTile
                 label="Orders"
-                value={overview.orders.total}
-                sublabel={`${overview.orders.successful} successful, ${overview.orders.failed} failed`}
+                value={overview.sales.total}
+                sublabel={`${overview.sales.successful} successful, ${overview.sales.failed} failed · ${
+                  overview.sales.rentals.total
+                } ${overview.sales.rentals.total === 1 ? "rental" : "rentals"}`}
                 href="/admin/orders"
               />
               <MetricTile
                 label="Active orders"
-                value={overview.orders.active}
+                value={overview.sales.active}
                 sublabel={`${overview.orders.code_received} awaiting completion`}
                 href="/admin/orders"
               />
@@ -526,7 +528,9 @@ function PeriodStats({ charts }: { charts: AdminCharts }) {
         icon={<ReceiptIcon />}
         value={now.orders}
         delta={<Delta current={now.orders} previous={before.orders} />}
-        footnote={`${now.completed} delivered, ${now.refunded} refunded, ${now.failed} failed`}
+        footnote={`${now.completed} delivered, ${now.refunded} refunded, ${now.failed} failed${
+          now.rentals ? ` · ${now.rentals} ${now.rentals === 1 ? "rental" : "rentals"}` : ""
+        }`}
         spark={days.map((day) => day.orders)}
         sparkColor={CHART_COLORS.warn}
         href="/admin/orders"

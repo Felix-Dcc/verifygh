@@ -478,6 +478,7 @@ export type AdminOverview = {
       { revenue: string; provider_cost: string; count: number; today: string }
     >;
   };
+  /** Verification orders only - what the Orders page lists. */
   orders: {
     total: number;
     today: number;
@@ -485,6 +486,15 @@ export type AdminOverview = {
     code_received: number;
     failed: number;
     active: number;
+  };
+  /** Everything customers bought: verification orders plus number rentals. */
+  sales: {
+    total: number;
+    today: number;
+    successful: number;
+    failed: number;
+    active: number;
+    rentals: { total: number; today: number; pending: number; live_numbers: number };
   };
   payments: { momo_total: string; momo_today: string; count: number; failed: number };
   refunds: { total: string; count: number };
@@ -510,7 +520,10 @@ export type AdminChartDay = {
   revenue: string;
   cost: string;
   profit: string;
+  /** Orders placed, verification orders and rentals together. */
   orders: number;
+  /** How many of `orders` were rentals. */
+  rentals: number;
   completed: number;
   refunded: number;
   failed: number;
@@ -525,7 +538,10 @@ export type AdminChartTotals = {
   revenue: string;
   cost: string;
   profit: string;
+  /** Orders placed, verification orders and rentals together. */
   orders: number;
+  /** How many of `orders` were rentals. */
+  rentals: number;
   completed: number;
   refunded: number;
   failed: number;

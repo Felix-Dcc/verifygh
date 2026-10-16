@@ -680,21 +680,23 @@ def test_an_extension_adds_to_revenue_once_it_is_made(
     assert Decimal(revenue["by_product"]["extensions"]["revenue"]) == WHATSAPP_7
 
 
-def test_the_revenue_chart_includes_rentals_but_counts_orders_separately(
+def test_the_revenue_chart_counts_a_rental_as_an_order_but_not_its_extension(
     user, admin_user, auth, catalog, funded_wallet
 ):
-    from decimal import Decimal
-
     funded_wallet(user, "400.00")
-    rent(auth(user))
+    client = auth(user)
+    reference = rent(client).data["reference"]
+    client.post(f"/api/v1/rentals/{reference}/extend/", {"days": 7}, format="json")
 
     charts = auth(admin_user, "Correct-Horse-Battery-3").get(
         "/api/v1/admin/charts/?days=7").data
 
     total = sum(Decimal(row["revenue"]) for row in charts["revenue"])
-    assert total == WHATSAPP_30
-    # The rental is revenue, but it is not an order.
-    assert sum(row["orders"] for row in charts["revenue"]) == 0
+    assert total == WHATSAPP_30 + WHATSAPP_7
+    # One rental is one order; the extension adds money, not another order.
+    assert sum(row["orders"] for row in charts["revenue"]) == 1
+    assert sum(row["total"] for row in charts["orders"]) == 1
+    assert sum(row["successful"] for row in charts["orders"]) == 1
 
 
 def test_the_profit_trend_and_period_totals_include_rentals(
@@ -720,9 +722,12 @@ def test_the_profit_trend_and_period_totals_include_rentals(
     assert Decimal(totals["profit"]) == WHATSAPP_30 + WHATSAPP_7 - cost
     today = charts["series"][-1]
     assert Decimal(today["profit"]) == Decimal(totals["profit"])
-    # The order counts stay about orders.
-    assert totals["orders"] == 0
-    assert totals["completed"] == 0
+    # The rental is one order placed, and delivered; the extension is not.
+    assert totals["orders"] == 1
+    assert totals["rentals"] == 1
+    assert totals["completed"] == 1
+    assert today["orders"] == 1
+    assert today["active"] == 0
 
 
 def test_a_refunded_rental_stays_out_of_the_profit_trend(
@@ -756,3 +761,144 @@ def test_the_funding_view_counts_rental_earnings(user, catalog, funded_wallet, a
         assert Decimal(flow[period]["gross_profit"]) == WHATSAPP_30 - cost
     # Nothing is still waiting on the provider.
     assert Decimal(flow["customer_funds"]["orders_in_progress"]) == 0
+
+# ---------------------------------------------------------------------------
+# The admin dashboard counts a rental as an order placed
+# ---------------------------------------------------------------------------
+
+
+def _verification_order(user, reference, status):
+    from apps.catalog.models import Country, Provider, Service
+    from apps.orders.models import Order
+
+    return Order.objects.create(
+        reference=reference, user=user, service=Service.objects.get(slug="instagram"),
+        country=Country.objects.get(code="US"), provider=Provider.objects.first(),
+        price=Decimal("15.00"), provider_cost=Decimal("0.50"), exchange_rate=Decimal("12.00"),
+        idempotency_key=reference, status=status,
+    )
+
+
+def test_a_rental_counts_in_todays_orders_on_the_dashboard(
+    user, admin_user, auth, catalog, funded_wallet
+):
+    from apps.orders.models import OrderStatus
+
+    funded_wallet(user, "400.00")
+    client = auth(user)
+    reference = rent(client).data["reference"]
+    client.post(f"/api/v1/rentals/{reference}/extend/", {"days": 7}, format="json")
+    _verification_order(user, "VGH-SALES1", OrderStatus.COMPLETED)
+
+    overview = auth(admin_user, "Correct-Horse-Battery-3").get(
+        "/api/v1/admin/overview/").data
+
+    sales = overview["sales"]
+    # One verification order and one rental; the extension is not a new order.
+    assert sales["today"] == 2
+    assert sales["total"] == 2
+    assert sales["successful"] == 2
+    assert sales["failed"] == 0
+    assert sales["active"] == 0
+    assert sales["rentals"] == {"total": 1, "today": 1, "pending": 0, "live_numbers": 1}
+    # The Orders page lists verification orders, so its figures stay theirs.
+    assert overview["orders"]["today"] == 1
+    assert overview["orders"]["total"] == 1
+
+
+def test_a_rental_placed_on_an_earlier_day_is_not_in_todays_orders(
+    user, admin_user, auth, catalog, funded_wallet
+):
+    funded_wallet(user, "400.00")
+    rental = Rental.objects.get(reference=rent(auth(user)).data["reference"])
+    age(rental, days=2)
+
+    sales = auth(admin_user, "Correct-Horse-Battery-3").get(
+        "/api/v1/admin/overview/").data["sales"]
+
+    assert sales["today"] == 0
+    assert sales["total"] == 1
+
+
+def test_a_failed_rental_is_an_order_placed_that_failed(
+    user, admin_user, auth, catalog, funded_wallet
+):
+    """Like a failed verification: placed today, counted, and counted as failed."""
+    funded_wallet(user, "400.00")
+    verification_mock.force_rental_mode("REFUSE")
+    rent(auth(user))
+
+    staff = auth(admin_user, "Correct-Horse-Battery-3")
+    sales = staff.get("/api/v1/admin/overview/").data["sales"]
+    totals = staff.get("/api/v1/admin/charts/?days=7").data["totals"]
+
+    assert (sales["today"], sales["successful"], sales["failed"]) == (1, 0, 1)
+    assert (totals["orders"], totals["completed"], totals["failed"]) == (1, 0, 1)
+    assert totals["success_rate"] == 0.0
+
+
+def test_a_rental_still_being_set_up_is_a_live_order(
+    user, admin_user, auth, catalog, funded_wallet
+):
+    funded_wallet(user, "400.00")
+    verification_mock.force_rental_mode("PENDING")
+    rent(auth(user))
+
+    staff = auth(admin_user, "Correct-Horse-Battery-3")
+    sales = staff.get("/api/v1/admin/overview/").data["sales"]
+    today = staff.get("/api/v1/admin/charts/?days=7").data["series"][-1]
+
+    assert sales["active"] == 1
+    assert sales["rentals"]["pending"] == 1
+    assert sales["successful"] == 0
+    assert (today["orders"], today["active"], today["completed"]) == (1, 1, 0)
+
+
+def test_rental_outcomes_sit_beside_order_outcomes_by_day(
+    user, admin_user, auth, catalog, funded_wallet
+):
+    """Delivered, ended (still delivered), cancelled (refunded) - and orders alongside."""
+    from apps.orders.models import OrderStatus
+
+    funded_wallet(user, "400.00")
+    client = auth(user)
+    delivered = rent(client, key="r1").data["reference"]
+    ended = rent(client, key="r2").data["reference"]
+    cancelled = rent(client, key="r3").data["reference"]
+    Rental.objects.filter(reference=ended).update(status=RentalStatus.EXPIRED)
+    Rental.objects.filter(reference=cancelled).update(status=RentalStatus.REFUNDED)
+    _verification_order(user, "VGH-SALES2", OrderStatus.COMPLETED)
+    _verification_order(user, "VGH-SALES3", OrderStatus.EXPIRED)
+    assert Rental.objects.get(reference=delivered).status == RentalStatus.ACTIVE
+
+    data = auth(admin_user, "Correct-Horse-Battery-3").get(
+        "/api/v1/admin/charts/?days=7").data
+    today = data["series"][-1]
+
+    assert today["orders"] == 5
+    assert today["rentals"] == 3
+    # Delivered: two rentals and one order. Refunded: the cancelled rental.
+    # Failed: the expired verification order.
+    assert (today["completed"], today["refunded"], today["failed"], today["active"]) == (
+        3, 1, 1, 0)
+    assert data["totals"]["orders"] == 5
+    assert data["totals"]["rentals"] == 3
+    assert data["failure_rate"] == 20.0  # 1 failed of 5 placed
+
+
+def test_top_services_count_rentals_for_their_app(
+    user, admin_user, auth, catalog, funded_wallet
+):
+    funded_wallet(user, "400.00")
+    client = auth(user)
+    rent(client, key="w1")
+    rent(client, service="all", key="a1")
+
+    popular = auth(admin_user, "Correct-Horse-Battery-3").get(
+        "/api/v1/admin/charts/?days=7").data["popular_services"]
+
+    by_name = {row["name"]: row for row in popular}
+    assert by_name["WhatsApp"]["orders"] == 1
+    assert Decimal(by_name["WhatsApp"]["revenue"]) == WHATSAPP_30
+    assert by_name["Any app"]["orders"] == 1
+    assert Decimal(by_name["Any app"]["revenue"]) == ALL_30

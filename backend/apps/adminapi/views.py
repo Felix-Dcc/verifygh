@@ -132,8 +132,21 @@ class AdminOverviewView(AdminBase, APIView):
         today = timezone.localtime().date()
         month_ago = now - timedelta(days=30)
 
+        from apps.rentals.models import DELIVERED_RENTAL_STATUSES, Rental, RentalStatus
+
         orders = Order.objects.all()
+        rentals = Rental.objects.all()
         payments = Payment.objects.filter(status=PaymentStatus.SUCCESS)
+        active_orders = orders.filter(status__in=[
+            OrderStatus.PROCESSING, OrderStatus.NUMBER_ASSIGNED, OrderStatus.WAITING_FOR_CODE,
+        ]).count()
+        successful_orders = orders.filter(status=OrderStatus.COMPLETED).count()
+        failed_orders = orders.filter(status__in=[OrderStatus.FAILED, OrderStatus.EXPIRED]).count()
+        orders_total = orders.count()
+        orders_today = orders.filter(created_at__date=today).count()
+        rentals_total = rentals.count()
+        rentals_today = rentals.filter(created_at__date=today).count()
+        rentals_pending = rentals.filter(status=RentalStatus.PENDING).count()
 
         # Everything sold: verification orders, number rentals and extensions.
         earned = _earnings()
@@ -184,21 +197,35 @@ class AdminOverviewView(AdminBase, APIView):
                         for name, part in earned["parts"].items()
                     },
                 },
+                # Verification orders only: the Orders page filters its order
+                # list by these, so they must match what that list can show.
                 "orders": {
-                    "total": orders.count(),
-                    "today": orders.filter(created_at__date=today).count(),
-                    "successful": orders.filter(status=OrderStatus.COMPLETED).count(),
+                    "total": orders_total,
+                    "today": orders_today,
+                    "successful": successful_orders,
                     "code_received": orders.filter(status=OrderStatus.CODE_RECEIVED).count(),
-                    "failed": orders.filter(
-                        status__in=[OrderStatus.FAILED, OrderStatus.EXPIRED]
-                    ).count(),
-                    "active": orders.filter(
-                        status__in=[
-                            OrderStatus.PROCESSING,
-                            OrderStatus.NUMBER_ASSIGNED,
-                            OrderStatus.WAITING_FOR_CODE,
-                        ]
-                    ).count(),
+                    "failed": failed_orders,
+                    "active": active_orders,
+                },
+                # Everything customers bought: verification orders and number
+                # rentals. An extension adds days to a rental already counted,
+                # so it is not a new purchase here (its money is in revenue).
+                "sales": {
+                    "total": orders_total + rentals_total,
+                    "today": orders_today + rentals_today,
+                    # A rental is successful once the number is handed over,
+                    # and stays so when its period ends.
+                    "successful": successful_orders + rentals.filter(
+                        status__in=DELIVERED_RENTAL_STATUSES).count(),
+                    "failed": failed_orders + rentals.filter(
+                        status=RentalStatus.FAILED).count(),
+                    "active": active_orders + rentals_pending,
+                    "rentals": {
+                        "total": rentals_total,
+                        "today": rentals_today,
+                        "pending": rentals_pending,
+                        "live_numbers": rentals.filter(status=RentalStatus.ACTIVE).count(),
+                    },
                 },
                 "payments": {
                     "momo_total": str(
@@ -250,16 +277,28 @@ def _period(start, end) -> dict:
     tz = timezone.get_current_timezone()
     lower = timezone.make_aware(datetime.combine(start, time.min), tz)
     upper = timezone.make_aware(datetime.combine(end, time.min), tz)
+    from apps.rentals.models import DELIVERED_RENTAL_STATUSES, Rental, RentalStatus
+
     window = Q(created_at__gte=lower, created_at__lt=upper)
     earning = Q(status__in=EARNING)
 
-    # Order counts are orders only; the donut and success rate are about codes.
+    # Orders placed: verification orders and number rentals, each sorted into
+    # the same outcomes. A rental is delivered once the number is handed over
+    # (and stays delivered when its period ends), refunded when cancelled,
+    # failed when the provider could not supply one, in progress while pending.
     orders = _by_day(
         Order.objects.filter(window),
         total=Count("id"),
         completed=Count("id", filter=earning),
         refunded=Count("id", filter=Q(status=OrderStatus.REFUNDED)),
         failed=Count("id", filter=Q(status__in=UNSUCCESSFUL)),
+    )
+    rentals = _by_day(
+        Rental.objects.filter(window),
+        total=Count("id"),
+        completed=Count("id", filter=Q(status__in=DELIVERED_RENTAL_STATUSES)),
+        refunded=Count("id", filter=Q(status=RentalStatus.REFUNDED)),
+        failed=Count("id", filter=Q(status=RentalStatus.FAILED)),
     )
     # Money is everything sold: orders, rentals and extensions, by day.
     earned: dict = {}
@@ -281,19 +320,22 @@ def _period(start, end) -> dict:
     day = start
     while day < end:
         o, d, s = orders.get(day, {}), deposits.get(day, {}), signups.get(day, {})
-        e = earned.get(day, {})
+        r, e = rentals.get(day, {}), earned.get(day, {})
         revenue, spent = _money(e.get("revenue")), _money(e.get("cost"))
-        total = o.get("total", 0)
+        placed = {key: o.get(key, 0) + r.get(key, 0)
+                  for key in ("total", "completed", "refunded", "failed")}
         series.append({
             "date": str(day),
             "revenue": str(revenue),
             "cost": str(spent),
             "profit": str(revenue - spent),
-            "orders": total,
-            "completed": o.get("completed", 0),
-            "refunded": o.get("refunded", 0),
-            "failed": o.get("failed", 0),
-            "active": total - o.get("completed", 0) - o.get("refunded", 0) - o.get("failed", 0),
+            "orders": placed["total"],
+            "rentals": r.get("total", 0),
+            "completed": placed["completed"],
+            "refunded": placed["refunded"],
+            "failed": placed["failed"],
+            "active": (placed["total"] - placed["completed"] - placed["refunded"]
+                       - placed["failed"]),
             "deposits": str(_money(d.get("amount"))),
             "deposit_count": d.get("count", 0),
             "signups": s.get("total", 0),
@@ -312,6 +354,7 @@ def _period(start, end) -> dict:
         "cost": total("cost", money=True),
         "profit": total("profit", money=True),
         "orders": total("orders"),
+        "rentals": total("rentals"),
         "completed": completed,
         "refunded": refunded,
         "failed": failed,
@@ -340,42 +383,60 @@ class AdminChartsView(AdminBase, APIView):
         current = _period(end - timedelta(days=days), end)
         previous = _period(end - timedelta(days=2 * days), end - timedelta(days=days))
 
+        from apps.rentals.models import (
+            ALL_SERVICES, DELIVERED_RENTAL_STATUSES, Rental, RentalExtension, RentalStatus,
+        )
+
         # One line for the whole business: orders, rentals and extensions, by
-        # day. `orders` stays the order count, so the chart's "orders" label
-        # still means orders and is not inflated by rentals.
+        # day. `orders` counts orders and rentals delivered that day; an
+        # extension adds days to a rental already counted, so only its money.
         by_day: dict = {}
         for rows in _earning_rows(created_at__gte=since):
-            counts_orders = rows.model is Order
+            counts_as_order = rows.model is not RentalExtension
             for row in (rows.annotate(day=TruncDate("created_at")).values("day")
                         .annotate(revenue=Sum("price"), rows=Count("id")).order_by("day")):
                 entry = by_day.setdefault(row["day"], {"day": row["day"],
                                                        "revenue": Decimal("0.00"),
                                                        "orders": 0})
                 entry["revenue"] += Decimal(row["revenue"] or 0)
-                if counts_orders:
+                if counts_as_order:
                     entry["orders"] += row["rows"]
         revenue_series = [by_day[day] for day in sorted(by_day)]
 
-        orders_series = list(
-            Order.objects.filter(created_at__gte=since)
-            .annotate(day=TruncDate("created_at"))
-            .values("day")
-            .annotate(
-                total=Count("id"),
-                successful=Count("id", filter=Q(status=OrderStatus.COMPLETED)),
-                failed=Count(
-                    "id", filter=Q(status__in=[OrderStatus.FAILED, OrderStatus.EXPIRED])
-                ),
-            )
-            .order_by("day")
-        )
+        # Orders placed by day, verification orders and rentals together.
+        failed_order = Q(status__in=[OrderStatus.FAILED, OrderStatus.EXPIRED])
+        placed: dict = {}
+        for rows, successful, failed in (
+            (Order.objects.filter(created_at__gte=since),
+             Q(status=OrderStatus.COMPLETED), failed_order),
+            (Rental.objects.filter(created_at__gte=since),
+             Q(status__in=DELIVERED_RENTAL_STATUSES), Q(status=RentalStatus.FAILED)),
+        ):
+            for row in (rows.annotate(day=TruncDate("created_at")).values("day")
+                        .annotate(total=Count("id"),
+                                  successful=Count("id", filter=successful),
+                                  failed=Count("id", filter=failed)).order_by()):
+                entry = placed.setdefault(row["day"], {"day": row["day"], "total": 0,
+                                                       "successful": 0, "failed": 0})
+                for key in ("total", "successful", "failed"):
+                    entry[key] += row[key]
+        orders_series = [placed[day] for day in sorted(placed)]
 
-        popular = list(
-            Order.objects.filter(created_at__gte=since)
-            .values("service__slug", "service__name")
-            .annotate(orders=Count("id"), revenue=Sum("price"))
-            .order_by("-orders")[:10]
-        )
+        # Top services by orders placed. A rental counts for its app; an "any
+        # app" rental has no service, so it is ranked as one row of its own.
+        services: dict = {}
+        for rows in (Order.objects.filter(created_at__gte=since),
+                     Rental.objects.filter(created_at__gte=since)):
+            for row in (rows.values("service__slug", "service__name")
+                        .annotate(orders=Count("id"), revenue=Sum("price")).order_by()):
+                slug = row["service__slug"] or ALL_SERVICES
+                entry = services.setdefault(slug, {
+                    "service__slug": slug, "service__name": row["service__name"] or "Any app",
+                    "orders": 0, "revenue": Decimal("0.00")})
+                entry["orders"] += row["orders"]
+                entry["revenue"] += Decimal(row["revenue"] or 0)
+        popular = sorted(services.values(),
+                         key=lambda row: (-row["orders"], row["service__name"]))[:10]
 
         networks = list(
             Payment.objects.filter(created_at__gte=since, status=PaymentStatus.SUCCESS)
@@ -384,10 +445,8 @@ class AdminChartsView(AdminBase, APIView):
             .order_by("-amount")
         )
 
-        total_orders = Order.objects.filter(created_at__gte=since).count()
-        failed_orders = Order.objects.filter(
-            created_at__gte=since, status__in=[OrderStatus.FAILED, OrderStatus.EXPIRED]
-        ).count()
+        total_orders = sum(row["total"] for row in orders_series)
+        failed_orders = sum(row["failed"] for row in orders_series)
 
         return Response(
             {
