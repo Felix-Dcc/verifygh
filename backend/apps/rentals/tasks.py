@@ -172,3 +172,24 @@ def purge_rental_messages(days: int | None = None) -> int:
               .update(body="", code=""))
     logger.info("rental_messages_purged", extra={"messages": purged, "older_than_days": days})
     return purged
+
+
+@shared_task(name="apps.rentals.tasks.reconcile_given_up_rentals")
+def reconcile_given_up_rentals() -> dict:
+    """Follow up purchases refunded for want of an answer (services.reconcile_given_up).
+
+    Recovers what it can from the provider and tells staff about the rest. The
+    customer's refund is never revisited.
+    """
+    due = (Rental.objects.select_related("provider", "service", "user")
+           .filter(metadata__reconcile_pending=True).order_by("updated_at")[:BATCH_SIZE])
+    checked = 0
+    for rental in due:
+        try:
+            services.reconcile_given_up(rental)
+            checked += 1
+        except Exception:
+            logger.exception("rental_reconcile_failed", extra={"rental": rental.reference})
+    if checked:
+        logger.info("rentals_reconciled", extra={"checked": checked})
+    return {"checked": checked}
