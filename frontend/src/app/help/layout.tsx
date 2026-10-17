@@ -5,7 +5,12 @@ import type { Metadata } from "next";
  * Absolute, because a nested layout's plain title stops the root template
  * from reaching the pages below it.
  */
-export const metadata: Metadata = { title: { absolute: "VerifyGH — Help" } };
+export const metadata: Metadata = {
+  title: { absolute: "VerifyGH — Help" },
+  description:
+    "Answers to common VerifyGH questions: codes that did not arrive, refunds, Mobile Money top-ups, and how to reach support.",
+  alternates: { canonical: "/help" },
+};
 
 export default function Layout({ children }: { children: React.ReactNode }) {
   return children;

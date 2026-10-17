@@ -294,6 +294,24 @@ def test_sign_up_with_google_records_the_terms_and_the_invite(api, google_on, mo
     assert User.objects.get(email="efua@gmail.com").has_accepted_current_terms
 
 
+def test_sign_up_with_google_records_where_it_came_from(api, google_on, monkeypatch):
+    from apps.audit.models import AuditLog
+
+    _, pending = start(api, intent="signup", terms="1", utm_source="tiktok",
+                       utm_campaign="oct-test", landing="/services")
+    finish(api, monkeypatch, pending)
+    entry = AuditLog.objects.get(action="AUTH_REGISTER")
+    assert entry.metadata["method"] == "google"
+    assert entry.metadata["attribution"] == {
+        "utm_source": "tiktok", "utm_campaign": "oct-test", "landing": "/services",
+    }
+
+
+def test_a_google_sign_in_carries_no_attribution(api, google_on):
+    _, pending = start(api, utm_source="tiktok")
+    assert pending["attribution"] == {}
+
+
 def test_terms_are_not_taken_from_the_sign_in_page(api, google_on):
     _, pending = start(api, terms="1")
     assert pending["terms"] is False

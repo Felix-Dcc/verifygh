@@ -41,6 +41,12 @@ export default function PrivacyPage() {
           of a coarse device fingerprint (browser type plus IP). We store the hash, never the raw
           fingerprint, and use it only to detect one device driving many accounts.
         </li>
+        <li>
+          Where you found us: if you arrived from a campaign link or another website, the
+          campaign&apos;s name, the page you landed on and the linking site&apos;s name are recorded
+          with your sign-up, so we know which of our posts and ads bring people in. It is not
+          shared with anyone.
+        </li>
       </ul>
 
       <h3>What we do not collect</h3>
@@ -175,7 +181,9 @@ export default function PrivacyPage() {
       <h2>8. Cookies</h2>
       <p>
         We use cookies only to keep you signed in and to protect against cross-site request forgery.
-        There are no analytics, advertising or tracking cookies.
+        There are no analytics, advertising or tracking cookies. Your browser&apos;s own storage keeps
+        an invitation code and the campaign link you arrived from, until you sign up or they expire
+        (7 and 30 days).
       </p>
 
       <h2>9. Changes</h2>

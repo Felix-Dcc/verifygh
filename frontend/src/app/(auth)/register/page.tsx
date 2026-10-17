@@ -4,6 +4,7 @@ import Link from "next/link";
 import { useRouter, useSearchParams } from "next/navigation";
 import * as React from "react";
 
+import { type Attribution, clearAttribution, rememberedAttribution } from "@/components/attribution";
 import {
   GoogleButton,
   OrDivider,
@@ -49,6 +50,9 @@ function RegisterForm() {
   const referralsOpen = useReferralsEnabled();
   const google = useGoogleSignIn();
   const googleError = googleProblem(params.get("google"));
+  // Read after mount: it lives in this device's storage, which the server cannot see.
+  const [source, setSource] = React.useState<Attribution | undefined>(undefined);
+  React.useEffect(() => setSource(rememberedAttribution()), []);
 
   const [form, setForm] = React.useState({
     full_name: "",
@@ -130,9 +134,11 @@ function RegisterForm() {
         // Sent as-is. The backend resolves it, ignores anything it does not
         // recognise, and records the attribution itself.
         referral_code: invite.code || undefined,
+        attribution: source,
         turnstile_token: humanToken ?? undefined,
       });
       clearReferralInvite();
+      clearAttribution();
       // Straight on to the 6-digit code: the app asks for it before anything
       // else (components/verify-email-gate.tsx), with the address shown in full
       // so a typo is caught now.
@@ -328,6 +334,7 @@ function RegisterForm() {
               intent: "signup",
               acceptedTerms,
               referralCode: invite.code || undefined,
+              attribution: source,
             })}
           />
         </div>

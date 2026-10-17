@@ -45,7 +45,16 @@ const mono = IBM_Plex_Mono({
 export const dynamic = "force-dynamic";
 
 const SITE_URL = process.env.NEXT_PUBLIC_SITE_ORIGIN || "https://www.getverifygh.com";
-const DESCRIPTION = "US numbers for SMS verification codes, paid for in cedis with Mobile Money.";
+/**
+ * What a search result and a shared link say under the title. Written for the
+ * searches people in Ghana actually make ("US number for WhatsApp
+ * verification", "pay with MoMo"), and kept to what is always true: no prices,
+ * which move with the provider and the cedi.
+ */
+const DESCRIPTION =
+  "Receive SMS verification codes on a US number for WhatsApp, TikTok, Google and more. " +
+  "Pay in cedis with MTN MoMo, Telecel Cash or AT Money. Refunded if no code arrives.";
+const DEFAULT_TITLE = `${BRAND} \u2014 US Numbers for SMS Verification, Paid with MoMo`;
 
 /**
  * Titles read "VerifyGH — Wallet" and so on: each route's layout supplies the
@@ -57,7 +66,7 @@ const DESCRIPTION = "US numbers for SMS verification codes, paid for in cedis wi
 export const metadata: Metadata = {
   metadataBase: new URL(SITE_URL),
   title: {
-    default: `${BRAND} \u2014 SMS Verification`,
+    default: DEFAULT_TITLE,
     template: `${BRAND} \u2014 %s`,
   },
   description: DESCRIPTION,
@@ -65,18 +74,26 @@ export const metadata: Metadata = {
   openGraph: {
     type: "website",
     siteName: BRAND,
-    title: `${BRAND} \u2014 SMS Verification`,
+    title: DEFAULT_TITLE,
     description: DESCRIPTION,
     url: "/",
     locale: "en_GH",
   },
   twitter: {
     card: "summary_large_image",
-    title: `${BRAND} \u2014 SMS Verification`,
+    title: DEFAULT_TITLE,
     description: DESCRIPTION,
   },
   appleWebApp: { title: BRAND, capable: true, statusBarStyle: "default" },
-  keywords: ["Mobile Money", "Ghana", "MTN MoMo", "Telecel Cash", "verification", "GH₵"],
+  keywords: [
+    "US number for verification",
+    "SMS verification Ghana",
+    "virtual number Ghana",
+    "Mobile Money",
+    "MTN MoMo",
+    "Telecel Cash",
+    "GH₵",
+  ],
   robots: { index: true, follow: true },
   formatDetection: { telephone: false },
 };

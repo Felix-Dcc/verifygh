@@ -146,8 +146,8 @@ export function PaymentSection() {
             </li>
             <li className="flex items-start gap-2.5">
               <CheckCircleIcon className="mt-0.5 h-4 w-4 shrink-0 text-brand-600" />
-              Payments are processed by Paystack, and your wallet is credited only after Paystack
-              confirms the payment.
+              Payments are processed by our payment partner, and your wallet is credited only after
+              the partner confirms the payment.
             </li>
           </ul>
         </Reveal>

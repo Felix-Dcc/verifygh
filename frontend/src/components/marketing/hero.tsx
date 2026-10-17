@@ -8,6 +8,7 @@ import { Logomark } from "@/components/brand";
 import { CheckCircleIcon, CopyIcon } from "@/components/icons";
 import { ServiceLogo } from "@/components/service-logo";
 import { ButtonLink, LiveDot } from "@/components/ui/primitives";
+import { cedis } from "@/lib/format";
 import type { MarketHome, MarketPage, MarketRow } from "@/lib/types";
 
 import { Device, HomeIndicator, StatusBar, useInView, usePrefersReducedMotion } from "./device";
@@ -43,6 +44,12 @@ export function Hero() {
     .filter((row) => (seen.has(row.slug) ? false : (seen.add(row.slug), true)))
     .slice(0, 12);
   const whatsapp = [...(home?.popular ?? []), ...(page?.results ?? [])].find((row) => row.slug === "whatsapp");
+  // The same "from" price the pricing section shows: the cheapest popular service on sale.
+  const prices = (home?.popular ?? [])
+    .filter((row) => !row.temporarily_unavailable && row.price)
+    .map((row) => Number.parseFloat(row.price ?? ""))
+    .filter((value) => value > 0);
+  const from = prices.length ? Math.min(...prices) : null;
 
   return (
     <section className="atmosphere-night relative overflow-x-clip text-white">
@@ -83,6 +90,26 @@ export function Hero() {
               {user ? "Go to dashboard" : "Sign in"}
             </ButtonLink>
           </div>
+
+          {/* The three questions a first-time visitor has before signing up:
+              how much, how do I pay, what if it fails. Every answer is live or
+              is how the product works (automatic refunds, orders/services.py). */}
+          <ul className="mt-5 flex flex-wrap items-center justify-center gap-x-4 gap-y-1.5 text-caption font-medium text-white/75 lg:justify-start">
+            {from !== null ? (
+              <li className="flex items-center gap-1.5">
+                <CheckCircleIcon className="h-3.5 w-3.5 text-leaf-light" />
+                Numbers from {cedis(from)}
+              </li>
+            ) : null}
+            <li className="flex items-center gap-1.5">
+              <CheckCircleIcon className="h-3.5 w-3.5 text-leaf-light" />
+              MTN MoMo, Telecel Cash, AT Money
+            </li>
+            <li className="flex items-center gap-1.5">
+              <CheckCircleIcon className="h-3.5 w-3.5 text-leaf-light" />
+              Refunded if no code arrives
+            </li>
+          </ul>
 
           <a
             href="#how-it-works"

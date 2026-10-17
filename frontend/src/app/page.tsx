@@ -1,3 +1,4 @@
+import type { Metadata } from "next";
 import Link from "next/link";
 
 import { DashboardShowcase } from "@/components/marketing/dashboard-showcase";
@@ -35,9 +36,51 @@ import { ButtonLink } from "@/components/ui/primitives";
  * globals.css. No testimonials: there are no verified reviews to show yet,
  * and invented ones would be fake.
  */
+/**
+ * One address for the homepage. getverifygh.com and www.getverifygh.com both
+ * serve it, and without a canonical a search engine treats them as two copies
+ * of the same page and splits their ranking between them.
+ */
+export const metadata: Metadata = { alternates: { canonical: "/" } };
+
+const SITE_URL = process.env.NEXT_PUBLIC_SITE_ORIGIN || "https://www.getverifygh.com";
+
+/**
+ * Who we are, for search engines (schema.org). Only facts that are true and
+ * public on this page: the name, the address, the logo, the support inbox and
+ * that the service is for Ghana. No ratings - there are no verified reviews.
+ */
+const STRUCTURED_DATA = {
+  "@context": "https://schema.org",
+  "@graph": [
+    {
+      "@type": "Organization",
+      "@id": `${SITE_URL}/#organization`,
+      name: "VerifyGH",
+      url: SITE_URL,
+      logo: `${SITE_URL}/icons/icon-512.png`,
+      email: "support@getverifygh.com",
+      areaServed: { "@type": "Country", name: "Ghana" },
+    },
+    {
+      "@type": "WebSite",
+      "@id": `${SITE_URL}/#website`,
+      name: "VerifyGH",
+      url: SITE_URL,
+      inLanguage: "en-GH",
+      publisher: { "@id": `${SITE_URL}/#organization` },
+    },
+  ],
+};
+
 export default function LandingPage() {
   return (
     <div className="flex min-h-dvh flex-col">
+      {/* Data, not code: browsers never run an ld+json block, so the CSP has no say in it. */}
+      <script
+        type="application/ld+json"
+        dangerouslySetInnerHTML={{ __html: JSON.stringify(STRUCTURED_DATA) }}
+      />
       <SiteHeader />
       <main id="main" className="flex-1">
         <Hero />

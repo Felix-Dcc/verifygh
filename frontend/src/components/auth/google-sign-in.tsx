@@ -3,6 +3,7 @@
 import * as React from "react";
 import useSWR from "swr";
 
+import type { Attribution } from "@/components/attribution";
 import { Spinner, buttonClasses, cn } from "@/components/ui/primitives";
 import { API_URL } from "@/lib/api";
 
@@ -25,16 +26,22 @@ export function googleStartUrl({
   next,
   acceptedTerms,
   referralCode,
+  attribution,
 }: {
   intent: "signin" | "signup";
   next?: string;
   acceptedTerms?: boolean;
   referralCode?: string;
+  /** Sent on a sign-up only; the API records it if an account is created. */
+  attribution?: Attribution;
 }): string {
   const params = new URLSearchParams({ intent });
   if (next) params.set("next", next);
   if (acceptedTerms) params.set("terms", "1");
   if (referralCode) params.set("ref", referralCode);
+  for (const [key, value] of Object.entries(attribution ?? {})) {
+    if (value) params.set(key, value);
+  }
   return `${API_URL}/auth/google/start/?${params.toString()}`;
 }
 
