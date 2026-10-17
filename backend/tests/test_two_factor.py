@@ -271,13 +271,23 @@ def test_customers_are_not_required_to(user, auth, required, catalog):
 
 
 def test_the_requirement_ships_on():
-    """Production gets the base settings value, which defaults to on."""
-    import importlib
+    """Production reads the base settings value, which defaults to on.
 
-    from config.settings import base
+    In a fresh process with the variable unset: other tests swap the settings
+    modules in and out of sys.modules, so nothing here may reload them.
+    """
+    import os
+    import subprocess
+    import sys
+    from pathlib import Path
 
-    importlib.reload(base)
-    assert base.VERIFYGH["STAFF_TWO_FACTOR_REQUIRED"] is True
+    env = {k: v for k, v in os.environ.items() if k != "STAFF_TWO_FACTOR_REQUIRED"}
+    result = subprocess.run(
+        [sys.executable, "-c", "from config.settings import base; "
+                               "print(base.VERIFYGH['STAFF_TWO_FACTOR_REQUIRED'])"],
+        cwd=Path(__file__).resolve().parents[1], env=env, capture_output=True, text=True,
+        timeout=60)
+    assert result.stdout.strip() == "True", result.stderr[-500:]
 
 
 # ---------------------------------------------------------------------------
