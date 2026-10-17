@@ -1018,3 +1018,44 @@ def test_the_migration_files_past_information_as_history(mock_provider, admin_us
     assert info.resolution == "INFO"
     assert seen.resolution == "CLEARED"
     assert still_low.resolved_at is None  # left to the next balance check
+
+
+def test_the_top_up_list_carries_a_total_of_every_top_up_ever_recorded(
+        api, auth, admin_user, mock_provider):
+    """The total covers all of them, not only the 100 rows the list shows."""
+    account = funding.account_for(mock_provider)
+    for _ in range(101):
+        ProviderTopUp.objects.create(account=account, amount=Decimal("25"), currency="USD",
+                                     method="CARD", paid_ghs=Decimal("316.86"),
+                                     recorded_by=admin_user)
+    # A top-up whose cedi amount was never entered: counted, not guessed at.
+    ProviderTopUp.objects.create(account=account, amount=Decimal("10"), currency="USD",
+                                 method="CARD", recorded_by=admin_user)
+
+    data = auth(admin_user, ADMIN_PASSWORD).get(f"{FUNDING}mock/top-ups/").data
+
+    assert len(data["results"]) == 100
+    totals = data["totals"]
+    assert totals["count"] == 102
+    assert totals["by_currency"] == [{"currency": "USD", "amount": "2535.0000", "count": 102}]
+    assert Decimal(totals["paid_ghs"]) == Decimal("316.86") * 101
+    assert totals["without_paid_ghs"] == 1
+
+
+def test_the_top_up_total_updates_when_a_top_up_is_recorded(
+        api, auth, admin_user, mock_provider):
+    set_balance("2", mock_provider)
+    verification_mock.set_balance("27")
+    client = auth(admin_user, ADMIN_PASSWORD)
+    assert client.get(f"{FUNDING}mock/top-ups/").data["totals"]["count"] == 0
+
+    with run(execute=True):
+        client.post(f"{FUNDING}mock/top-ups/", {
+            "amount": "25", "currency": "USD", "method": "CARD", "paid_ghs": "312.50",
+        }, format="json")
+
+    totals = client.get(f"{FUNDING}mock/top-ups/").data["totals"]
+    assert totals["count"] == 1
+    assert totals["by_currency"] == [{"currency": "USD", "amount": "25.0000", "count": 1}]
+    assert Decimal(totals["paid_ghs"]) == Decimal("312.50")
+    assert totals["without_paid_ghs"] == 0

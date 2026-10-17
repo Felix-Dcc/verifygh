@@ -10,7 +10,9 @@ website.
 from __future__ import annotations
 
 from datetime import timedelta
+from decimal import Decimal
 
+from django.db.models import Count, Sum
 from django.utils import timezone
 from rest_framework.response import Response
 from rest_framework.views import APIView
@@ -124,13 +126,36 @@ class FundingSyncView(AdminBase, APIView):
         return Response(services.account_report(account))
 
 
+def _top_up_totals(account) -> dict:
+    """Every top-up ever recorded for the account, not only the rows listed.
+
+    Amounts are summed per currency, never added across currencies. The cedi
+    total covers only top-ups whose cedi amount was entered; `without_paid_ghs`
+    says how many it leaves out.
+    """
+    rows = account.top_ups.all()
+    by_currency = (rows.order_by().values("currency")
+                   .annotate(amount=Sum("amount"), count=Count("id")).order_by("currency"))
+    paid = rows.aggregate(total=Sum("paid_ghs"))["total"]
+    return {
+        "count": rows.count(),
+        # Fixed places, as on each row: databases differ on a sum's scale.
+        "by_currency": [{"currency": row["currency"],
+                         "amount": str(Decimal(row["amount"]).quantize(Decimal("0.0001"))),
+                         "count": row["count"]} for row in by_currency],
+        "paid_ghs": str(Decimal(paid or 0).quantize(Decimal("0.01"))),
+        "without_paid_ghs": rows.filter(paid_ghs__isnull=True).count(),
+    }
+
+
 class FundingTopUpView(AdminBase, APIView):
     required_permission = AdminPermission.PRICING_VIEW
 
     def get(self, request, adapter_key: str):
         account = _account(adapter_key)
         top_ups = account.top_ups.select_related("recorded_by")[:100]
-        return Response({"results": [_top_up(top_up) for top_up in top_ups]})
+        return Response({"results": [_top_up(top_up) for top_up in top_ups],
+                         "totals": _top_up_totals(account)})
 
     def post(self, request, adapter_key: str):
         self.required_permission = AdminPermission.PROVIDER_MANAGE

@@ -1,7 +1,7 @@
 "use client";
 
 import * as React from "react";
-import useSWR from "swr";
+import useSWR, { mutate } from "swr";
 
 import { MetricTile } from "@/components/admin/charts";
 import { providerMoney } from "@/components/admin/pricing-offering";
@@ -123,7 +123,19 @@ type TopUp = {
   created_at: string;
 };
 
+/** Every top-up ever recorded for one account, not only the rows listed. */
+type TopUpTotals = {
+  count: number;
+  /** Summed per currency, never added across currencies. */
+  by_currency: { currency: string; amount: string; count: number }[];
+  /** Cedis paid, over the top-ups whose cedi amount was entered. */
+  paid_ghs: string;
+  without_paid_ghs: number;
+};
+
 export const FUNDING_KEY = "/admin/funding/";
+
+const topUpsKey = (adapterKey: string) => `/admin/funding/${adapterKey}/top-ups/`;
 
 const STATUS: Record<FundingStatus, { label: string; tone: "success" | "warn" | "danger" | "neutral" }> = {
   HEALTHY: { label: "Healthy", tone: "success" },
@@ -306,7 +318,7 @@ function Level({ label, value, warn }: { label: string; value: React.ReactNode; 
 
 function TopUpHistory({ adapterKey, canManage }: { adapterKey: string; canManage: boolean }) {
   const toast = useToast();
-  const { data, mutate } = useSWR<{ results: TopUp[] }>(`/admin/funding/${adapterKey}/top-ups/`);
+  const { data, mutate } = useSWR<{ results: TopUp[]; totals: TopUpTotals }>(topUpsKey(adapterKey));
   const [confirming, setConfirming] = React.useState<TopUp | null>(null);
   const [busy, setBusy] = React.useState(false);
 
@@ -372,6 +384,37 @@ function TopUpHistory({ adapterKey, canManage }: { adapterKey: string; canManage
             </tr>
           ))}
         </tbody>
+        {data.totals ? (
+          <tfoot>
+            <tr className="border-t-2 border-line font-semibold text-ink">
+              <td className="py-2.5 pr-3">
+                Total
+                <span className="block text-caption font-normal text-ink-muted">
+                  {data.totals.count} {data.totals.count === 1 ? "top-up" : "top-ups"}
+                  {data.totals.count > data.results.length
+                    ? `, latest ${data.results.length} listed`
+                    : ""}
+                </span>
+              </td>
+              <td className="tabular py-2.5 pr-3">
+                {data.totals.by_currency.map((row) => (
+                  <span key={row.currency} className="block">
+                    {providerMoney(row.amount, row.currency)}
+                  </span>
+                ))}
+              </td>
+              <td className="tabular py-2.5 pr-3">
+                {cedis(data.totals.paid_ghs)}
+                {data.totals.without_paid_ghs ? (
+                  <span className="block text-caption font-normal text-ink-muted">
+                    {data.totals.without_paid_ghs} without a cedi amount
+                  </span>
+                ) : null}
+              </td>
+              <td colSpan={3} />
+            </tr>
+          </tfoot>
+        ) : null}
       </table>
       <ConfirmDialog
         open={confirming !== null}
@@ -419,7 +462,9 @@ function TopUpDialog({
       });
       toast.success("Top-up recorded");
       setForm(blank);
-      await onSaved();
+      // The history and its total live under their own key; refresh them too,
+      // so the new row and the new total show at once.
+      await Promise.all([onSaved(), mutate(topUpsKey(account.adapter_key))]);
       onClose();
     } catch (caught) {
       setError(caught instanceof ApiError ? caught.message : "Could not record the top-up.");
