@@ -154,8 +154,16 @@ There is exactly one authentication class. A second, plain `JWTAuthentication` f
 would have let bearer tokens skip both checks. A suspended user's token is rejected
 immediately with `403 ACCOUNT_SUSPENDED`. Expired blacklist rows are flushed nightly.
 
-**Not implemented:** TOTP 2FA. The `totp_secret` and `is_two_factor_enabled` fields exist and
-the UI reserves space, but no verification flow is wired up.
+**Two-factor sign-in** (`apps/accounts/two_factor.py`). Authenticator-app codes (RFC 6238
+TOTP, 6 digits, 30 s, one step of drift), each accepted once, plus ten single-use recovery
+codes stored as keyed hashes. With it on, the password step returns a signed five-minute
+challenge (httpOnly cookie) tied to the session epoch, and `/auth/2fa/verify/` exchanges it
+and a code for a session, once; wrong codes count towards the password lockout. Google
+sign-in takes the same step. Staff must have it to use any admin endpoint while
+`STAFF_TWO_FACTOR_REQUIRED` is on (the default; off in dev and tests). A super admin can reset
+another staff member's two-factor with a reason, which ends their sessions. The TOTP secret is
+stored unencrypted in the user row, like most implementations; encrypting it at rest would
+need a key outside the database.
 
 ---
 

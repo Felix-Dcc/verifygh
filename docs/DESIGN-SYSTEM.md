@@ -1,7 +1,7 @@
 # VerifyGH design system
 
-The rules the interface is built on. Tokens live in `frontend/tailwind.config.ts`,
-base styles in `frontend/src/app/globals.css`, components in
+The rules the interface is built on. Tokens and base styles live in
+`frontend/src/app/globals.css` (Tailwind 4: the `@theme inline` block), components in
 `frontend/src/components/ui/`. Why each rule exists is in `docs/UI-AUDIT.md`.
 
 ## Principles
@@ -42,8 +42,8 @@ Money uses `.tabular` everywhere so columns do not jitter.
 
 ## Colour and themes
 
-Every colour is a token (`tailwind.config.ts`) backed by a CSS variable
-(`globals.css`) that holds an "R G B" triplet, defined once for light (`:root`)
+Every colour is a token (`@theme inline` in `globals.css`) backed by a CSS variable
+that holds an "R G B" triplet, defined once for light (`:root`)
 and once for dark (`.dark`). Components use the token - `bg-surface`,
 `text-ink-muted`, `border-line` - and never name a theme. `dark:` variants are
 not needed and should not appear.
