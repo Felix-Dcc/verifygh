@@ -22,7 +22,7 @@ const LAYERS = [
   "HTTPS on every page",
   "Cookies scripts can't read",
   "Argon2-hashed passwords",
-  "Payments confirmed by Paystack",
+  "Signed payment confirmations",
   "Every cedi on a ledger",
 ];
 

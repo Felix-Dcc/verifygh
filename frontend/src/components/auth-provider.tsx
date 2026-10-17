@@ -4,6 +4,7 @@ import { useRouter } from "next/navigation";
 import * as React from "react";
 import useSWR, { mutate as globalMutate } from "swr";
 
+import type { Attribution } from "@/components/attribution";
 import { useToast } from "@/components/ui/toast";
 import { ApiError, api } from "@/lib/api";
 import type { User } from "@/lib/types";
@@ -30,6 +31,8 @@ export type SignUpInput = {
   accepted_terms: boolean;
   /** From /register?ref=CODE. The backend resolves it; we only pass it on. */
   referral_code?: string;
+  /** The campaign or site that sent this visitor (components/attribution.tsx). */
+  attribution?: Attribution;
   /** Cloudflare's one-time token, when the check is on. */
   turnstile_token?: string;
 };

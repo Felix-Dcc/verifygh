@@ -3,6 +3,7 @@
 import * as React from "react";
 import { SWRConfig } from "swr";
 
+import { AttributionCapture } from "@/components/attribution";
 import { AuthProvider } from "@/components/auth-provider";
 import { MaintenanceBanner } from "@/components/maintenance";
 import { ReferralCapture } from "@/components/referral-invite";
@@ -31,6 +32,8 @@ export function Providers({ children }: { children: React.ReactNode }) {
             <MaintenanceBanner />
             {/* Keeps a ?ref= invitation from whichever page a friend lands on. */}
             <ReferralCapture />
+            {/* And which campaign or site sent them, for counting sign-ups per channel. */}
+            <AttributionCapture />
             {children}
           </AuthProvider>
         </ToastProvider>

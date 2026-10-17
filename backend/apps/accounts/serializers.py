@@ -29,6 +29,10 @@ class RegisterSerializer(serializers.Serializer):
     referral_code = serializers.CharField(
         max_length=16, required=False, allow_blank=True, default=""
     )
+    #: Optional: the campaign or site that sent this visitor. Any shape is
+    #: accepted here and cleaned by apps.accounts.attribution - it can never
+    #: make a sign-up fail.
+    attribution = serializers.JSONField(required=False, allow_null=True, default=dict)
     #: Cloudflare Turnstile's one-time token (checked by the view, not here).
     turnstile_token = serializers.CharField(
         write_only=True, required=False, allow_blank=True, default=""

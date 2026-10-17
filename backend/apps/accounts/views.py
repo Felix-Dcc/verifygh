@@ -17,6 +17,7 @@ from rest_framework_simplejwt.exceptions import TokenError
 from rest_framework_simplejwt.tokens import RefreshToken
 
 from apps.accounts import google, services, turnstile
+from apps.accounts.attribution import clean_attribution
 from apps.accounts.authentication import (
     blacklist_refresh_token,
     clear_auth_cookies,
@@ -104,9 +105,10 @@ class RegisterView(APIView):
             referral_code=data.get("referral_code", ""),
             request=request,
         )
+        source = clean_attribution(data.get("attribution"))
         record_audit(
             actor=user, action="AUTH_REGISTER", target=user, request=request,
-            metadata={"email": user.email},
+            metadata={"email": user.email, **({"attribution": source} if source else {})},
         )
         return _auth_response(user, status.HTTP_201_CREATED)
 
@@ -592,6 +594,8 @@ class GoogleStartView(_GoogleRedirectView):
             # Only the sign-up form asks for the terms; it sends terms=1 once ticked.
             "terms": intent == "signup" and request.GET.get("terms") == "1",
             "ref": referral if referral.isalnum() else "",
+            # Recorded on the sign-up, if this turns out to be one.
+            "attribution": clean_attribution(request.GET) if intent == "signup" else {},
         }
 
         response = HttpResponseRedirect(
@@ -668,9 +672,11 @@ class GoogleCallbackView(_GoogleRedirectView):
         services.record_login_attempt(email=user.email, user=user, successful=True,
                                       request=request)
         services.track_device(user, request)
+        source = clean_attribution(pending.get("attribution")) if created else {}
         record_audit(
             actor=user, action="AUTH_REGISTER" if created else "AUTH_LOGIN", target=user,
-            request=request, metadata={"method": "google"},
+            request=request,
+            metadata={"method": "google", **({"attribution": source} if source else {})},
         )
 
         destination = pending["next"] if user.role == Role.USER else "/admin"
