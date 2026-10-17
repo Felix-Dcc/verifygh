@@ -15,6 +15,9 @@ export type User = {
   is_phone_verified: boolean;
   is_suspended: boolean;
   is_two_factor_enabled: boolean;
+  /** Staff who must turn two-factor on before using the admin console. */
+  two_factor_required: boolean;
+  two_factor_recovery_codes_left: number;
   has_accepted_current_terms: boolean;
   accepted_terms_version: string;
   admin_permissions: string[];

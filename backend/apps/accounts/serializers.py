@@ -75,6 +75,9 @@ class UserSerializer(serializers.ModelSerializer):
     #: False for an account that only signs in with Google - it has no current
     #: password to give, so the app offers a reset link instead.
     has_password = serializers.SerializerMethodField()
+    #: Staff who must turn two-factor on before using the admin console.
+    two_factor_required = serializers.SerializerMethodField()
+    two_factor_recovery_codes_left = serializers.SerializerMethodField()
 
     class Meta:
         model = User
@@ -89,6 +92,8 @@ class UserSerializer(serializers.ModelSerializer):
             "is_phone_verified",
             "is_suspended",
             "is_two_factor_enabled",
+            "two_factor_required",
+            "two_factor_recovery_codes_left",
             "has_accepted_current_terms",
             "accepted_terms_version",
             "admin_permissions",
@@ -96,6 +101,14 @@ class UserSerializer(serializers.ModelSerializer):
             "created_at",
         ]
         read_only_fields = fields
+
+    def get_two_factor_required(self, obj: User) -> bool:
+        from apps.accounts import two_factor
+
+        return two_factor.required_for(obj)
+
+    def get_two_factor_recovery_codes_left(self, obj: User) -> int:
+        return len(obj.two_factor_recovery_codes or []) if obj.is_two_factor_enabled else 0
 
     def get_phone_display(self, obj: User) -> str:
         return format_local(obj.phone) if obj.phone else ""

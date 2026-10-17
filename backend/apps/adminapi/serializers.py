@@ -32,7 +32,7 @@ class AdminUserSerializer(serializers.ModelSerializer):
             "id", "email", "full_name", "phone", "role", "is_active", "is_suspended",
             "suspension_reason", "is_email_verified", "is_phone_verified", "risk_score",
             "balance", "promo_balance", "order_count", "open_flags", "invite_pending",
-            "former_staff", "has_password",
+            "former_staff", "has_password", "is_two_factor_enabled",
             "last_login", "created_at",
         ]
         read_only_fields = fields

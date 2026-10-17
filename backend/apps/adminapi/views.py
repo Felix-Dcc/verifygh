@@ -578,6 +578,35 @@ class AdminUserViewSet(AdminBase, mixins.ListModelMixin, mixins.RetrieveModelMix
             raise NotFound("We could not find that user.")
         return user
 
+    @action(detail=True, methods=["post"], url_path="reset-two-factor")
+    def reset_two_factor(self, request, pk=None):
+        """For someone who lost their phone and recovery codes: they set it up again.
+
+        Super admins only, with a reason, and every session of theirs ends, so
+        the next sign-in is a fresh one that has to enrol again.
+        """
+        from apps.accounts import two_factor
+
+        self.required_permission = AdminPermission.USER_ROLE_CHANGE
+        self.check_permissions(request)
+        serializer = SuspendUserSerializer(data=request.data)  # {"reason": ...}
+        serializer.is_valid(raise_exception=True)
+        target = self._get_user()
+        if target.pk == request.user.pk:
+            raise ValidationFailed("Turn your own two-factor off in your account settings.")
+        if not target.is_two_factor_enabled:
+            raise Conflict("This account does not have two-factor sign-in on.")
+        with transaction.atomic():
+            record_admin_action(
+                admin=request.user, action="USER_TWO_FACTOR_RESET", target=target,
+                reason=serializer.validated_data["reason"],
+                before={"is_two_factor_enabled": True},
+                after={"is_two_factor_enabled": False}, request=request,
+            )
+            two_factor.disable(target)
+            target.revoke_all_sessions()
+        return Response(AdminUserSerializer(self._get_user()).data)
+
     @action(detail=True, methods=["post"])
     def suspend(self, request, pk=None):
         self.required_permission = AdminPermission.USER_SUSPEND

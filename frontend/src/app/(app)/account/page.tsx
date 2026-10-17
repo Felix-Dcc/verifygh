@@ -3,6 +3,7 @@
 import Link from "next/link";
 import * as React from "react";
 
+import { TwoFactorSettings } from "@/components/account/two-factor";
 import { AppHero } from "@/components/app-hero";
 import { errorMessage, useAuth } from "@/components/auth-provider";
 import {
@@ -315,6 +316,15 @@ export default function AccountPage() {
               </div>
             </form>
             )}
+          </SettingsCard>
+
+          <SettingsCard
+            id="two-factor"
+            icon={<LockIcon className="h-4 w-4" />}
+            title="Two-factor sign-in"
+            description="A code from your phone at every sign-in, so a password alone is not enough."
+          >
+            <TwoFactorSettings />
           </SettingsCard>
 
           <SettingsCard

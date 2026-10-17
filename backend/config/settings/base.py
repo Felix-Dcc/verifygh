@@ -510,6 +510,9 @@ VERIFYGH = {
     "MAX_ORDERS_PER_DAY": env_int("MAX_ORDERS_PER_DAY", 25),
     "MAX_DAILY_SPEND": env("MAX_DAILY_SPEND", "1500.00"),
     "MAX_FAILED_LOGINS": env_int("MAX_FAILED_LOGINS", 8),
+    # Staff must sign in with a second factor before using the admin console.
+    # Off only in development and tests (dev.py, test.py).
+    "STAFF_TWO_FACTOR_REQUIRED": env_bool("STAFF_TWO_FACTOR_REQUIRED", True),
     "LOGIN_LOCKOUT_MINUTES": env_int("LOGIN_LOCKOUT_MINUTES", 15),
     "REQUIRE_EMAIL_VERIFICATION_FOR_PURCHASE": env_bool(
         "REQUIRE_EMAIL_VERIFICATION_FOR_PURCHASE", True

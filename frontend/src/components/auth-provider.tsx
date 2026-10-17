@@ -14,8 +14,13 @@ type AuthContextValue = {
   /** True once we know for certain whether there is a session. */
   ready: boolean;
   refresh: () => Promise<void>;
-  /** `turnstileToken`: Cloudflare's one-time token, when the check is on. */
-  signIn: (email: string, password: string, turnstileToken?: string) => Promise<User>;
+  /**
+   * `turnstileToken`: Cloudflare's one-time token, when the check is on.
+   * Null when the account has two-factor on: finish with verifyTwoFactor.
+   */
+  signIn: (email: string, password: string, turnstileToken?: string) => Promise<User | null>;
+  /** The second step of signing in: a code from the app, or a recovery code. */
+  verifyTwoFactor: (code: string) => Promise<User>;
   signUp: (input: SignUpInput) => Promise<User>;
   signOut: () => Promise<void>;
   isStaff: boolean;
@@ -85,11 +90,25 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
 
   const signIn = React.useCallback(
     async (email: string, password: string, turnstileToken?: string) => {
-      const response = await api.post<{ user: User }>("/auth/login/", {
-        email,
-        password,
-        ...(turnstileToken ? { turnstile_token: turnstileToken } : {}),
-      });
+      const response = await api.post<{ user?: User; two_factor_required?: boolean }>(
+        "/auth/login/",
+        {
+          email,
+          password,
+          ...(turnstileToken ? { turnstile_token: turnstileToken } : {}),
+        },
+      );
+      // The challenge travels in an httpOnly cookie; the code step sends it back.
+      if (response.two_factor_required || !response.user) return null;
+      await mutate({ user: response.user }, { revalidate: false });
+      return response.user;
+    },
+    [mutate],
+  );
+
+  const verifyTwoFactor = React.useCallback(
+    async (code: string) => {
+      const response = await api.post<{ user: User }>("/auth/2fa/verify/", { code });
       await mutate({ user: response.user }, { revalidate: false });
       return response.user;
     },
@@ -141,12 +160,13 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       ready,
       refresh,
       signIn,
+      verifyTwoFactor,
       signUp,
       signOut,
       isStaff: Boolean(user && user.role !== "USER"),
       can: (permission: string) => Boolean(user?.admin_permissions?.includes(permission)),
     }),
-    [user, isLoading, ready, refresh, signIn, signUp, signOut],
+    [user, isLoading, ready, refresh, signIn, verifyTwoFactor, signUp, signOut],
   );
 
   return <AuthContext.Provider value={value}>{children}</AuthContext.Provider>;
