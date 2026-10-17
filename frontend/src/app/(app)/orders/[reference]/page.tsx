@@ -48,6 +48,10 @@ const ACTIVE_STATUSES = new Set([
   "WAITING_FOR_CODE",
 ]);
 
+/** Telegram codes usually land within this long; cancelling sooner throws away
+ *  numbers that were about to work. */
+const TELEGRAM_PATIENCE_SECONDS = 120;
+
 export default function OrderDetailPage() {
   const params = useParams<{ reference: string }>();
   const reference = params.reference;
@@ -84,6 +88,9 @@ export default function OrderDetailPage() {
 
   const [cancelling, setCancelling] = React.useState(false);
   const [confirmCancel, setConfirmCancel] = React.useState(false);
+  // Set when the cancel dialog opens on a Telegram order younger than
+  // TELEGRAM_PATIENCE_SECONDS, so the dialog can suggest waiting a little.
+  const [cancellingEarly, setCancellingEarly] = React.useState(false);
   const [completing, setCompleting] = React.useState(false);
   // "Buy again": the same service and country, straight from this page.
   const [buyingAgain, setBuyingAgain] = React.useState(false);
@@ -163,6 +170,16 @@ export default function OrderDetailPage() {
   const status = live?.status ?? order.status;
   const retryable = RETRYABLE_STATUSES.has(status) && !order.code_received_at;
   const delivered = status === "COMPLETED" || status === "CODE_RECEIVED";
+  const isTelegram = order.service_slug === "telegram";
+  const awaitingCode = !code && ["NUMBER_ASSIGNED", "WAITING_FOR_CODE"].includes(status);
+
+  const placedAt = new Date(order.created_at).getTime();
+
+  function askToCancel() {
+    const ageSeconds = (Date.now() - placedAt) / 1000;
+    setCancellingEarly(isTelegram && ageSeconds < TELEGRAM_PATIENCE_SECONDS);
+    setConfirmCancel(true);
+  }
 
   return (
     <div className="space-y-6">
@@ -276,6 +293,8 @@ export default function OrderDetailPage() {
               message={order.verification_message}
             />
 
+            {isTelegram && awaitingCode ? <TelegramTips /> : null}
+
             {order.can_reuse && order.reusable_until && order.reuse_price ? (
               <ReuseSection
                 reference={order.reference}
@@ -304,7 +323,7 @@ export default function OrderDetailPage() {
                   {order.can_cancel ? (
                     <Button
                       variant="secondary"
-                      onClick={() => setConfirmCancel(true)}
+                      onClick={askToCancel}
                       disabled={cancelling}
                       className="w-full sm:w-auto"
                     >
@@ -392,6 +411,12 @@ export default function OrderDetailPage() {
           <>
             The number is released and {cedis(order.price)} goes back to your wallet. This cannot
             be undone - you would need to buy a new number.
+            {cancellingEarly ? (
+              <span className="mt-2 block">
+                Telegram codes often take up to 2 minutes. Unless Telegram sent the code to its app
+                or offered to call you, it is worth waiting a little longer.
+              </span>
+            ) : null}
           </>
         }
         confirmLabel="Cancel order"
@@ -587,6 +612,30 @@ function CodeSection({
       ) : (
         <p className="mt-2 text-sm text-ink-muted">No verification code was received.</p>
       )}
+    </div>
+  );
+}
+
+/**
+ * What goes wrong with Telegram, and what to do. Most Telegram orders that end
+ * without a code were cancelled within a minute or two, or were numbers that
+ * already had a Telegram account - Telegram then sends the code to that
+ * account's app or offers a call, and no SMS ever comes.
+ */
+function TelegramTips() {
+  return (
+    <div className="border-t border-line bg-sunken px-5 py-4 sm:px-6">
+      <p className="text-sm font-medium text-ink">Tips for Telegram</p>
+      <ul className="mt-2 list-disc space-y-1.5 pl-5 text-sm text-ink-soft">
+        <li>
+          Codes usually arrive within 2 minutes. Wait at least that long before cancelling.
+        </li>
+        <li>
+          If Telegram says the code was sent to the Telegram app, or offers to call you, this number
+          already has a Telegram account and no SMS will come. Cancel for a full refund and try a
+          new number.
+        </li>
+      </ul>
     </div>
   );
 }
