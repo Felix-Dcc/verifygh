@@ -95,7 +95,7 @@ export function Dialog({
   return (
     // !m-0: dialogs render where they are used, often inside a space-y-*
     // stack whose sibling margin would push the backdrop down the screen.
-    <div className="fixed inset-0 z-[90] !m-0 flex items-end justify-center sm:items-center">
+    <div className="fixed inset-0 z-90 m-0! flex items-end justify-center sm:items-center">
       <div
         className="absolute inset-0 animate-fade-in bg-scrim/50 backdrop-blur-[2px]"
         onClick={dismissible ? onClose : undefined}
@@ -108,7 +108,7 @@ export function Dialog({
         aria-labelledby={titleId}
         tabIndex={-1}
         className={cn(
-          "relative w-full animate-slide-up bg-raised shadow-pop outline-none",
+          "relative w-full animate-slide-up bg-raised shadow-pop outline-hidden",
           "max-h-[90vh] overflow-y-auto rounded-t-3xl px-5 pb-safe pt-5",
           size === "lg" ? "sm:max-w-2xl sm:rounded-2xl sm:pb-5" : "sm:max-w-md sm:rounded-2xl sm:pb-5",
         )}

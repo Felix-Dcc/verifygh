@@ -30,7 +30,7 @@ export function AdminToolbar({
         inset
           ? "bg-sunken/40"
           : // Below the top bar, above the table's own header.
-            "-mx-1 bg-surface/90 shadow-[0_10px_30px_-20px_rgba(5,11,24,0.6)] backdrop-blur supports-[backdrop-filter]:bg-surface/75 lg:sticky lg:top-16",
+            "-mx-1 bg-surface/90 shadow-[0_10px_30px_-20px_rgba(5,11,24,0.6)] backdrop-blur-sm supports-backdrop-filter:bg-surface/75 lg:sticky lg:top-16",
         className,
       )}
     >

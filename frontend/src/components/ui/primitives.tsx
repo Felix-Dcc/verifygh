@@ -40,7 +40,7 @@ const VARIANTS: Record<ButtonVariant, string> = {
   onBandOutline:
     "border border-white/35 bg-transparent text-white hover:bg-white/10 active:bg-white/15 disabled:opacity-50",
   dawn:
-    "bg-gradient-to-r from-[#0B63B6] to-[#137A4E] text-white shadow-[0_10px_30px_-10px_rgba(8,120,209,0.7)] hover:brightness-110 active:brightness-95 disabled:opacity-60",
+    "bg-linear-to-r from-[#0B63B6] to-[#137A4E] text-white shadow-[0_10px_30px_-10px_rgba(8,120,209,0.7)] hover:brightness-110 active:brightness-95 disabled:opacity-60",
 };
 
 const SIZES: Record<ButtonSize, string> = {
@@ -274,10 +274,14 @@ export const Input = React.forwardRef<HTMLInputElement, InputProps>(function Inp
   { className, invalid, prefix, suffix, ...props },
   ref,
 ) {
+  // The caller's classes come last so they win (cn() merges conflicts):
+  // a search box's pl-11 over the default padding, h-9 over h-11.
   const base = cn(
     "h-11 w-full bg-transparent text-base text-ink placeholder:text-ink-faint",
     // 16px text: anything smaller makes iOS Safari zoom the page on focus.
-    "focus:outline-none disabled:text-ink-muted",
+    "focus:outline-hidden disabled:text-ink-muted",
+    prefix ? "px-2" : "px-3.5",
+    suffix && "pr-1",
     className,
   );
 
@@ -297,7 +301,7 @@ export const Input = React.forwardRef<HTMLInputElement, InputProps>(function Inp
       <input
         ref={ref}
         aria-invalid={invalid || undefined}
-        className={cn(base, prefix ? "px-2" : "px-3.5", suffix && "pr-1")}
+        className={base}
         {...props}
       />
       {suffix ? <span className="flex shrink-0 self-stretch">{suffix}</span> : null}
@@ -348,8 +352,10 @@ export const Select = React.forwardRef<
       aria-invalid={invalid || undefined}
       className={cn(
         "h-11 w-full appearance-none rounded-lg border bg-surface px-3.5 pr-10 text-base text-ink",
-        "bg-[url('data:image/svg+xml;utf8,<svg xmlns=%22http://www.w3.org/2000/svg%22 viewBox=%220 0 20 20%22 fill=%22none%22 stroke=%22%236B7A73%22 stroke-width=%221.6%22><path d=%22M6 8l4 4 4-4%22/></svg>')] bg-[length:20px_20px] bg-[right_0.75rem_center] bg-no-repeat",
-        "transition-shadow focus:shadow-focus focus:outline-none",
+        // The chevron (globals.css). A class of its own rather than arbitrary
+        // bg-* utilities, which tailwind-merge in cn() reads as a colour.
+        "select-chevron",
+        "transition-shadow focus:shadow-focus focus:outline-hidden",
         invalid ? "border-danger-500" : "border-line-strong focus:border-brand-500",
         className,
       )}
@@ -370,7 +376,7 @@ export const Textarea = React.forwardRef<
       aria-invalid={invalid || undefined}
       className={cn(
         "w-full rounded-lg border bg-surface p-3.5 text-base text-ink placeholder:text-ink-faint",
-        "transition-shadow focus:shadow-focus focus:outline-none",
+        "transition-shadow focus:shadow-focus focus:outline-hidden",
         invalid ? "border-danger-500" : "border-line-strong focus:border-brand-500",
         className,
       )}

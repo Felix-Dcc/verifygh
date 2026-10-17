@@ -125,7 +125,7 @@ export function OtpStep({
             onChange={(event) => setCode(event.target.value.replace(/\D/g, ""))}
             placeholder="······"
             aria-describedby="otp-help"
-            className="code h-14 w-full rounded-lg border border-line-strong bg-surface px-4 text-center text-title font-semibold tracking-widest text-ink transition-shadow placeholder:text-ink-faint focus:border-brand-500 focus:shadow-focus focus:outline-none"
+            className="code h-14 w-full rounded-lg border border-line-strong bg-surface px-4 text-center text-title font-semibold tracking-widest text-ink transition-shadow placeholder:text-ink-faint focus:border-brand-500 focus:shadow-focus focus:outline-hidden"
           />
 
           <Button type="submit" size="lg" fullWidth loading={submitting} className="mt-4">

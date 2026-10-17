@@ -63,7 +63,7 @@ function FinalCta() {
   return (
     <section className="atmosphere-night-close relative overflow-x-clip text-white">
       {/* The padding holds the text on the navy: at least --fade-in above. */}
-      <div className="container-page relative pb-24 pt-[21rem] text-center sm:pb-28 sm:pt-[27rem]">
+      <div className="container-page relative pb-24 pt-84 text-center sm:pb-28 sm:pt-108">
         <h2 className="mx-auto max-w-3xl text-balance text-4xl font-extrabold tracking-[-0.035em] text-white sm:text-5xl">
           Ready to verify without giving out <span className="text-dawn">your number?</span>
         </h2>

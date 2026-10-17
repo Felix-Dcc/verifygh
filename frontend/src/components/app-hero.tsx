@@ -57,7 +57,7 @@ export function AppHero({
       {/* The dawn line */}
       <span
         aria-hidden
-        className="absolute inset-x-0 bottom-0 h-[3px] bg-gradient-to-r from-azure via-aqua to-leaf opacity-80"
+        className="absolute inset-x-0 bottom-0 h-[3px] bg-linear-to-r from-azure via-aqua to-leaf opacity-80"
       />
     </section>
   );
@@ -76,7 +76,7 @@ export function HeroStat({
   className?: string;
 }) {
   return (
-    <div className={cn("flex min-w-0 flex-col rounded-2xl border border-white/10 bg-white/[0.06] p-3 backdrop-blur sm:p-4", className)}>
+    <div className={cn("flex min-w-0 flex-col rounded-2xl border border-white/10 bg-white/6 p-3 backdrop-blur-sm sm:p-4", className)}>
       {/* A size down on phones, where three tiles share a row. */}
       <p className="text-2xs text-white/60 sm:text-caption">{label}</p>
       {/* A div, not a p: the value may be a loading skeleton (a block). mt-auto

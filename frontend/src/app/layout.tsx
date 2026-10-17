@@ -20,13 +20,14 @@ const BRAND = process.env.NEXT_PUBLIC_BRAND_NAME ?? "VerifyGH";
 const sans = Inter({
   subsets: ["latin", "latin-ext"],
   display: "swap",
-  variable: "--font-sans",
+  // Not --font-sans: the theme defines that name (globals.css) in terms of this.
+  variable: "--font-inter",
 });
 const mono = IBM_Plex_Mono({
   subsets: ["latin"],
   weight: ["400", "500"],
   display: "swap",
-  variable: "--font-mono",
+  variable: "--font-plex-mono",
 });
 
 /**

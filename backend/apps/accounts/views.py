@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import logging
 import secrets
+from urllib.parse import quote
 
 from django.conf import settings
 from django.contrib.auth import authenticate
@@ -211,6 +212,13 @@ class LoginView(APIView):
                 reason="suspended",
             )
             raise AccountSuspended()
+
+        if authenticated.is_two_factor_enabled:
+            # The password was right; the code step finishes the sign-in. The
+            # failed-login count is not reset until it does.
+            from apps.accounts.two_factor_views import challenge_response
+
+            return challenge_response(authenticated, method="password")
 
         authenticated.register_successful_login(ip=get_client_ip(request) or None)
         services.record_login_attempt(
@@ -691,6 +699,19 @@ class GoogleCallbackView(_GoogleRedirectView):
                 reason="suspended",
             )
             return self.fail("suspended", intent=intent)
+
+        if user.is_two_factor_enabled:
+            # Google proved the first factor only: back to the sign-in page for
+            # the code, carrying the challenge in an httpOnly cookie, not the URL.
+            from apps.accounts import two_factor
+
+            destination = pending["next"] if user.role == Role.USER else "/admin"
+            response = HttpResponseRedirect(_frontend(
+                f"/login?two_factor=1&next={quote(destination, safe='/')}"))
+            two_factor.set_challenge_cookie(
+                response, two_factor.issue_challenge(user, method="google"))
+            response.delete_cookie(GOOGLE_PENDING_COOKIE, path=_callback_path())
+            return response
 
         # Google has proved who this is, so a password lockout - which exists
         # to stop guessing - is cleared like any other successful sign-in.

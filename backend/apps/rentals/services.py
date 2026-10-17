@@ -58,6 +58,7 @@ from apps.wallet.services import (
     WalletFrozen,
     charge_rental,
     get_or_create_wallet,
+    lock_wallet,
     net_spending,
     refund_rental_charge,
 )
@@ -285,6 +286,10 @@ def _check_buyer(user) -> None:
 
 def check_rental_eligibility(user) -> None:
     _check_buyer(user)
+    _check_open_rentals(user)
+
+
+def _check_open_rentals(user) -> None:
     held = Rental.objects.filter(user=user, status__in=OPEN_RENTAL_STATUSES).count()
     limit = int(settings.VERIFYGH["RENTAL_MAX_ACTIVE"])
     if held >= limit:
@@ -407,6 +412,11 @@ def create_rental(*, user, service_key: str, days, expected_price=None,
 
     try:
         with transaction.atomic():
+            # Again under the wallet lock, so two rentals sent together cannot
+            # both slip past the limits checked above (A-12).
+            lock_wallet(wallet)
+            _check_open_rentals(user)
+            _check_spend_cap(wallet, priced.price)
             rental = Rental.objects.create(
                 reference=rental_reference(),
                 user=user,
@@ -908,6 +918,8 @@ def extend_rental(rental: Rental, *, user, days, expected_price=None,
 
         try:
             with transaction.atomic():
+                lock_wallet(wallet)
+                _check_spend_cap(wallet, priced.price)
                 extension = RentalExtension.objects.create(
                     rental=rental, days=days, price=priced.price,
                     provider_cost=priced.provider_cost, exchange_rate=priced.exchange_rate,

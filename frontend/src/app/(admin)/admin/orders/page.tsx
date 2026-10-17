@@ -185,7 +185,7 @@ export default function AdminOrdersPage() {
           />
         ) : (
           <div className="overflow-x-auto">
-            <table className="w-full min-w-[56rem] text-left text-sm">
+            <table className="w-full min-w-4xl text-left text-sm">
               <thead className="border-b border-line bg-sunken">
                 <tr className="text-caption text-ink-muted">
                   <th scope="col" className="px-5 py-3 font-medium">Reference</th>
@@ -203,7 +203,7 @@ export default function AdminOrdersPage() {
                     <td className="tabular whitespace-nowrap px-5 py-3.5 font-medium text-ink">
                       {order.reference}
                     </td>
-                    <td className="max-w-[12rem] truncate px-5 py-3.5 text-ink-soft">
+                    <td className="max-w-48 truncate px-5 py-3.5 text-ink-soft">
                       {order.user_email}
                     </td>
                     <td className="whitespace-nowrap px-5 py-3.5 text-ink">

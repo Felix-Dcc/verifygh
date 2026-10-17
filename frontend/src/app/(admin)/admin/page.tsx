@@ -457,7 +457,7 @@ function compactCedis(value: number): string {
 
 function HeroRange({ value, onChange }: { value: Range; onChange: (value: Range) => void }) {
   return (
-    <div role="tablist" aria-label="Period" className="flex gap-0.5 rounded-lg bg-white/10 p-0.5 backdrop-blur">
+    <div role="tablist" aria-label="Period" className="flex gap-0.5 rounded-lg bg-white/10 p-0.5 backdrop-blur-sm">
       {(["7", "14", "30", "90"] as Range[]).map((option) => (
         <button
           key={option}

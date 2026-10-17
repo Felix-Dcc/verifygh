@@ -19,24 +19,24 @@ import { cn } from "@/components/ui/primitives";
  * keeps its own colours in both themes; the screen follows the site's.
  */
 export function Device({ children, className }: { children: React.ReactNode; className?: string }) {
-  const metal = "bg-gradient-to-b from-[#d8d3cb] via-[#9e9890] to-[#6b665f]";
+  const metal = "bg-linear-to-b from-[#d8d3cb] via-[#9e9890] to-[#6b665f]";
   return (
-    <div className={cn("relative shrink-0", className ?? "w-[15rem] sm:w-64 lg:w-[17rem]")}>
+    <div className={cn("relative shrink-0", className ?? "w-60 sm:w-64 lg:w-68")}>
       {/* Floor shadow, tinted green so it settles into pale surfaces rather than greying them */}
       <span className="absolute -bottom-5 left-1/2 h-10 w-4/5 -translate-x-1/2 rounded-[50%] bg-band-deep/35 blur-2xl" />
 
       {/* Side keys: action, volume up, volume down; power, camera key */}
-      <span className={cn("absolute -left-[2px] top-[15%] h-[3.5%] w-[3px] rounded-l-[2px]", metal)} />
-      <span className={cn("absolute -left-[2px] top-[22%] h-[7%] w-[3px] rounded-l-[2px]", metal)} />
-      <span className={cn("absolute -left-[2px] top-[31%] h-[7%] w-[3px] rounded-l-[2px]", metal)} />
-      <span className={cn("absolute -right-[2px] top-[24%] h-[10.5%] w-[3px] rounded-r-[2px]", metal)} />
-      <span className="absolute -right-[1.5px] top-[52%] h-[6%] w-[2.5px] rounded-r-[2px] bg-gradient-to-b from-[#4b4843] to-[#2c2a27]" />
+      <span className={cn("absolute left-[-2px] top-[15%] h-[3.5%] w-[3px] rounded-l-[2px]", metal)} />
+      <span className={cn("absolute left-[-2px] top-[22%] h-[7%] w-[3px] rounded-l-[2px]", metal)} />
+      <span className={cn("absolute left-[-2px] top-[31%] h-[7%] w-[3px] rounded-l-[2px]", metal)} />
+      <span className={cn("absolute right-[-2px] top-[24%] h-[10.5%] w-[3px] rounded-r-[2px]", metal)} />
+      <span className="absolute right-[-1.5px] top-[52%] h-[6%] w-[2.5px] rounded-r-[2px] bg-linear-to-b from-[#4b4843] to-[#2c2a27]" />
 
       {/* Frame */}
       <div
         className={cn(
-          "relative aspect-[776/1630] rounded-[2.75rem] p-[3px]",
-          "bg-gradient-to-br from-[#ebe7e0] via-[#a19b92] to-[#5e5a54]",
+          "relative aspect-776/1630 rounded-[2.75rem] p-[3px]",
+          "bg-linear-to-br from-[#ebe7e0] via-[#a19b92] to-[#5e5a54]",
           "shadow-[inset_0_1px_1px_rgba(255,255,255,0.7),0_45px_90px_-30px_rgba(0,0,0,0.55),0_25px_45px_-25px_rgba(0,0,0,0.45)]",
         )}
       >
@@ -50,7 +50,7 @@ export function Device({ children, className }: { children: React.ReactNode; cla
               <span className="h-[7px] w-[7px] rounded-full bg-[#1a1d2b] ring-1 ring-[#2b3040]" />
             </span>
             {/* Glass reflection */}
-            <span className="pointer-events-none absolute inset-0 z-30 bg-gradient-to-br from-white/[0.08] via-transparent to-transparent" />
+            <span className="pointer-events-none absolute inset-0 z-30 bg-linear-to-br from-white/8 via-transparent to-transparent" />
           </div>
         </div>
       </div>
@@ -76,7 +76,7 @@ export function StatusBar() {
         </svg>
         <span className="relative ml-0.5 flex h-[10px] w-[20px] items-center rounded-[3px] border border-ink/40 p-[1.5px]">
           <span className="h-full w-[78%] rounded-[1.5px] bg-ink" />
-          <span className="absolute -right-[3px] h-1 w-[1.5px] rounded-r-sm bg-ink/40" />
+          <span className="absolute right-[-3px] h-1 w-[1.5px] rounded-r-sm bg-ink/40" />
         </span>
       </span>
     </div>

@@ -149,7 +149,7 @@ function NumbersArt({ rows }: { rows: MarketRow[] }) {
 /** One number, two codes. */
 function ReuseArt() {
   return (
-    <div className="w-full max-w-[15rem]">
+    <div className="w-full max-w-60">
       <div className="rounded-2xl border border-line bg-surface p-3 shadow-card">
         <p className="text-2xs text-ink-muted">Same number</p>
         <p className="code text-sm font-semibold text-ink">+1 (512) 555-0147</p>
@@ -174,7 +174,7 @@ function ReuseArt() {
 function RefundArt({ row }: { row?: MarketRow }) {
   const price = row?.price ?? null;
   return (
-    <div className="flex w-full max-w-[15rem] flex-col items-stretch gap-2">
+    <div className="flex w-full max-w-60 flex-col items-stretch gap-2">
       <div className="flex items-center gap-2.5 rounded-2xl border border-line bg-surface p-3 shadow-card">
         <span className="relative flex h-9 w-9 items-center justify-center rounded-full border-2 border-dashed border-warn-500 text-warn-700">
           <ClockIcon className="h-4 w-4" />
@@ -184,7 +184,7 @@ function RefundArt({ row }: { row?: MarketRow }) {
           <span className="block text-2xs text-ink-muted">No code arrived</span>
         </span>
       </div>
-      <div className="flex items-center gap-2.5 rounded-2xl bg-gradient-to-r from-[#0B63B6] to-[#137A4E] p-3 text-white shadow-[0_12px_24px_-12px_rgba(8,120,209,0.8)]">
+      <div className="flex items-center gap-2.5 rounded-2xl bg-linear-to-r from-[#0B63B6] to-[#137A4E] p-3 text-white shadow-[0_12px_24px_-12px_rgba(8,120,209,0.8)]">
         <span className="flex h-9 w-9 items-center justify-center rounded-full bg-white/15">
           <RefreshIcon className="h-4 w-4" />
         </span>
@@ -217,7 +217,7 @@ function FavouritesArt({ rows }: { rows: MarketRow[] }) {
             key={row.slug}
             className="flex items-center gap-1.5 rounded-full border border-line bg-surface py-1 pl-1 pr-3 text-2xs font-medium text-ink-soft shadow-card"
           >
-            <ServiceLogo name={row.name} src={row.icon_url} slug={row.slug} size="xs" className="!h-5 !w-5" />
+            <ServiceLogo name={row.name} src={row.icon_url} slug={row.slug} size="xs" className="h-5! w-5!" />
             Buy again
           </span>
         ))}

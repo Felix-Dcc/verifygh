@@ -64,7 +64,7 @@ function compact(value: number): string {
 }
 
 /** The width of an element, kept current. Charts draw at real pixels. */
-function useWidth<T extends HTMLElement>(): [React.RefObject<T>, number] {
+function useWidth<T extends HTMLElement>(): [React.RefObject<T | null>, number] {
   const ref = React.useRef<T>(null);
   const [width, setWidth] = React.useState(0);
   React.useLayoutEffect(() => {
@@ -135,7 +135,7 @@ function Tooltip({
   const right = x > width / 2;
   return (
     <div
-      className="pointer-events-none absolute top-0 z-10 min-w-[9rem] rounded-lg border border-white/10 bg-navy/95 px-3 py-2 text-caption text-white shadow-pop backdrop-blur"
+      className="pointer-events-none absolute top-0 z-10 min-w-36 rounded-lg border border-white/10 bg-navy/95 px-3 py-2 text-caption text-white shadow-pop backdrop-blur-sm"
       style={right ? { right: width - x + 12 } : { left: x + 12 }}
     >
       <p className="mb-1 font-medium text-white/70">{title}</p>
@@ -566,7 +566,7 @@ export function Donut({
           <span className="tabular text-title text-ink">
             {focused ? (total ? `${Math.round((focused.value / total) * 100)}%` : "0%") : centerValue}
           </span>
-          <span className="max-w-[6.5rem] truncate text-caption text-ink-muted">{focused ? focused.label : centerLabel}</span>
+          <span className="max-w-26 truncate text-caption text-ink-muted">{focused ? focused.label : centerLabel}</span>
         </div>
       </div>
       <ul className="w-full min-w-0 space-y-2">

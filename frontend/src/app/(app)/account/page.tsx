@@ -3,6 +3,7 @@
 import Link from "next/link";
 import * as React from "react";
 
+import { TwoFactorSettings } from "@/components/account/two-factor";
 import { AppHero } from "@/components/app-hero";
 import { errorMessage, useAuth } from "@/components/auth-provider";
 import {
@@ -318,6 +319,15 @@ export default function AccountPage() {
           </SettingsCard>
 
           <SettingsCard
+            id="two-factor"
+            icon={<LockIcon className="h-4 w-4" />}
+            title="Two-factor sign-in"
+            description="A code from your phone at every sign-in, so a password alone is not enough."
+          >
+            <TwoFactorSettings />
+          </SettingsCard>
+
+          <SettingsCard
             id="appearance"
             icon={<MonitorIcon className="h-4 w-4" />}
             title="Appearance"
@@ -397,7 +407,7 @@ function Avatar({ user }: { user: User }) {
   return (
     <span
       aria-hidden
-      className="flex h-14 w-14 shrink-0 items-center justify-center rounded-full bg-gradient-to-br from-[#0B63B6] to-[#137A4E] p-[2px] shadow-[0_10px_24px_-10px_rgba(8,120,209,0.8)] sm:h-16 sm:w-16"
+      className="flex h-14 w-14 shrink-0 items-center justify-center rounded-full bg-linear-to-br from-[#0B63B6] to-[#137A4E] p-[2px] shadow-[0_10px_24px_-10px_rgba(8,120,209,0.8)] sm:h-16 sm:w-16"
     >
       <span className="flex h-full w-full items-center justify-center rounded-full bg-navy text-lg font-bold uppercase tracking-wide text-white sm:text-xl">
         {letters}
@@ -413,7 +423,7 @@ function HeroBadge({ tone = "plain", children }: { tone?: "plain" | "good" | "wa
         "inline-flex items-center gap-1.5 rounded-full border px-2.5 py-1 text-caption font-medium",
         tone === "good" && "border-leaf/40 bg-leaf/15 text-leaf-light",
         tone === "warn" && "border-[#FFB86B]/40 bg-[#FFB86B]/10 text-[#FFCB8F]",
-        tone === "plain" && "border-white/15 bg-white/[0.06] text-white/80",
+        tone === "plain" && "border-white/15 bg-white/6 text-white/80",
       )}
     >
       {tone !== "plain" ? <span className="h-1.5 w-1.5 rounded-full bg-current" /> : null}
@@ -473,7 +483,7 @@ function Checklist({
   const circumference = 2 * Math.PI * 22;
 
   return (
-    <div className="rounded-2xl border border-white/10 bg-white/[0.06] p-4 backdrop-blur sm:p-5">
+    <div className="rounded-2xl border border-white/10 bg-white/6 p-4 backdrop-blur-sm sm:p-5">
       <div className="flex items-center gap-4">
         <svg viewBox="0 0 52 52" className="h-14 w-14 shrink-0 -rotate-90" aria-hidden>
           <defs>
@@ -545,7 +555,7 @@ function SettingsCard({
         <div className="flex items-start gap-3 border-b border-line px-5 py-4 sm:px-6">
           <span
             aria-hidden
-            className="mt-0.5 flex h-8 w-8 shrink-0 items-center justify-center rounded-lg bg-gradient-to-br from-[#0B63B6] to-[#137A4E] text-white"
+            className="mt-0.5 flex h-8 w-8 shrink-0 items-center justify-center rounded-lg bg-linear-to-br from-[#0B63B6] to-[#137A4E] text-white"
           >
             {icon}
           </span>

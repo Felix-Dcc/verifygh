@@ -136,11 +136,11 @@ export function ServicePicker() {
               value={search}
               onChange={(event) => setSearch(event.target.value)}
               disabled={failed}
-              className="h-11 w-full rounded-full border border-line-strong bg-surface pl-10 pr-4 text-base text-ink placeholder:text-ink-faint transition-shadow focus:border-brand-500 focus:shadow-focus focus:outline-none disabled:opacity-60"
+              className="h-11 w-full rounded-full border border-line-strong bg-surface pl-10 pr-4 text-base text-ink placeholder:text-ink-faint transition-shadow focus:border-brand-500 focus:shadow-focus focus:outline-hidden disabled:opacity-60"
             />
           </label>
 
-          <div className="mt-3 min-h-[22rem]" aria-live="polite" aria-busy={isLoading}>
+          <div className="mt-3 min-h-88" aria-live="polite" aria-busy={isLoading}>
             {failed ? (
               <div className="flex h-full flex-col items-center justify-center py-12 text-center">
                 <p className="text-sm font-medium text-ink">The catalogue is not available right now.</p>
@@ -229,7 +229,7 @@ function LogoMarquee({ rows }: { rows: MarketRow[] }) {
   return (
     <div
       aria-hidden
-      className="marquee-track relative mt-10 space-y-3 [mask-image:linear-gradient(90deg,transparent,#000_12%,#000_88%,transparent)]"
+      className="marquee-track relative mt-10 space-y-3 mask-[linear-gradient(90deg,transparent,#000_12%,#000_88%,transparent)]"
     >
       {lines.map((line, index) => (
         <div key={index} className="flex overflow-hidden">

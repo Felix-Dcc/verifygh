@@ -185,7 +185,7 @@ export default function ReferPage() {
         }
         aside={
           error && !data ? (
-            <div className="rounded-2xl border border-white/10 bg-white/[0.06] p-4">
+            <div className="rounded-2xl border border-white/10 bg-white/6 p-4">
               <LoadError what="your referral code" onRetry={() => mutate()} />
             </div>
           ) : (
@@ -285,7 +285,7 @@ function RewardCard({
 }) {
   const earns = data ? Number.parseFloat(data.referrer_bonus) > 0 : false;
   return (
-    <div className="rounded-2xl border border-white/10 bg-white/[0.06] p-4 backdrop-blur sm:p-5">
+    <div className="rounded-2xl border border-white/10 bg-white/6 p-4 backdrop-blur-sm sm:p-5">
       <div className={cn("grid gap-3", earns ? "grid-cols-2" : "grid-cols-1")}>
         {earns ? (
           <RewardTile label="You get" value={data ? short(data.referrer_bonus) : undefined} accent />
@@ -323,7 +323,7 @@ function RewardTile({ label, value, accent }: { label: string; value?: string; a
     <div
       className={cn(
         "min-w-0 rounded-xl p-3 ring-1 ring-inset",
-        accent ? "bg-gradient-to-br from-aqua/20 to-leaf/20 ring-white/15" : "bg-white/[0.04] ring-white/10",
+        accent ? "bg-linear-to-br from-aqua/20 to-leaf/20 ring-white/15" : "bg-white/4 ring-white/10",
       )}
     >
       <p className="flex items-center gap-1.5 whitespace-nowrap text-caption text-white/70">

@@ -15,6 +15,9 @@ export type User = {
   is_phone_verified: boolean;
   is_suspended: boolean;
   is_two_factor_enabled: boolean;
+  /** Staff who must turn two-factor on before using the admin console. */
+  two_factor_required: boolean;
+  two_factor_recovery_codes_left: number;
   has_accepted_current_terms: boolean;
   accepted_terms_version: string;
   admin_permissions: string[];
@@ -754,6 +757,8 @@ export type AdminOrder = {
   exchange_rate: string | null;
   status: OrderStatus;
   refund_status: string;
+  /** Everything given back for this order, whatever its status. */
+  refunded_amount: string;
   failure_reason: string;
   has_code: boolean;
   expires_at: string | null;

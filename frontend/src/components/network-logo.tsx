@@ -54,7 +54,7 @@ export function NetworkLogo({
       aria-hidden
       className={cn(
         frame,
-        "flex items-center justify-center bg-gradient-to-br from-[#0B63B6] to-[#137A4E] text-2xs font-bold text-white",
+        "flex items-center justify-center bg-linear-to-br from-[#0B63B6] to-[#137A4E] text-2xs font-bold text-white",
       )}
     >
       {(code || label).slice(0, 2).toUpperCase()}

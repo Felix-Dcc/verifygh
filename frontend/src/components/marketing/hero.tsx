@@ -51,7 +51,7 @@ export function Hero() {
           ramp - white text has to stay on the navy. */}
       <div className="container-page relative grid grid-cols-1 items-center gap-2 pb-24 pt-10 sm:pt-14 lg:grid-cols-2 lg:items-start lg:gap-8 lg:pb-40 lg:pt-14">
         <div className="text-center lg:pt-8 lg:text-left">
-          <p className="inline-flex items-center gap-2 rounded-full border border-white/15 bg-white/[0.06] px-3.5 py-1.5 text-caption font-medium text-white/85 backdrop-blur">
+          <p className="inline-flex items-center gap-2 rounded-full border border-white/15 bg-white/6 px-3.5 py-1.5 text-caption font-medium text-white/85 backdrop-blur-sm">
             <span className="relative flex h-2 w-2">
               <span className="absolute inset-0 animate-pulse-ring rounded-full bg-leaf-light/60" />
               <span className="relative h-2 w-2 rounded-full bg-leaf-light" />

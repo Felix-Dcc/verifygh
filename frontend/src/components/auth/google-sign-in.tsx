@@ -131,7 +131,7 @@ export function GoogleButton({
         variant: "secondary",
         size: "lg",
         fullWidth: true,
-        className: "gap-3 font-semibold shadow-sm",
+        className: "gap-3 font-semibold shadow-xs",
       })}
     >
       {leaving ? <Spinner className="h-5 w-5" /> : <GoogleMark />}

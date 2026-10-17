@@ -54,7 +54,12 @@ from apps.pricing.engine import quote_for_offering
 from apps.verification.base import ProviderOrderState
 from apps.verification.registry import get_provider
 from apps.wallet.models import FundType
-from apps.wallet.services import charge_order, credit_refund, get_or_create_wallet
+from apps.wallet.services import (
+    charge_order,
+    credit_refund,
+    get_or_create_wallet,
+    lock_wallet,
+)
 
 logger = logging.getLogger("verifygh.orders")
 
@@ -153,14 +158,7 @@ def check_purchase_eligibility(user) -> None:
     if settings.VERIFYGH["REQUIRE_EMAIL_VERIFICATION_FOR_PURCHASE"] and not user.is_email_verified:
         raise EmailNotVerified()
 
-    active = Order.objects.filter(user=user, status__in=ACTIVE_ORDER_STATUSES).count()
-    max_active = settings.VERIFYGH["MAX_ACTIVE_ORDERS"]
-    if active >= max_active:
-        raise LimitExceeded(
-            f"You already have {active} orders in progress. "
-            "Finish or cancel one before starting another.",
-            code="TOO_MANY_ACTIVE_ORDERS",
-        )
+    _check_active_orders(user)
 
     # Platform-wide, across every user: our supplier caps how many numbers one
     # account may hold at once. Checked here, before any money moves, so a full
@@ -180,29 +178,58 @@ def check_purchase_eligibility(user) -> None:
                 code="PLATFORM_AT_CAPACITY",
             )
 
-    since = timezone.now() - timedelta(days=1)
-    today_orders = Order.objects.filter(user=user, created_at__gte=since).count()
-    if today_orders >= settings.VERIFYGH["MAX_ORDERS_PER_DAY"]:
-        flag(
-            user=user,
-            kind=SuspiciousActivity.Kind.VELOCITY_LIMIT,
-            level=SuspicionLevel.MEDIUM,
-            description=f"Hit the daily order cap ({today_orders} in 24h).",
-        )
-        raise LimitExceeded(
-            "You have reached the daily order limit. Please try again tomorrow.",
-            code="DAILY_ORDER_LIMIT",
-        )
+    _check_daily_orders(user, flag_it=True)
 
     spend_cap = quantize(settings.VERIFYGH["MAX_DAILY_SPEND"])
     wallet = get_or_create_wallet(user)
     from apps.wallet.services import net_spending
 
     # Refunded orders do not count towards the limit: the money came back.
-    spent_today = net_spending(wallet, created_at__gte=since)
+    spent_today = net_spending(wallet, created_at__gte=timezone.now() - timedelta(days=1))
     if spent_today >= spend_cap:
         raise LimitExceeded(
             f"You have reached the daily spending limit of {format_ghs(spend_cap)}.",
+            code="DAILY_SPEND_LIMIT",
+        )
+
+
+def _check_active_orders(user) -> None:
+    active = Order.objects.filter(user=user, status__in=ACTIVE_ORDER_STATUSES).count()
+    if active >= settings.VERIFYGH["MAX_ACTIVE_ORDERS"]:
+        raise LimitExceeded(
+            f"You already have {active} orders in progress. "
+            "Finish or cancel one before starting another.",
+            code="TOO_MANY_ACTIVE_ORDERS",
+        )
+
+
+def _check_daily_orders(user, *, flag_it: bool) -> None:
+    since = timezone.now() - timedelta(days=1)
+    today_orders = Order.objects.filter(user=user, created_at__gte=since).count()
+    if today_orders >= settings.VERIFYGH["MAX_ORDERS_PER_DAY"]:
+        if flag_it:
+            # Not from inside a transaction about to roll back: the flag would go too.
+            flag(
+                user=user,
+                kind=SuspiciousActivity.Kind.VELOCITY_LIMIT,
+                level=SuspicionLevel.MEDIUM,
+                description=f"Hit the daily order cap ({today_orders} in 24h).",
+            )
+        raise LimitExceeded(
+            "You have reached the daily order limit. Please try again tomorrow.",
+            code="DAILY_ORDER_LIMIT",
+        )
+
+
+def _check_daily_spend(wallet, price) -> None:
+    """Refuse a purchase that would carry the day's net spending past the cap."""
+    from apps.wallet.services import net_spending
+
+    spend_cap = quantize(settings.VERIFYGH["MAX_DAILY_SPEND"])
+    spent_today = net_spending(wallet, created_at__gte=timezone.now() - timedelta(days=1))
+    if spent_today + quantize(price) > spend_cap:
+        raise LimitExceeded(
+            f"This would take you past the daily spending limit of {format_ghs(spend_cap)}.",
             code="DAILY_SPEND_LIMIT",
         )
 
@@ -422,21 +449,21 @@ def _place_order(*, user, offering, priced, idempotency_key: str, request=None,
 
     # The eligibility check refuses once the limit is reached; this one also
     # counts the purchase being made, so a single order cannot carry the day's
-    # spending past it.
-    from apps.wallet.services import net_spending
-
-    spend_cap = quantize(settings.VERIFYGH["MAX_DAILY_SPEND"])
-    spent_today = net_spending(wallet, created_at__gte=timezone.now() - timedelta(days=1))
-    if spent_today + quantize(price) > spend_cap:
-        raise LimitExceeded(
-            f"This would take you past the daily spending limit of {format_ghs(spend_cap)}.",
-            code="DAILY_SPEND_LIMIT",
-        )
+    # spending past it. Checked here for a quick answer, then again below.
+    _check_daily_spend(wallet, price)
 
     reference = order_reference()
 
     try:
         with transaction.atomic():
+            # The per-user limits again, under the wallet lock: two purchases
+            # sent together both passed the checks above, and both went
+            # through (A-12). The second now waits here and sees the first.
+            lock_wallet(wallet)
+            _check_active_orders(user)
+            _check_daily_orders(user, flag_it=False)
+            _check_daily_spend(wallet, price)
+
             order = Order.objects.create(
                 reference=reference,
                 user=user,
@@ -1245,7 +1272,9 @@ def issue_refund(order: Order, *, reason: str, amount=None, actor=None, note: st
         logger.info("refund_declined_service_rendered", extra={"order": order.reference})
         return order
 
-    refund_amount = quantize(amount if amount is not None else order.price)
+    # Never more than was paid; the database refuses it too (order_refund_within_price).
+    refund_amount = min(quantize(amount if amount is not None else order.price),
+                        quantize(order.price))
     if refund_amount <= 0:
         return order
 
@@ -1303,7 +1332,8 @@ def issue_refund(order: Order, *, reason: str, amount=None, actor=None, note: st
 
             # The order's final status becomes REFUNDED, but the reason it got
             # there stays readable in failure_reason and in the event timeline.
-            order_updates = {"refund_status": RefundStatus.COMPLETED}
+            order_updates = {"refund_status": RefundStatus.COMPLETED,
+                             "refunded_amount": refund_amount}
             if OrderStatus.REFUNDED in ALLOWED_TRANSITIONS.get(order.status, set()):
                 order_updates["status"] = OrderStatus.REFUNDED
             Order.objects.filter(pk=order.pk).update(**order_updates)

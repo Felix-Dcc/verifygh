@@ -477,7 +477,7 @@ function MessageRow({ message }: { message: RentalMessage }) {
           {relativeTime(message.received_at)}
         </time>
       </div>
-      {message.body ? <p className="mt-1.5 whitespace-pre-wrap break-words text-sm text-ink">{message.body}</p> : null}
+      {message.body ? <p className="mt-1.5 whitespace-pre-wrap wrap-break-word text-sm text-ink">{message.body}</p> : null}
       {message.code ? (
         <div className="mt-2.5 flex flex-wrap items-center gap-2">
           <span className="code select-all rounded-lg bg-success-50 px-2.5 py-1 text-base font-semibold tracking-widest text-success-700">

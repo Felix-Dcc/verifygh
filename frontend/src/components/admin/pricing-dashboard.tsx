@@ -241,7 +241,7 @@ export function PricingTable({
         <EmptyState icon={<SearchIcon />} title="No prices match these filters" />
       ) : (
         <div className="overflow-x-auto">
-          <table className="w-full min-w-[74rem] text-left text-sm">
+          <table className="w-full min-w-296 text-left text-sm">
             <thead className="border-y border-line bg-sunken">
               <tr className="text-caption text-ink-muted">
                 <th className="px-4 py-2.5 font-medium">Service</th>
@@ -708,7 +708,7 @@ export function ReviewPanel({ summary, canManage }: { summary?: PricingSummary; 
       ) : (
         <>
           <div className="overflow-x-auto">
-            <table className="w-full min-w-[40rem] text-left text-sm">
+            <table className="w-full min-w-160 text-left text-sm">
               <thead className="border-y border-line bg-sunken text-caption text-ink-muted">
                 <tr>
                   <th className="px-4 py-2 font-medium">Service</th>
@@ -937,7 +937,7 @@ function HistoryTable({
   if (rows.length === 0) return <p className="px-5 pb-5 text-sm text-ink-muted">Nothing recorded yet.</p>;
   return (
     <div className="overflow-x-auto">
-      <table className="w-full min-w-[52rem] text-left text-sm">
+      <table className="w-full min-w-208 text-left text-sm">
         <thead className="border-y border-line bg-sunken text-caption text-ink-muted">
           <tr>
             <th className="px-4 py-2 font-medium">When</th>
@@ -953,7 +953,7 @@ function HistoryTable({
                 {relativeTime(row.at)}
               </td>
               <td className="px-3 py-2 text-ink">{row.what}</td>
-              <td className="tabular max-w-[22rem] px-3 py-2 text-caption text-ink-soft">{row.change}</td>
+              <td className="tabular max-w-88 px-3 py-2 text-caption text-ink-soft">{row.change}</td>
               <td className="max-w-[18rem] px-3 py-2 text-caption text-ink-muted">
                 <span className="block text-ink-soft">{row.who}</span>
                 <span className="block">{row.why}</span>

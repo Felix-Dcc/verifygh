@@ -180,6 +180,13 @@ class Order(BaseModel):
     refund_status = models.CharField(
         max_length=10, choices=RefundStatus.choices, default=RefundStatus.NONE, db_index=True
     )
+    #: What was given back, in total. A refund on a delivered order (staff
+    #: goodwill, an upheld report) leaves its status as it was, so revenue is
+    #: price minus this - kept on the order so no report has to remember to
+    #: join to Refund (A-13).
+    refunded_amount = models.DecimalField(
+        max_digits=12, decimal_places=2, default=Decimal("0.00")
+    )
 
     idempotency_key = models.CharField(max_length=128, db_index=True)
     ip_address = models.GenericIPAddressField(null=True, blank=True)
@@ -209,6 +216,12 @@ class Order(BaseModel):
                 check=models.Q(promo_amount__gte=Decimal("0.00"))
                 & models.Q(cash_amount__gte=Decimal("0.00")),
                 name="order_split_non_negative",
+            ),
+            # Never more back than was paid.
+            models.CheckConstraint(
+                check=models.Q(refunded_amount__gte=Decimal("0.00"))
+                & models.Q(refunded_amount__lte=models.F("price")),
+                name="order_refund_within_price",
             ),
             models.CheckConstraint(
                 check=models.Q(status__in=[

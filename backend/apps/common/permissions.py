@@ -7,9 +7,16 @@ never be the only thing standing between two users' data.
 
 from __future__ import annotations
 
+from rest_framework.exceptions import PermissionDenied
 from rest_framework.permissions import BasePermission
 
 from apps.accounts.constants import Role
+
+
+class TwoFactorSetupRequired(PermissionDenied):
+    default_detail = ("Turn on two-factor sign-in in your account settings to use the "
+                      "admin console.")
+    default_code = "TWO_FACTOR_SETUP_REQUIRED"
 
 
 class IsActiveUser(BasePermission):
@@ -66,6 +73,11 @@ class HasPermissionCode(BasePermission):
         user = request.user
         if not (user and user.is_authenticated and user.is_active and not user.is_suspended):
             return False
+        from apps.accounts import two_factor
+
+        if two_factor.required_for(user) and not user.is_two_factor_enabled:
+            # Staff powers move money; a password alone is not enough to use them.
+            raise TwoFactorSetupRequired()
         required = getattr(view, "required_permission", None)
         if required is None:
             return True

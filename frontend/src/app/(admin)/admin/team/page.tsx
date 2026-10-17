@@ -119,7 +119,7 @@ export default function AdminTeamPage() {
           <EmptyState icon={<UsersIcon />} title="No staff yet" description="Invite your first admin." />
         ) : (
           <div className="overflow-x-auto">
-            <table className="w-full min-w-[46rem] text-left text-sm">
+            <table className="w-full min-w-184 text-left text-sm">
               <thead className="border-b border-line bg-sunken">
                 <tr className="text-caption text-ink-muted">
                   <th scope="col" className="px-5 py-3 font-medium">Member</th>

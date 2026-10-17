@@ -79,7 +79,7 @@ export default function WalletPage() {
               withdrawn and refunded as money; the other cannot. */}
           {hasPromo ? (
             <div className="mt-3 flex flex-wrap gap-2">
-              <span className="rounded-full border border-white/15 bg-white/[0.06] px-3 py-1 text-caption text-white/80">
+              <span className="rounded-full border border-white/15 bg-white/6 px-3 py-1 text-caption text-white/80">
                 <span className="tabular font-semibold text-white">{cedis(wallet?.balance)}</span> cash
               </span>
               <span className="rounded-full border border-[#E9C46A]/30 bg-[#E9C46A]/10 px-3 py-1 text-caption text-[#F3D98B]">
@@ -194,7 +194,7 @@ function InAndOut({
     { label: "Total spent", value: spent, width: outValue / max, tone: "from-aqua to-leaf" },
   ];
   return (
-    <div className="rounded-2xl border border-white/10 bg-white/[0.06] p-4 backdrop-blur sm:p-5">
+    <div className="rounded-2xl border border-white/10 bg-white/6 p-4 backdrop-blur-sm sm:p-5">
       <p className="text-caption font-medium text-white/60">Since you joined</p>
       <div className="mt-3 space-y-4">
         {bars.map((bar) => (
@@ -211,7 +211,7 @@ function InAndOut({
             </div>
             <span aria-hidden className="mt-2 block h-2 overflow-hidden rounded-full bg-white/10">
               <span
-                className={`block h-full rounded-full bg-gradient-to-r ${bar.tone} transition-[width] duration-700 ease-out`}
+                className={`block h-full rounded-full bg-linear-to-r ${bar.tone} transition-[width] duration-700 ease-out`}
                 style={{ width: loading || failed ? "0%" : `${Math.max(bar.width * 100, bar.width > 0 ? 3 : 0)}%` }}
               />
             </span>

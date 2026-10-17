@@ -153,7 +153,7 @@ function Orders() {
             placeholder="Reference or service"
             value={search}
             onChange={(event) => setSearch(event.target.value)}
-            className="h-11 w-full rounded-full border border-line-strong bg-surface pl-11 pr-4 text-base text-ink placeholder:text-ink-faint transition-shadow focus:border-brand-500 focus:shadow-focus focus:outline-none md:h-10 md:text-sm"
+            className="h-11 w-full rounded-full border border-line-strong bg-surface pl-11 pr-4 text-base text-ink placeholder:text-ink-faint transition-shadow focus:border-brand-500 focus:shadow-focus focus:outline-hidden md:h-10 md:text-sm"
           />
         </label>
       </div>

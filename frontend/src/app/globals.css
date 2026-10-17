@@ -1,6 +1,796 @@
-@tailwind base;
-@tailwind components;
-@tailwind utilities;
+@import 'tailwindcss';
+
+@custom-variant dark (&:is(.dark *));
+
+/* inline: utilities get the expression itself (rgb(var(--c-ink))), resolved on
+   each element, as Tailwind 3 did. Without it the colour is fixed once at the
+   root, and a section that switches theme with a nested .dark class (the
+   footer, the app hero, the homepage's night panels) kept the light colours. */
+@theme inline {
+  --color-canvas: rgb(var(--c-canvas));
+  --color-sunken: rgb(var(--c-sunken));
+  --color-surface: rgb(var(--c-surface));
+  --color-raised: rgb(var(--c-raised));
+  --color-scrim: rgb(var(--c-scrim));
+
+  --color-ink: rgb(var(--c-ink));
+  --color-ink-soft: rgb(var(--c-ink-soft));
+  --color-ink-muted: rgb(var(--c-ink-muted));
+  --color-ink-faint: rgb(var(--c-ink-faint));
+
+  --color-line: rgb(var(--c-line));
+  --color-line-strong: rgb(var(--c-line-strong));
+
+  --color-primary: rgb(var(--c-primary));
+  --color-primary-hover: rgb(var(--c-primary-hover));
+  --color-primary-active: rgb(var(--c-primary-active));
+
+  --color-band: rgb(var(--c-band));
+  --color-band-deep: rgb(var(--c-band-deep));
+
+  --color-navy: #071426;
+  --color-navy-deep: #050b18;
+
+  --color-azure: #0878d1;
+  --color-aqua: #28c7f7;
+
+  --color-leaf: #20b26b;
+  --color-leaf-light: #65d99a;
+
+  --color-brand-50: rgb(var(--c-brand-50));
+  --color-brand-100: rgb(var(--c-brand-100));
+  --color-brand-200: rgb(var(--c-brand-200));
+  --color-brand-300: rgb(var(--c-brand-300));
+  --color-brand-400: rgb(var(--c-brand-400));
+  --color-brand-500: rgb(var(--c-brand-500));
+  --color-brand-600: rgb(var(--c-brand-600));
+  --color-brand-700: rgb(var(--c-brand-700));
+  --color-brand-800: rgb(var(--c-brand-800));
+  --color-brand-900: rgb(var(--c-brand-900));
+
+  --color-gold-100: rgb(var(--c-gold-100));
+  --color-gold-300: rgb(var(--c-gold-300));
+  --color-gold-500: rgb(var(--c-gold-500));
+  --color-gold-700: rgb(var(--c-gold-700));
+
+  --color-danger-50: rgb(var(--c-danger-50));
+  --color-danger-200: rgb(var(--c-danger-200));
+  --color-danger-500: rgb(var(--c-danger-500));
+  --color-danger-700: rgb(var(--c-danger-700));
+  --color-danger-solid: rgb(var(--c-danger-solid));
+
+  --color-success-50: rgb(var(--c-success-50));
+  --color-success-200: rgb(var(--c-success-200));
+  --color-success-500: rgb(var(--c-success-500));
+  --color-success-700: rgb(var(--c-success-700));
+
+  --color-warn-50: rgb(var(--c-warn-50));
+  --color-warn-200: rgb(var(--c-warn-200));
+  --color-warn-500: rgb(var(--c-warn-500));
+  --color-warn-700: rgb(var(--c-warn-700));
+
+  --color-info-50: rgb(var(--c-info-50));
+  --color-info-200: rgb(var(--c-info-200));
+  --color-info-500: rgb(var(--c-info-500));
+  --color-info-700: rgb(var(--c-info-700));
+
+  --font-sans:
+    var(--font-inter), ui-sans-serif, system-ui, -apple-system, Segoe UI, Roboto,
+    Helvetica Neue, Arial, sans-serif;
+  --font-mono:
+    var(--font-plex-mono), ui-monospace, SFMono-Regular, Cascadia Mono, Menlo,
+    Consolas, monospace;
+
+  /* Tailwind 3's line heights: fixed lengths, not v4's ratios. A ratio is
+     inherited as a ratio, so text set with an arbitrary size inside a text-sm
+     block (the homepage's phone mock-ups) lost its spacing. */
+  --text-xs--line-height: 1rem;
+  --text-sm--line-height: 1.25rem;
+  --text-base--line-height: 1.5rem;
+  --text-lg--line-height: 1.75rem;
+  --text-xl--line-height: 1.75rem;
+  --text-2xl--line-height: 2rem;
+  --text-3xl--line-height: 2.25rem;
+  --text-4xl--line-height: 2.5rem;
+
+  --text-2xs: 0.6875rem;
+  --text-2xs--line-height: 1rem;
+  --text-2xs--letter-spacing: 0.01em;
+  --text-caption: 0.75rem;
+  --text-caption--line-height: 1.125rem;
+  --text-label: 0.8125rem;
+  --text-label--line-height: 1.25rem;
+  --text-label--font-weight: 500;
+  --text-heading: 1.0625rem;
+  --text-heading--line-height: 1.5rem;
+  --text-heading--letter-spacing: -0.01em;
+  --text-heading--font-weight: 600;
+  --text-title: 1.375rem;
+  --text-title--line-height: 1.875rem;
+  --text-title--letter-spacing: -0.015em;
+  --text-title--font-weight: 600;
+  --text-display: 1.875rem;
+  --text-display--line-height: 2.25rem;
+  --text-display--letter-spacing: -0.02em;
+  --text-display--font-weight: 600;
+  --text-figure: 2.25rem;
+  --text-figure--line-height: 2.5rem;
+  --text-figure--letter-spacing: -0.025em;
+  --text-figure--font-weight: 600;
+
+  --radius-sm: 0.25rem;
+  --radius: 0.375rem;
+  --radius-md: 0.375rem;
+  --radius-lg: 0.5rem;
+  --radius-xl: 0.625rem;
+  --radius-2xl: 0.75rem;
+  --radius-3xl: 0.75rem;
+  --radius-device: 2rem;
+
+  --shadow-card: var(--c-shadow-card);
+  --shadow-raised: var(--c-shadow-raised);
+  --shadow-pop: var(--c-shadow-pop);
+  --shadow-focus: 0 0 0 3px rgb(var(--c-brand-500) / 0.25);
+
+  --ease-out: cubic-bezier(0.16, 1, 0.3, 1);
+
+  --animate-fade-in: fade-in 160ms ease-out;
+  --animate-slide-up: slide-up 200ms cubic-bezier(0.16, 1, 0.3, 1);
+  --animate-shimmer: shimmer 1.6s infinite;
+  --animate-pulse-ring: pulse-ring 1.8s cubic-bezier(0.24, 0, 0.38, 1) infinite;
+  --animate-pin-pop: pin-pop 220ms cubic-bezier(0.16, 1, 0.3, 1);
+  --animate-float: float 6s ease-in-out infinite;
+
+  @keyframes fade-in {
+    from {
+      opacity: 0;
+      transform: translateY(4px);
+    }
+    to {
+      opacity: 1;
+      transform: translateY(0);
+    }
+  }
+  @keyframes slide-up {
+    from {
+      opacity: 0;
+      transform: translateY(12px);
+    }
+    to {
+      opacity: 1;
+      transform: translateY(0);
+    }
+  }
+  @keyframes shimmer {
+    100% {
+      transform: translateX(100%);
+    }
+  }
+  @keyframes pulse-ring {
+    0% {
+      transform: scale(0.9);
+      opacity: 0.7;
+    }
+    70% {
+      transform: scale(1.6);
+      opacity: 0;
+    }
+    100% {
+      transform: scale(1.6);
+      opacity: 0;
+    }
+  }
+  @keyframes float {
+    0%,
+    100% {
+      transform: translateY(0);
+    }
+    50% {
+      transform: translateY(-6px);
+    }
+  }
+  @keyframes pin-pop {
+    0% {
+      transform: scale(1);
+    }
+    40% {
+      transform: scale(1.22);
+    }
+    100% {
+      transform: scale(1);
+    }
+  }
+}
+
+/*
+  The default border color has changed to `currentcolor` in Tailwind CSS v4,
+  so we've added these compatibility styles to make sure everything still
+  looks the same as it did with Tailwind CSS v3.
+
+  If we ever want to remove these styles, we need to add an explicit border
+  color utility to any element that depends on these defaults.
+*/
+@layer base {
+  *,
+  ::after,
+  ::before,
+  ::backdrop,
+  ::file-selector-button {
+    border-color: var(--color-gray-200, currentcolor);
+  }
+}
+
+@utility container-page {
+  @apply mx-auto w-full max-w-6xl px-4 sm:px-6 lg:px-8;
+}
+
+@utility card {
+  /* A bordered surface. Borders separate; shadows are for things that float
+     (menus, dialogs, toasts). Use a card only when a group needs a boundary -
+     sections and dividers carry most of the layout. */
+  @apply rounded-xl border border-line bg-surface;
+  /* Grid and flex items default to min-width:auto, which means a card
+       refuses to shrink below its content and pushes the page wider than the
+       viewport. Cards are containers, so they may always shrink. */
+  min-width: 0;
+  .admin-portal & {
+    @apply rounded-2xl;
+    box-shadow:
+      0 1px 2px rgb(15 27 23 / 0.04),
+      0 1px 1px rgb(15 27 23 / 0.02);
+  }
+  .dark .admin-portal & {
+    box-shadow: 0 1px 0 rgb(0 0 0 / 0.25);
+  }
+
+  /* Clickable list rows inside cards lift a little on hover. */
+  .admin-portal & ul > li > button:hover {
+    background-color: rgb(var(--c-brand-50) / 0.55);
+  }
+}
+
+@utility metric-group {
+  /* Four figures that belong together read as one panel with hairline
+     dividers, not four boxes. The 1px gap shows the line colour behind the
+     cells, so it works at any column count. */
+  @apply grid gap-px overflow-hidden rounded-xl border border-line bg-line;
+  /* Its tiles are often cards. Tailwind 4 orders utilities differently from 3,
+     so `.card`'s border could come after this reset and win; the extra class
+     makes the reset the more specific rule. */
+  & > *,
+  & > .card {
+    @apply rounded-none border-0;
+  }
+  .admin-portal & {
+    @apply rounded-2xl;
+    box-shadow: 0 1px 2px rgb(15 27 23 / 0.04);
+  }
+
+  /* Figure tiles: a hairline of colour along the top. */
+  .admin-portal & > * {
+    background-image: linear-gradient(
+      90deg,
+      rgb(8 120 209 / 0.55),
+      rgb(32 178 107 / 0.55)
+    );
+    background-size: 100% 2px;
+    background-repeat: no-repeat;
+  }
+}
+
+@utility skeleton {
+  @apply relative overflow-hidden rounded-md bg-line/60;
+
+  &::after {
+    content: '';
+    @apply absolute inset-0 -translate-x-full animate-shimmer;
+    background-image: linear-gradient(
+      90deg,
+      transparent 0,
+      var(--shimmer) 50%,
+      transparent 100%
+    );
+  }
+}
+
+@utility link {
+  @apply font-medium text-brand-700 underline-offset-2 hover:underline;
+}
+
+@utility section-title {
+  /* Marketing section headings: one size and weight on every section, so the
+     homepage reads as one voice. Centre them with the intro when the section
+     below is centred; leave them left in two-column sections. */
+  @apply text-balance text-3xl font-bold tracking-tight text-ink sm:text-4xl;
+}
+
+@utility atmosphere-wash {
+  /* ---- Atmosphere: the homepage never changes colour at a line ----------
+     Navy surfaces ramp into the page through the sky ramp (below), and
+     sections that need separation get a wash that fades in and out. White
+     text only ever sits on the navy, never on a ramp. */
+
+  /* A section set slightly apart: the palest green, faded in and out. */
+  background: linear-gradient(
+    180deg,
+    rgb(var(--c-canvas)) 0%,
+    rgb(var(--c-wash)) 22%,
+    rgb(var(--c-wash)) 78%,
+    rgb(var(--c-canvas)) 100%
+  );
+}
+
+@utility atmosphere-night {
+  /* ---- Night: the homepage's navy surfaces and their ramp into the page ---
+     Navy, then the dawn ramp (--c-dawn-1..12) into the page. The ramp is the
+     only thing in the blend - no glows or mists over it - so it stays clean.
+     Light inside the navy (blue behind the phone, the shield, the close) sits
+     well clear of the ramps. White text only ever sits on the navy: pad the
+     content by at least each fade. */
+  --fade: 30rem;
+  background:
+    radial-gradient(
+      ellipse 55% 34% at var(--light-x, 50%) 36%,
+      rgb(8 120 209 / 0.3),
+      rgb(8 120 209 / 0) 70%
+    ),
+    radial-gradient(
+      ellipse 40% 30% at 12% 12%,
+      rgb(40 199 247 / 0.1),
+      rgb(40 199 247 / 0) 70%
+    ),
+    linear-gradient(
+      180deg,
+      #050b18 0%,
+      #071426 calc(100% - var(--fade)),
+      rgb(var(--c-dawn-1)) calc(100% - var(--fade) * 0.9231),
+      rgb(var(--c-dawn-2)) calc(100% - var(--fade) * 0.8462),
+      rgb(var(--c-dawn-3)) calc(100% - var(--fade) * 0.7692),
+      rgb(var(--c-dawn-4)) calc(100% - var(--fade) * 0.6923),
+      rgb(var(--c-dawn-5)) calc(100% - var(--fade) * 0.6154),
+      rgb(var(--c-dawn-6)) calc(100% - var(--fade) * 0.5385),
+      rgb(var(--c-dawn-7)) calc(100% - var(--fade) * 0.4615),
+      rgb(var(--c-dawn-8)) calc(100% - var(--fade) * 0.3846),
+      rgb(var(--c-dawn-9)) calc(100% - var(--fade) * 0.3077),
+      rgb(var(--c-dawn-10)) calc(100% - var(--fade) * 0.2308),
+      rgb(var(--c-dawn-11)) calc(100% - var(--fade) * 0.1538),
+      rgb(var(--c-dawn-12)) calc(100% - var(--fade) * 0.0769),
+      rgb(var(--c-canvas)) 100%
+    );
+  @media (min-width: 1024px) {
+    --fade: 22rem;
+    --light-x: 72%;
+  }
+}
+
+@utility atmosphere-night-mid {
+  /* A navy section mid-page: the page ramps up into night over --fade-in,
+     holds it (blue light at the centre, cyan and green at the sides), and
+     ramps back down into the page over --fade-out. */
+  --fade-in: 20rem;
+  --fade-out: 20rem;
+  background:
+    radial-gradient(
+      ellipse 45% 22% at 50% 50%,
+      rgb(8 120 209 / 0.3),
+      rgb(8 120 209 / 0) 70%
+    ),
+    radial-gradient(
+      ellipse 30% 18% at 8% 48%,
+      rgb(40 199 247 / 0.1),
+      rgb(40 199 247 / 0) 70%
+    ),
+    radial-gradient(
+      ellipse 30% 18% at 92% 52%,
+      rgb(32 178 107 / 0.12),
+      rgb(32 178 107 / 0) 70%
+    ),
+    linear-gradient(
+      180deg,
+      rgb(var(--c-canvas)) 0,
+      rgb(var(--c-dawn-12)) calc(var(--fade-in) * 0.0769),
+      rgb(var(--c-dawn-11)) calc(var(--fade-in) * 0.1538),
+      rgb(var(--c-dawn-10)) calc(var(--fade-in) * 0.2308),
+      rgb(var(--c-dawn-9)) calc(var(--fade-in) * 0.3077),
+      rgb(var(--c-dawn-8)) calc(var(--fade-in) * 0.3846),
+      rgb(var(--c-dawn-7)) calc(var(--fade-in) * 0.4615),
+      rgb(var(--c-dawn-6)) calc(var(--fade-in) * 0.5385),
+      rgb(var(--c-dawn-5)) calc(var(--fade-in) * 0.6154),
+      rgb(var(--c-dawn-4)) calc(var(--fade-in) * 0.6923),
+      rgb(var(--c-dawn-3)) calc(var(--fade-in) * 0.7692),
+      rgb(var(--c-dawn-2)) calc(var(--fade-in) * 0.8462),
+      rgb(var(--c-dawn-1)) calc(var(--fade-in) * 0.9231),
+      #071426 var(--fade-in),
+      #071426 calc(100% - var(--fade-out)),
+      rgb(var(--c-dawn-1)) calc(100% - var(--fade-out) * 0.9231),
+      rgb(var(--c-dawn-2)) calc(100% - var(--fade-out) * 0.8462),
+      rgb(var(--c-dawn-3)) calc(100% - var(--fade-out) * 0.7692),
+      rgb(var(--c-dawn-4)) calc(100% - var(--fade-out) * 0.6923),
+      rgb(var(--c-dawn-5)) calc(100% - var(--fade-out) * 0.6154),
+      rgb(var(--c-dawn-6)) calc(100% - var(--fade-out) * 0.5385),
+      rgb(var(--c-dawn-7)) calc(100% - var(--fade-out) * 0.4615),
+      rgb(var(--c-dawn-8)) calc(100% - var(--fade-out) * 0.3846),
+      rgb(var(--c-dawn-9)) calc(100% - var(--fade-out) * 0.3077),
+      rgb(var(--c-dawn-10)) calc(100% - var(--fade-out) * 0.2308),
+      rgb(var(--c-dawn-11)) calc(100% - var(--fade-out) * 0.1538),
+      rgb(var(--c-dawn-12)) calc(100% - var(--fade-out) * 0.0769),
+      rgb(var(--c-canvas)) 100%
+    );
+  @media (min-width: 640px) {
+    --fade-in: 26rem;
+    --fade-out: 26rem;
+  }
+}
+
+@utility atmosphere-night-close {
+  /* The close: the page ramps up into night and stays there - the homepage
+     footer is navy too (SiteFooter night), so nothing ramps back down. */
+  --fade-in: 20rem;
+  background:
+    radial-gradient(
+      ellipse 36% 22% at 22% 74%,
+      rgb(8 120 209 / 0.32),
+      rgb(8 120 209 / 0) 70%
+    ),
+    radial-gradient(
+      ellipse 30% 20% at 50% 66%,
+      rgb(40 199 247 / 0.12),
+      rgb(40 199 247 / 0) 70%
+    ),
+    radial-gradient(
+      ellipse 36% 22% at 80% 76%,
+      rgb(32 178 107 / 0.26),
+      rgb(32 178 107 / 0) 70%
+    ),
+    linear-gradient(
+      180deg,
+      rgb(var(--c-canvas)) 0,
+      rgb(var(--c-dawn-12)) calc(var(--fade-in) * 0.0769),
+      rgb(var(--c-dawn-11)) calc(var(--fade-in) * 0.1538),
+      rgb(var(--c-dawn-10)) calc(var(--fade-in) * 0.2308),
+      rgb(var(--c-dawn-9)) calc(var(--fade-in) * 0.3077),
+      rgb(var(--c-dawn-8)) calc(var(--fade-in) * 0.3846),
+      rgb(var(--c-dawn-7)) calc(var(--fade-in) * 0.4615),
+      rgb(var(--c-dawn-6)) calc(var(--fade-in) * 0.5385),
+      rgb(var(--c-dawn-5)) calc(var(--fade-in) * 0.6154),
+      rgb(var(--c-dawn-4)) calc(var(--fade-in) * 0.6923),
+      rgb(var(--c-dawn-3)) calc(var(--fade-in) * 0.7692),
+      rgb(var(--c-dawn-2)) calc(var(--fade-in) * 0.8462),
+      rgb(var(--c-dawn-1)) calc(var(--fade-in) * 0.9231),
+      #071426 var(--fade-in),
+      #050b18 100%
+    );
+  @media (min-width: 640px) {
+    --fade-in: 26rem;
+  }
+}
+
+@utility app-hero {
+  /* The app's navy panel (AppHero): the homepage's night, sized for the top
+     of an app page - blue light from the top corner, aqua and green rising
+     from the bottom edge, all well inside the panel. */
+  background:
+    radial-gradient(
+      ellipse 60% 90% at 88% -20%,
+      rgb(8 120 209 / 0.5),
+      rgb(8 120 209 / 0) 62%
+    ),
+    radial-gradient(
+      ellipse 45% 75% at 4% 115%,
+      rgb(40 199 247 / 0.16),
+      rgb(40 199 247 / 0) 65%
+    ),
+    radial-gradient(
+      ellipse 45% 75% at 96% 115%,
+      rgb(32 178 107 / 0.2),
+      rgb(32 178 107 / 0) 65%
+    ),
+    linear-gradient(160deg, #0a1b35 0%, #071426 55%, #050b18 100%);
+}
+
+@utility text-dawn {
+  /* "ours." - the one word the hero is about, in the dawn gradient. */
+  background: linear-gradient(95deg, #28c7f7 0%, #3fd0c6 48%, #65d99a 100%);
+  -webkit-background-clip: text;
+  background-clip: text;
+  color: transparent;
+}
+
+@utility twinkle {
+  /* Night motion: stars, the services marquee, money moving along a line,
+     the shield breathing. All of it stops under reduced motion. */
+  animation: twinkle 4s ease-in-out infinite;
+  @media (prefers-reduced-motion: reduce) {
+    animation: none;
+  }
+}
+
+@utility marquee {
+  animation: marquee var(--marquee-duration, 60s) linear infinite;
+  .marquee-track:hover & {
+    animation-play-state: paused;
+  }
+  @media (prefers-reduced-motion: reduce) {
+    animation: none;
+  }
+}
+
+@utility marquee-reverse {
+  animation: marquee var(--marquee-duration, 60s) linear infinite reverse;
+
+  .marquee-track:hover & {
+    animation-play-state: paused;
+  }
+  @media (prefers-reduced-motion: reduce) {
+    animation: none;
+  }
+}
+
+@utility marquee-track {
+  &:hover .marquee {
+    animation-play-state: paused;
+  }
+  &:hover .marquee-reverse {
+    animation-play-state: paused;
+  }
+}
+
+@utility flow-dash {
+  stroke-dasharray: 4 8;
+  animation: flow-dash 1.2s linear infinite;
+  @media (prefers-reduced-motion: reduce) {
+    animation: none;
+  }
+}
+
+@utility shield-breathe {
+  animation: shield-breathe 5s ease-in-out infinite;
+  @media (prefers-reduced-motion: reduce) {
+    animation: none;
+  }
+}
+
+@utility halo {
+  /* A soft pale-green light behind a device (see Halo in device.tsx). */
+  position: absolute;
+  pointer-events: none;
+  border-radius: 9999px;
+  background: radial-gradient(
+    closest-side,
+    rgb(var(--c-brand-100) / 0.95),
+    rgb(var(--c-brand-100) / 0.35) 55%,
+    rgb(var(--c-brand-100) / 0)
+  );
+}
+
+@utility reveal {
+  /* Reveal on scroll (Reveal in device.tsx): slow, upward, once. */
+  &[data-reveal='hidden'] {
+    opacity: 0;
+    transform: translateY(28px);
+  }
+  &[data-reveal='shown'] {
+    opacity: 1;
+    transform: none;
+    transition:
+      opacity 700ms ease-out,
+      transform 900ms cubic-bezier(0.16, 1, 0.3, 1);
+  }
+}
+
+@utility story-progress {
+  /* Story motion: a step's progress bar, a notification dropping in from the
+     top of a screen, a tap on a list row. All of it stops under reduced motion. */
+  animation: story-progress var(--story-interval, 4s) linear forwards;
+  @media (prefers-reduced-motion: reduce) {
+    animation: none;
+  }
+}
+
+@utility drop-in {
+  animation: drop-in 600ms cubic-bezier(0.16, 1, 0.3, 1) both;
+  @media (prefers-reduced-motion: reduce) {
+    animation: none;
+  }
+}
+
+@utility rise-in {
+  animation: rise-in 500ms cubic-bezier(0.16, 1, 0.3, 1) both;
+  @media (prefers-reduced-motion: reduce) {
+    animation: none;
+  }
+}
+
+@utility tap-ring {
+  animation: tap-ring 1.6s ease-out infinite;
+  @media (prefers-reduced-motion: reduce) {
+    animation: none;
+  }
+}
+
+@utility section-lead {
+  @apply mt-3 text-pretty text-base leading-relaxed text-ink-muted sm:text-lg;
+}
+
+@utility admin-hero {
+  /* ---- Admin console -------------------------------------------------------
+     AppShell's admin variant puts .admin-portal on its root. Everything here
+     is scoped to it, so the customer app is untouched. The pages keep their
+     own markup: tables, cards and metric groups take the console's look from
+     these rules (they out-rank single utilities on specificity). */
+
+  /* The navy band at the top of the overview, from the homepage's night. */
+  background:
+    radial-gradient(
+      ellipse 55% 120% at 92% -30%,
+      rgb(8 120 209 / 0.55),
+      rgb(8 120 209 / 0) 60%
+    ),
+    radial-gradient(
+      ellipse 40% 90% at 0% 130%,
+      rgb(40 199 247 / 0.18),
+      rgb(40 199 247 / 0) 65%
+    ),
+    radial-gradient(
+      ellipse 40% 90% at 70% 140%,
+      rgb(32 178 107 / 0.24),
+      rgb(32 178 107 / 0) 65%
+    ),
+    linear-gradient(150deg, #0c2142 0%, #071426 55%, #050b18 100%);
+}
+
+@utility stat-card {
+  /* A single figure on its own surface: a card that lifts on hover. */
+  @apply rounded-2xl border border-line bg-surface;
+  min-width: 0;
+  box-shadow:
+    0 1px 2px rgb(15 27 23 / 0.04),
+    0 1px 1px rgb(15 27 23 / 0.02);
+  .dark & {
+    box-shadow: 0 1px 0 rgb(0 0 0 / 0.25);
+  }
+}
+
+
+@utility admin-portal {
+  background:
+    radial-gradient(
+      ellipse 60% 40% at 100% 0%,
+      rgb(var(--c-brand-500) / 0.05),
+      transparent 70%
+    ),
+    rgb(var(--c-canvas));
+  & .card {
+    @apply rounded-2xl;
+    box-shadow:
+      0 1px 2px rgb(15 27 23 / 0.04),
+      0 1px 1px rgb(15 27 23 / 0.02);
+  }
+  .dark & .card {
+    box-shadow: 0 1px 0 rgb(0 0 0 / 0.25);
+  }
+  & .metric-group {
+    @apply rounded-2xl;
+    box-shadow: 0 1px 2px rgb(15 27 23 / 0.04);
+  }
+
+  /* Tables: a quiet uppercase header, roomy rows, a soft hover. */
+  & table thead {
+    @apply border-line bg-sunken/70;
+  }
+  & table thead th {
+    @apply whitespace-nowrap text-2xs font-semibold uppercase tracking-wider text-ink-faint;
+  }
+  & table tbody tr {
+    @apply transition-colors;
+  }
+  & table tbody tr:hover {
+    background-color: rgb(var(--c-brand-50) / 0.55);
+  }
+  & table tbody td {
+    @apply align-middle;
+  }
+  /* Filter tabs (SegmentedControl): the chosen one in the deep brand green,
+     which carries white text in both themes. The overview's period picker on
+     the navy banner is not bg-sunken, so it keeps its own look. */
+  & [role='tablist'].bg-sunken {
+    @apply rounded-xl p-1 ring-1 ring-inset ring-line;
+  }
+  & [role='tablist'].bg-sunken [aria-selected='true'] {
+    background-color: rgb(var(--c-primary));
+    color: #fff;
+    box-shadow: 0 6px 16px -8px rgb(var(--c-primary) / 0.8);
+    --tw-ring-color: transparent;
+  }
+  & [role='tablist'].bg-sunken [aria-selected='true'] span {
+    color: rgb(255 255 255 / 0.75);
+  }
+
+  /* Section headings get a short accent bar, so long pages scan in blocks. */
+  & section > div > div > h2.text-heading {
+    @apply flex items-center gap-2;
+  }
+  & section > div > div > h2.text-heading::before {
+    content: '';
+    @apply inline-block h-4 w-1 rounded-full bg-linear-to-b from-azure to-leaf;
+  }
+
+  /* Figure tiles: a hairline of colour along the top. */
+  & .metric-group > * {
+    background-image: linear-gradient(
+      90deg,
+      rgb(8 120 209 / 0.55),
+      rgb(32 178 107 / 0.55)
+    );
+    background-size: 100% 2px;
+    background-repeat: no-repeat;
+  }
+
+  /* Rows that open a record (components/admin/ui.tsx openRow): reachable by
+     keyboard, and plainly focused when they are. */
+  & tr.admin-row:focus-visible {
+    outline: 2px solid rgb(var(--c-primary));
+    outline-offset: -2px;
+    background-color: rgb(var(--c-brand-50) / 0.55);
+  }
+
+  /* Clickable list rows inside cards lift a little on hover. */
+  & .card ul > li > button:hover {
+    background-color: rgb(var(--c-brand-50) / 0.55);
+  }
+
+  & .overflow-x-auto {
+    /* Contains absolutely positioned children (sr-only labels in a wide
+       table's header), which otherwise escape and widen the whole page. */
+    position: relative;
+    scrollbar-width: thin;
+  }
+}
+
+
+
+
+
+@utility admin-sidebar {
+  /* The console's sidebar: night navy in both themes. */
+  background:
+    radial-gradient(
+      ellipse 120% 40% at 0% 0%,
+      rgb(8 120 209 / 0.22),
+      transparent 70%
+    ),
+    radial-gradient(
+      ellipse 120% 30% at 100% 100%,
+      rgb(32 178 107 / 0.14),
+      transparent 70%
+    ),
+    linear-gradient(180deg, #0a1b35 0%, #071426 45%, #050b18 100%);
+}
+
+@utility pb-safe {
+  padding-bottom: calc(1rem + var(--safe-bottom));
+}
+
+@utility mb-safe-nav {
+  /* Clears the fixed bottom navigation on mobile. */
+  margin-bottom: calc(4.5rem + var(--safe-bottom));
+}
+
+@utility pb-safe-nav {
+  /* The app's content area on phones: room for the fixed bottom navigation
+     (4rem tall, plus the home-indicator inset it sits above) and a little air,
+     so the last thing on a page - "Show more", a form's button - is never
+     under it. lg:pb-* takes over where the bar is hidden. */
+  padding-bottom: calc(5.5rem + var(--safe-bottom));
+}
+
+@utility no-scrollbar {
+  &::-webkit-scrollbar {
+    display: none;
+  }
+  -ms-overflow-style: none;
+  scrollbar-width: none;
+}
 
 @layer base {
   /* Theme tokens. Each colour is an "R G B" triplet so Tailwind's opacity
@@ -77,9 +867,9 @@
     --c-info-200: 178 221 255;
     --c-info-500: 46 144 250;
     --c-info-700: 23 92 211;
-    --shadow-card: 0 1px 0 rgb(15 27 23 / 0.03);
-    --shadow-raised: 0 4px 12px rgb(15 27 23 / 0.07), 0 1px 3px rgb(15 27 23 / 0.05);
-    --shadow-pop: 0 16px 40px rgb(15 27 23 / 0.14), 0 2px 8px rgb(15 27 23 / 0.06);
+    --c-shadow-card: 0 1px 0 rgb(15 27 23 / 0.03);
+    --c-shadow-raised: 0 4px 12px rgb(15 27 23 / 0.07), 0 1px 3px rgb(15 27 23 / 0.05);
+    --c-shadow-pop: 0 16px 40px rgb(15 27 23 / 0.14), 0 2px 8px rgb(15 27 23 / 0.06);
     --shimmer: rgb(255 255 255 / 0.6);
     color-scheme: light;
   }
@@ -147,9 +937,9 @@
     --c-info-200: 30 61 96;
     --c-info-500: 77 163 255;
     --c-info-700: 124 183 255;
-    --shadow-card: 0 1px 0 rgb(0 0 0 / 0.25);
-    --shadow-raised: 0 6px 16px rgb(0 0 0 / 0.35), 0 1px 3px rgb(0 0 0 / 0.3);
-    --shadow-pop: 0 20px 48px rgb(0 0 0 / 0.55), 0 2px 8px rgb(0 0 0 / 0.35);
+    --c-shadow-card: 0 1px 0 rgb(0 0 0 / 0.25);
+    --c-shadow-raised: 0 6px 16px rgb(0 0 0 / 0.35), 0 1px 3px rgb(0 0 0 / 0.3);
+    --c-shadow-pop: 0 20px 48px rgb(0 0 0 / 0.55), 0 2px 8px rgb(0 0 0 / 0.35);
     --shimmer: rgb(255 255 255 / 0.05);
     color-scheme: dark;
   }
@@ -181,7 +971,7 @@
   /* A visible focus ring is a feature, not a blemish. Only shown for keyboard
      users so it never fights with touch input. */
   :focus-visible {
-    @apply outline-none ring-2 ring-brand-500/60 ring-offset-2 ring-offset-canvas;
+    @apply outline-hidden ring-2 ring-brand-500/60 ring-offset-2 ring-offset-canvas;
   }
 
   /* Tabular figures keep money columns from jittering as digits change. */
@@ -211,221 +1001,6 @@
 }
 
 @layer components {
-  .container-page {
-    @apply mx-auto w-full max-w-6xl px-4 sm:px-6 lg:px-8;
-  }
-
-  /* A bordered surface. Borders separate; shadows are for things that float
-     (menus, dialogs, toasts). Use a card only when a group needs a boundary -
-     sections and dividers carry most of the layout. */
-  .card {
-    @apply rounded-xl border border-line bg-surface;
-    /* Grid and flex items default to min-width:auto, which means a card
-       refuses to shrink below its content and pushes the page wider than the
-       viewport. Cards are containers, so they may always shrink. */
-    min-width: 0;
-  }
-
-  /* Four figures that belong together read as one panel with hairline
-     dividers, not four boxes. The 1px gap shows the line colour behind the
-     cells, so it works at any column count. */
-  .metric-group {
-    @apply grid gap-px overflow-hidden rounded-xl border border-line bg-line;
-  }
-  .metric-group > * {
-    @apply rounded-none border-0;
-  }
-
-  .skeleton {
-    @apply relative overflow-hidden rounded-md bg-line/60;
-  }
-
-  .link {
-    @apply font-medium text-brand-700 underline-offset-2 hover:underline;
-  }
-
-  /* Marketing section headings: one size and weight on every section, so the
-     homepage reads as one voice. Centre them with the intro when the section
-     below is centred; leave them left in two-column sections. */
-  .section-title {
-    @apply text-balance text-3xl font-bold tracking-tight text-ink sm:text-4xl;
-  }
-  /* ---- Atmosphere: the homepage never changes colour at a line ----------
-     Navy surfaces ramp into the page through the sky ramp (below), and
-     sections that need separation get a wash that fades in and out. White
-     text only ever sits on the navy, never on a ramp. */
-
-  /* A section set slightly apart: the palest green, faded in and out. */
-  .atmosphere-wash {
-    background: linear-gradient(
-      180deg,
-      rgb(var(--c-canvas)) 0%,
-      rgb(var(--c-wash)) 22%,
-      rgb(var(--c-wash)) 78%,
-      rgb(var(--c-canvas)) 100%
-    );
-  }
-
-  /* ---- Night: the homepage's navy surfaces and their ramp into the page ---
-     Navy, then the dawn ramp (--c-dawn-1..12) into the page. The ramp is the
-     only thing in the blend - no glows or mists over it - so it stays clean.
-     Light inside the navy (blue behind the phone, the shield, the close) sits
-     well clear of the ramps. White text only ever sits on the navy: pad the
-     content by at least each fade. */
-  .atmosphere-night {
-    --fade: 30rem;
-    background:
-      radial-gradient(ellipse 55% 34% at var(--light-x, 50%) 36%, rgb(8 120 209 / 0.3), rgb(8 120 209 / 0) 70%),
-      radial-gradient(ellipse 40% 30% at 12% 12%, rgb(40 199 247 / 0.1), rgb(40 199 247 / 0) 70%),
-      linear-gradient(
-        180deg,
-        #050b18 0%,
-        #071426 calc(100% - var(--fade)),
-        rgb(var(--c-dawn-1)) calc(100% - var(--fade) * 0.9231),
-        rgb(var(--c-dawn-2)) calc(100% - var(--fade) * 0.8462),
-        rgb(var(--c-dawn-3)) calc(100% - var(--fade) * 0.7692),
-        rgb(var(--c-dawn-4)) calc(100% - var(--fade) * 0.6923),
-        rgb(var(--c-dawn-5)) calc(100% - var(--fade) * 0.6154),
-        rgb(var(--c-dawn-6)) calc(100% - var(--fade) * 0.5385),
-        rgb(var(--c-dawn-7)) calc(100% - var(--fade) * 0.4615),
-        rgb(var(--c-dawn-8)) calc(100% - var(--fade) * 0.3846),
-        rgb(var(--c-dawn-9)) calc(100% - var(--fade) * 0.3077),
-        rgb(var(--c-dawn-10)) calc(100% - var(--fade) * 0.2308),
-        rgb(var(--c-dawn-11)) calc(100% - var(--fade) * 0.1538),
-        rgb(var(--c-dawn-12)) calc(100% - var(--fade) * 0.0769),
-        rgb(var(--c-canvas)) 100%
-      );
-  }
-  @media (min-width: 1024px) {
-    .atmosphere-night {
-      --fade: 22rem;
-      --light-x: 72%;
-    }
-  }
-
-  /* A navy section mid-page: the page ramps up into night over --fade-in,
-     holds it (blue light at the centre, cyan and green at the sides), and
-     ramps back down into the page over --fade-out. */
-  .atmosphere-night-mid {
-    --fade-in: 20rem;
-    --fade-out: 20rem;
-    background:
-      radial-gradient(ellipse 45% 22% at 50% 50%, rgb(8 120 209 / 0.3), rgb(8 120 209 / 0) 70%),
-      radial-gradient(ellipse 30% 18% at 8% 48%, rgb(40 199 247 / 0.1), rgb(40 199 247 / 0) 70%),
-      radial-gradient(ellipse 30% 18% at 92% 52%, rgb(32 178 107 / 0.12), rgb(32 178 107 / 0) 70%),
-      linear-gradient(
-        180deg,
-        rgb(var(--c-canvas)) 0,
-        rgb(var(--c-dawn-12)) calc(var(--fade-in) * 0.0769),
-        rgb(var(--c-dawn-11)) calc(var(--fade-in) * 0.1538),
-        rgb(var(--c-dawn-10)) calc(var(--fade-in) * 0.2308),
-        rgb(var(--c-dawn-9)) calc(var(--fade-in) * 0.3077),
-        rgb(var(--c-dawn-8)) calc(var(--fade-in) * 0.3846),
-        rgb(var(--c-dawn-7)) calc(var(--fade-in) * 0.4615),
-        rgb(var(--c-dawn-6)) calc(var(--fade-in) * 0.5385),
-        rgb(var(--c-dawn-5)) calc(var(--fade-in) * 0.6154),
-        rgb(var(--c-dawn-4)) calc(var(--fade-in) * 0.6923),
-        rgb(var(--c-dawn-3)) calc(var(--fade-in) * 0.7692),
-        rgb(var(--c-dawn-2)) calc(var(--fade-in) * 0.8462),
-        rgb(var(--c-dawn-1)) calc(var(--fade-in) * 0.9231),
-        #071426 var(--fade-in),
-        #071426 calc(100% - var(--fade-out)),
-        rgb(var(--c-dawn-1)) calc(100% - var(--fade-out) * 0.9231),
-        rgb(var(--c-dawn-2)) calc(100% - var(--fade-out) * 0.8462),
-        rgb(var(--c-dawn-3)) calc(100% - var(--fade-out) * 0.7692),
-        rgb(var(--c-dawn-4)) calc(100% - var(--fade-out) * 0.6923),
-        rgb(var(--c-dawn-5)) calc(100% - var(--fade-out) * 0.6154),
-        rgb(var(--c-dawn-6)) calc(100% - var(--fade-out) * 0.5385),
-        rgb(var(--c-dawn-7)) calc(100% - var(--fade-out) * 0.4615),
-        rgb(var(--c-dawn-8)) calc(100% - var(--fade-out) * 0.3846),
-        rgb(var(--c-dawn-9)) calc(100% - var(--fade-out) * 0.3077),
-        rgb(var(--c-dawn-10)) calc(100% - var(--fade-out) * 0.2308),
-        rgb(var(--c-dawn-11)) calc(100% - var(--fade-out) * 0.1538),
-        rgb(var(--c-dawn-12)) calc(100% - var(--fade-out) * 0.0769),
-        rgb(var(--c-canvas)) 100%
-      );
-  }
-  @media (min-width: 640px) {
-    .atmosphere-night-mid {
-      --fade-in: 26rem;
-      --fade-out: 26rem;
-    }
-  }
-
-  /* The close: the page ramps up into night and stays there - the homepage
-     footer is navy too (SiteFooter night), so nothing ramps back down. */
-  .atmosphere-night-close {
-    --fade-in: 20rem;
-    background:
-      radial-gradient(ellipse 36% 22% at 22% 74%, rgb(8 120 209 / 0.32), rgb(8 120 209 / 0) 70%),
-      radial-gradient(ellipse 30% 20% at 50% 66%, rgb(40 199 247 / 0.12), rgb(40 199 247 / 0) 70%),
-      radial-gradient(ellipse 36% 22% at 80% 76%, rgb(32 178 107 / 0.26), rgb(32 178 107 / 0) 70%),
-      linear-gradient(
-        180deg,
-        rgb(var(--c-canvas)) 0,
-        rgb(var(--c-dawn-12)) calc(var(--fade-in) * 0.0769),
-        rgb(var(--c-dawn-11)) calc(var(--fade-in) * 0.1538),
-        rgb(var(--c-dawn-10)) calc(var(--fade-in) * 0.2308),
-        rgb(var(--c-dawn-9)) calc(var(--fade-in) * 0.3077),
-        rgb(var(--c-dawn-8)) calc(var(--fade-in) * 0.3846),
-        rgb(var(--c-dawn-7)) calc(var(--fade-in) * 0.4615),
-        rgb(var(--c-dawn-6)) calc(var(--fade-in) * 0.5385),
-        rgb(var(--c-dawn-5)) calc(var(--fade-in) * 0.6154),
-        rgb(var(--c-dawn-4)) calc(var(--fade-in) * 0.6923),
-        rgb(var(--c-dawn-3)) calc(var(--fade-in) * 0.7692),
-        rgb(var(--c-dawn-2)) calc(var(--fade-in) * 0.8462),
-        rgb(var(--c-dawn-1)) calc(var(--fade-in) * 0.9231),
-        #071426 var(--fade-in),
-        #050b18 100%
-      );
-  }
-  @media (min-width: 640px) {
-    .atmosphere-night-close {
-      --fade-in: 26rem;
-    }
-  }
-
-  /* The app's navy panel (AppHero): the homepage's night, sized for the top
-     of an app page - blue light from the top corner, aqua and green rising
-     from the bottom edge, all well inside the panel. */
-  .app-hero {
-    background:
-      radial-gradient(ellipse 60% 90% at 88% -20%, rgb(8 120 209 / 0.5), rgb(8 120 209 / 0) 62%),
-      radial-gradient(ellipse 45% 75% at 4% 115%, rgb(40 199 247 / 0.16), rgb(40 199 247 / 0) 65%),
-      radial-gradient(ellipse 45% 75% at 96% 115%, rgb(32 178 107 / 0.2), rgb(32 178 107 / 0) 65%),
-      linear-gradient(160deg, #0a1b35 0%, #071426 55%, #050b18 100%);
-  }
-
-  /* "ours." - the one word the hero is about, in the dawn gradient. */
-  .text-dawn {
-    background: linear-gradient(95deg, #28c7f7 0%, #3fd0c6 48%, #65d99a 100%);
-    -webkit-background-clip: text;
-    background-clip: text;
-    color: transparent;
-  }
-
-  /* Night motion: stars, the services marquee, money moving along a line,
-     the shield breathing. All of it stops under reduced motion. */
-  .twinkle {
-    animation: twinkle 4s ease-in-out infinite;
-  }
-  .marquee {
-    animation: marquee var(--marquee-duration, 60s) linear infinite;
-  }
-  .marquee-reverse {
-    animation: marquee var(--marquee-duration, 60s) linear infinite reverse;
-  }
-  .marquee-track:hover .marquee,
-  .marquee-track:hover .marquee-reverse {
-    animation-play-state: paused;
-  }
-  .flow-dash {
-    stroke-dasharray: 4 8;
-    animation: flow-dash 1.2s linear infinite;
-  }
-  .shield-breathe {
-    animation: shield-breathe 5s ease-in-out infinite;
-  }
   @keyframes twinkle {
     0%, 100% { opacity: 0.15; }
     50% { opacity: 0.8; }
@@ -440,45 +1015,6 @@
   @keyframes shield-breathe {
     0%, 100% { transform: scale(1); opacity: 0.55; }
     50% { transform: scale(1.06); opacity: 0.9; }
-  }
-  @media (prefers-reduced-motion: reduce) {
-    .twinkle, .marquee, .marquee-reverse, .flow-dash, .shield-breathe { animation: none; }
-  }
-
-  /* A soft pale-green light behind a device (see Halo in device.tsx). */
-  .halo {
-    position: absolute;
-    pointer-events: none;
-    border-radius: 9999px;
-    background: radial-gradient(closest-side, rgb(var(--c-brand-100) / 0.95), rgb(var(--c-brand-100) / 0.35) 55%, rgb(var(--c-brand-100) / 0));
-  }
-
-  /* Reveal on scroll (Reveal in device.tsx): slow, upward, once. */
-  .reveal[data-reveal="hidden"] {
-    opacity: 0;
-    transform: translateY(28px);
-  }
-  .reveal[data-reveal="shown"] {
-    opacity: 1;
-    transform: none;
-    transition:
-      opacity 700ms ease-out,
-      transform 900ms cubic-bezier(0.16, 1, 0.3, 1);
-  }
-
-  /* Story motion: a step's progress bar, a notification dropping in from the
-     top of a screen, a tap on a list row. All of it stops under reduced motion. */
-  .story-progress {
-    animation: story-progress var(--story-interval, 4s) linear forwards;
-  }
-  .drop-in {
-    animation: drop-in 600ms cubic-bezier(0.16, 1, 0.3, 1) both;
-  }
-  .rise-in {
-    animation: rise-in 500ms cubic-bezier(0.16, 1, 0.3, 1) both;
-  }
-  .tap-ring {
-    animation: tap-ring 1.6s ease-out infinite;
   }
   @keyframes story-progress {
     from { transform: scaleX(0); }
@@ -496,169 +1032,25 @@
     0% { opacity: 0.55; transform: scale(0.6); }
     70%, 100% { opacity: 0; transform: scale(1.5); }
   }
-  @media (prefers-reduced-motion: reduce) {
-    .story-progress, .drop-in, .rise-in, .tap-ring { animation: none; }
-  }
-
-  .section-lead {
-    @apply mt-3 text-pretty text-base leading-relaxed text-ink-muted sm:text-lg;
-  }
-
-  /* ---- Admin console -------------------------------------------------------
-     AppShell's admin variant puts .admin-portal on its root. Everything here
-     is scoped to it, so the customer app is untouched. The pages keep their
-     own markup: tables, cards and metric groups take the console's look from
-     these rules (they out-rank single utilities on specificity). */
-
-  /* The navy band at the top of the overview, from the homepage's night. */
-  .admin-hero {
-    background:
-      radial-gradient(ellipse 55% 120% at 92% -30%, rgb(8 120 209 / 0.55), rgb(8 120 209 / 0) 60%),
-      radial-gradient(ellipse 40% 90% at 0% 130%, rgb(40 199 247 / 0.18), rgb(40 199 247 / 0) 65%),
-      radial-gradient(ellipse 40% 90% at 70% 140%, rgb(32 178 107 / 0.24), rgb(32 178 107 / 0) 65%),
-      linear-gradient(150deg, #0c2142 0%, #071426 55%, #050b18 100%);
-  }
-
-  /* A single figure on its own surface: a card that lifts on hover. */
-  .stat-card {
-    @apply rounded-2xl border border-line bg-surface;
-    min-width: 0;
-    box-shadow: 0 1px 2px rgb(15 27 23 / 0.04), 0 1px 1px rgb(15 27 23 / 0.02);
-  }
-  .dark .stat-card {
-    box-shadow: 0 1px 0 rgb(0 0 0 / 0.25);
-  }
-
-  .admin-portal {
-    background:
-      radial-gradient(ellipse 60% 40% at 100% 0%, rgb(var(--c-brand-500) / 0.05), transparent 70%),
-      rgb(var(--c-canvas));
-  }
-  .admin-portal .card {
-    @apply rounded-2xl;
-    box-shadow: 0 1px 2px rgb(15 27 23 / 0.04), 0 1px 1px rgb(15 27 23 / 0.02);
-  }
-  .dark .admin-portal .card {
-    box-shadow: 0 1px 0 rgb(0 0 0 / 0.25);
-  }
-  .admin-portal .metric-group {
-    @apply rounded-2xl;
-    box-shadow: 0 1px 2px rgb(15 27 23 / 0.04);
-  }
-
-  /* Tables: a quiet uppercase header, roomy rows, a soft hover. */
-  .admin-portal table thead {
-    @apply border-line bg-sunken/70;
-  }
-  .admin-portal table thead th {
-    @apply whitespace-nowrap text-2xs font-semibold uppercase tracking-wider text-ink-faint;
-  }
-  .admin-portal table tbody tr {
-    @apply transition-colors;
-  }
-  .admin-portal table tbody tr:hover {
-    background-color: rgb(var(--c-brand-50) / 0.55);
-  }
-  .admin-portal table tbody td {
-    @apply align-middle;
-  }
-  /* Filter tabs (SegmentedControl): the chosen one in the deep brand green,
-     which carries white text in both themes. The overview's period picker on
-     the navy banner is not bg-sunken, so it keeps its own look. */
-  .admin-portal [role="tablist"].bg-sunken {
-    @apply rounded-xl p-1 ring-1 ring-inset ring-line;
-  }
-  .admin-portal [role="tablist"].bg-sunken [aria-selected="true"] {
-    background-color: rgb(var(--c-primary));
-    color: #fff;
-    box-shadow: 0 6px 16px -8px rgb(var(--c-primary) / 0.8);
-    --tw-ring-color: transparent;
-  }
-  .admin-portal [role="tablist"].bg-sunken [aria-selected="true"] span {
-    color: rgb(255 255 255 / 0.75);
-  }
-
-  /* Section headings get a short accent bar, so long pages scan in blocks. */
-  .admin-portal section > div > div > h2.text-heading {
-    @apply flex items-center gap-2;
-  }
-  .admin-portal section > div > div > h2.text-heading::before {
-    content: "";
-    @apply inline-block h-4 w-1 rounded-full bg-gradient-to-b from-azure to-leaf;
-  }
-
-  /* Figure tiles: a hairline of colour along the top. */
-  .admin-portal .metric-group > * {
-    background-image: linear-gradient(90deg, rgb(8 120 209 / 0.55), rgb(32 178 107 / 0.55));
-    background-size: 100% 2px;
-    background-repeat: no-repeat;
-  }
-
-  /* Rows that open a record (components/admin/ui.tsx openRow): reachable by
-     keyboard, and plainly focused when they are. */
-  .admin-portal tr.admin-row:focus-visible {
-    outline: 2px solid rgb(var(--c-primary));
-    outline-offset: -2px;
-    background-color: rgb(var(--c-brand-50) / 0.55);
-  }
-
-  /* Clickable list rows inside cards lift a little on hover. */
-  .admin-portal .card ul > li > button:hover {
-    background-color: rgb(var(--c-brand-50) / 0.55);
-  }
-
-  .admin-portal .overflow-x-auto {
-    /* Contains absolutely positioned children (sr-only labels in a wide
-       table's header), which otherwise escape and widen the whole page. */
-    position: relative;
-    scrollbar-width: thin;
-  }
-
-  /* The console's sidebar: night navy in both themes. */
-  .admin-sidebar {
-    background:
-      radial-gradient(ellipse 120% 40% at 0% 0%, rgb(8 120 209 / 0.22), transparent 70%),
-      radial-gradient(ellipse 120% 30% at 100% 100%, rgb(32 178 107 / 0.14), transparent 70%),
-      linear-gradient(180deg, #0a1b35 0%, #071426 45%, #050b18 100%);
-  }
-
-  .skeleton::after {
-    content: "";
-    @apply absolute inset-0 -translate-x-full animate-shimmer;
-    background-image: linear-gradient(
-      90deg,
-      transparent 0,
-      var(--shimmer) 50%,
-      transparent 100%
-    );
-  }
 
 }
 
-@layer utilities {
-  .pb-safe {
-    padding-bottom: calc(1rem + var(--safe-bottom));
+/* The v4 upgrade tool turned a few context rules into @utility blocks named
+   after core utilities (dark, bg-sunken, overflow-x-auto), two of them with
+   selectors browsers reject. The admin ones live in admin-portal above; this
+   is the one left over. */
+@layer components {
+  .dark .stat-card {
+    box-shadow: 0 1px 0 rgb(0 0 0 / 0.25);
   }
+}
 
-  .mb-safe-nav {
-    /* Clears the fixed bottom navigation on mobile. */
-    margin-bottom: calc(4.5rem + var(--safe-bottom));
-  }
-
-  /* The app's content area on phones: room for the fixed bottom navigation
-     (4rem tall, plus the home-indicator inset it sits above) and a little air,
-     so the last thing on a page - "Show more", a form's button - is never
-     under it. lg:pb-* takes over where the bar is hidden. */
-  .pb-safe-nav {
-    padding-bottom: calc(5.5rem + var(--safe-bottom));
-  }
-
-  .no-scrollbar::-webkit-scrollbar {
-    display: none;
-  }
-
-  .no-scrollbar {
-    -ms-overflow-style: none;
-    scrollbar-width: none;
+/* The native <select>'s chevron (components/ui/primitives.tsx Select). */
+@layer components {
+  .select-chevron {
+    background-image: url('data:image/svg+xml;utf8,<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 20" fill="none" stroke="%236B7A73" stroke-width="1.6"><path d="M6 8l4 4 4-4"/></svg>');
+    background-size: 20px 20px;
+    background-position: right 0.75rem center;
+    background-repeat: no-repeat;
   }
 }

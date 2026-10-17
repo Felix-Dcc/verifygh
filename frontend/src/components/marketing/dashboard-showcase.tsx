@@ -68,7 +68,7 @@ export function DashboardShowcase() {
               </div>
             </div>
             {/* The base */}
-            <div className="relative -mx-10 h-4 rounded-b-2xl bg-gradient-to-b from-[#d9d6d0] via-[#b3aea6] to-[#8a857e] shadow-[0_20px_30px_-15px_rgba(0,0,0,0.5)]">
+            <div className="relative -mx-10 h-4 rounded-b-2xl bg-linear-to-b from-[#d9d6d0] via-[#b3aea6] to-[#8a857e] shadow-[0_20px_30px_-15px_rgba(0,0,0,0.5)]">
               <span className="absolute left-1/2 top-0 h-1.5 w-28 -translate-x-1/2 rounded-b-lg bg-[#8f8a83]" />
             </div>
           </div>
@@ -118,7 +118,7 @@ function DesktopApp({ orders }: { orders: Order[] }) {
     { label: "Settings", Icon: SettingsIcon },
   ];
   return (
-    <div className="grid h-[34rem] grid-cols-[13rem_1fr] text-left">
+    <div className="grid h-136 grid-cols-[13rem_1fr] text-left">
       {/* Sidebar */}
       <aside className="flex flex-col border-r border-line bg-surface px-3 py-4">
         <span className="flex items-center gap-2 px-2">
@@ -197,7 +197,7 @@ function DesktopApp({ orders }: { orders: Order[] }) {
           </div>
 
           <div className="space-y-4">
-            <div className="rounded-2xl bg-gradient-to-br from-[#0B63B6] to-[#137A4E] p-4 text-white shadow-[0_16px_30px_-14px_rgba(8,120,209,0.8)]">
+            <div className="rounded-2xl bg-linear-to-br from-[#0B63B6] to-[#137A4E] p-4 text-white shadow-[0_16px_30px_-14px_rgba(8,120,209,0.8)]">
               <p className="text-2xs text-white/75">Available balance</p>
               <p className="tabular mt-0.5 text-2xl font-extrabold tracking-tight">{cedis(BALANCE)}</p>
               <div className="mt-3 grid grid-cols-2 gap-1.5 text-2xs font-semibold">
@@ -243,7 +243,7 @@ function MobileApp({ orders }: { orders: Order[] }) {
           <p className="text-base font-bold tracking-tight text-ink">Good morning, Kofi</p>
           <p className="text-[0.625rem] text-ink-muted">One order is waiting for its code.</p>
         </div>
-        <div className="rounded-2xl bg-gradient-to-br from-[#0B63B6] to-[#137A4E] p-3 text-white">
+        <div className="rounded-2xl bg-linear-to-br from-[#0B63B6] to-[#137A4E] p-3 text-white">
           <p className="text-[0.625rem] text-white/75">Available balance</p>
           <p className="tabular text-xl font-extrabold tracking-tight">{cedis(BALANCE)}</p>
           <div className="mt-2 grid grid-cols-2 gap-1.5 text-[0.625rem] font-semibold">
@@ -255,7 +255,7 @@ function MobileApp({ orders }: { orders: Order[] }) {
         <div className="divide-y divide-line rounded-xl border border-line bg-surface">
           {orders.slice(0, 3).map((order, index) => (
             <div key={index} className="flex items-center gap-2 px-2.5 py-2">
-              <RowLogo row={order.row} size="xs" className="!h-6 !w-6" />
+              <RowLogo row={order.row} size="xs" className="h-6! w-6!" />
               <span className="min-w-0 flex-1">
                 <span className="block truncate text-[0.6875rem] font-semibold text-ink">{order.row?.name ?? "—"}</span>
                 <span className="code block truncate text-[0.5625rem] text-ink-muted">{order.number}</span>

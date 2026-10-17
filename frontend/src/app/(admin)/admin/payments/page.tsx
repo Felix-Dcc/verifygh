@@ -161,7 +161,7 @@ export default function AdminPaymentsPage() {
           />
         ) : (
           <div className="overflow-x-auto">
-            <table className="w-full min-w-[52rem] text-left text-sm">
+            <table className="w-full min-w-208 text-left text-sm">
               <thead className="border-b border-line bg-sunken">
                 <tr className="text-caption text-ink-muted">
                   <th scope="col" className="px-5 py-3 font-medium">Reference</th>
@@ -184,7 +184,7 @@ export default function AdminPaymentsPage() {
                         </span>
                       ) : null}
                     </td>
-                    <td className="max-w-[12rem] truncate px-5 py-3.5 text-ink-soft">
+                    <td className="max-w-48 truncate px-5 py-3.5 text-ink-soft">
                       {payment.user_email}
                     </td>
                     <td className="tabular whitespace-nowrap px-5 py-3.5 text-right font-medium text-ink">
@@ -197,7 +197,7 @@ export default function AdminPaymentsPage() {
                       <StatusBadge status={payment.status} />
                       {payment.failure_reason && !payment.credited_at ? (
                         <span
-                          className="mt-1 block max-w-[14rem] truncate text-caption text-ink-muted"
+                          className="mt-1 block max-w-56 truncate text-caption text-ink-muted"
                           title={payment.failure_reason}
                         >
                           {payment.failure_reason}
@@ -379,7 +379,7 @@ function Row({ label, value }: { label: string; value: string }) {
   return (
     <div className="flex items-start justify-between gap-4 px-3.5 py-2.5">
       <dt className="shrink-0 text-sm text-ink-muted">{label}</dt>
-      <dd className="tabular break-words text-right text-sm font-medium text-ink">{value}</dd>
+      <dd className="tabular wrap-break-word text-right text-sm font-medium text-ink">{value}</dd>
     </div>
   );
 }

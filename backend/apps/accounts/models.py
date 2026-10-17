@@ -50,8 +50,16 @@ class User(AbstractBaseUser, PermissionsMixin, BaseModel):
     # Matched before the email address, which a Google account can change.
     google_subject = models.CharField(max_length=255, blank=True, default="")
 
+    # Two-factor sign-in (apps/accounts/two_factor.py). The secret is set when
+    # enrolment starts and in force only once is_two_factor_enabled is True.
     totp_secret = models.CharField(max_length=64, blank=True, default="")
     is_two_factor_enabled = models.BooleanField(default=False)
+    two_factor_enabled_at = models.DateTimeField(null=True, blank=True)
+    #: The time step of the last code accepted: an equal or older one is refused.
+    totp_last_step = models.BigIntegerField(default=0)
+    #: Keyed hashes of the unused recovery codes; the codes themselves are
+    #: shown once and never stored.
+    two_factor_recovery_codes = models.JSONField(default=list, blank=True)
 
     failed_login_count = models.PositiveIntegerField(default=0)
     locked_until = models.DateTimeField(null=True, blank=True)

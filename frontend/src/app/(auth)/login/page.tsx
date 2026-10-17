@@ -32,7 +32,7 @@ function safeNext(raw: string | null): string {
 function LoginForm() {
   const router = useRouter();
   const params = useSearchParams();
-  const { signIn, user, ready } = useAuth();
+  const { signIn, verifyTwoFactor, user, ready } = useAuth();
   const google = useGoogleSignIn();
 
   const [email, setEmail] = React.useState("");
@@ -43,6 +43,10 @@ function LoginForm() {
   const [humanToken, setHumanToken] = React.useState<string | null>(null);
   const [humanError, setHumanError] = React.useState("");
   const turnstile = React.useRef<TurnstileHandle>(null);
+  // Google sign-in comes back with ?two_factor=1 when the account has it on.
+  const [codeStep, setCodeStep] = React.useState(params.get("two_factor") === "1");
+  const [code, setCode] = React.useState("");
+  const [useRecovery, setUseRecovery] = React.useState(false);
 
   const next = safeNext(params.get("next"));
   const googleError = googleProblem(params.get("google"));
@@ -69,6 +73,11 @@ function LoginForm() {
     setSubmitting(true);
     try {
       const account = await signIn(email.trim(), password, humanToken ?? undefined);
+      if (!account) {
+        setCodeStep(true);
+        setSubmitting(false);
+        return;
+      }
       router.replace(account.role === "USER" ? next : "/admin");
     } catch (error) {
       if (error instanceof ApiError && error.code === "HUMAN_CHECK_FAILED") {
@@ -83,6 +92,96 @@ function LoginForm() {
       turnstile.current?.reset();
       setSubmitting(false);
     }
+  }
+
+  async function onCode(event: React.FormEvent) {
+    event.preventDefault();
+    setFormError("");
+    setSubmitting(true);
+    try {
+      const account = await verifyTwoFactor(code.trim());
+      router.replace(account.role === "USER" ? next : "/admin");
+    } catch (error) {
+      if (error instanceof ApiError && error.code === "TWO_FACTOR_EXPIRED") {
+        // The five minutes ran out: back to the password.
+        setCodeStep(false);
+        setCode("");
+      }
+      setFormError(errorMessage(error));
+      setSubmitting(false);
+    }
+  }
+
+  if (codeStep) {
+    return (
+      <div>
+        <h1 className="text-[1.75rem] font-bold leading-tight tracking-tight text-ink">
+          Two-factor sign-in
+        </h1>
+        <p className="mt-1.5 text-sm text-ink-muted">
+          {useRecovery
+            ? "Enter one of the recovery codes you saved when you set this up."
+            : "Enter the 6-digit code from your authenticator app."}
+        </p>
+        <form onSubmit={onCode} noValidate className="mt-6 space-y-5">
+          {formError ? (
+            <Alert tone="danger" title="Could not sign in">
+              {formError}
+            </Alert>
+          ) : null}
+          <Field label={useRecovery ? "Recovery code" : "Code"} htmlFor="two-factor-code" required>
+            <Input
+              id="two-factor-code"
+              name="code"
+              inputMode={useRecovery ? "text" : "numeric"}
+              autoComplete="one-time-code"
+              autoCapitalize="characters"
+              autoFocus
+              value={code}
+              onChange={(event) =>
+                setCode(useRecovery ? event.target.value : event.target.value.replace(/\D/g, "").slice(0, 6))
+              }
+              className="font-mono tracking-[0.2em]"
+              placeholder={useRecovery ? "XXXXX-XXXXX" : "123456"}
+            />
+          </Field>
+          <Button
+            type="submit"
+            variant="dawn"
+            size="lg"
+            fullWidth
+            loading={submitting}
+            disabled={useRecovery ? code.trim().length < 10 : code.length !== 6}
+          >
+            Sign in
+          </Button>
+        </form>
+        <div className="mt-6 flex flex-wrap justify-between gap-3 text-sm">
+          <button
+            type="button"
+            className="font-medium text-brand-700 hover:underline"
+            onClick={() => {
+              setUseRecovery((value) => !value);
+              setCode("");
+              setFormError("");
+            }}
+          >
+            {useRecovery ? "Use a code from the app" : "Use a recovery code"}
+          </button>
+          <button
+            type="button"
+            className="font-medium text-ink-muted hover:underline"
+            onClick={() => {
+              setCodeStep(false);
+              setCode("");
+              setFormError("");
+            }}
+          >
+            Start again
+          </button>
+        </div>
+      </div>
+    );
   }
 
   return (
