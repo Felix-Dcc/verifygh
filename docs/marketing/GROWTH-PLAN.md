@@ -17,9 +17,63 @@ invented; where data is missing it says so and says how to get it.
    little cash sits there; if a withdrawal fails again, pause all paid ads the same day.
    Paid tests can start in week 1, within the Lean budget, and move to Moderate only on
    the scorecard's decision rules.
-2. **Margin per order is not yet known to this plan.** The admin dashboard has it, but I
-   could not read production data from this session (see "Access" at the end). Until it
-   is filled in, every CAC ceiling below is a scenario, not a target.
+2. **43% of orders end without a code.** From the admin dashboard (17 Oct, see
+   "Real numbers" below): 538 delivered, 413 refunded. Customers get their money back
+   automatically, but every refund is a disappointed customer and lost revenue.
+   **Raising the delivery rate is the biggest growth lever you have, ahead of any ad.**
+   Lifting it from 56.5% to 70% on today's demand would add about **GH₵2,070 of revenue
+   a month** with no extra spend.
+
+---
+
+## Real numbers (admin dashboard, last 30 days to 17 Oct 2026)
+
+| Metric | Value |
+|---|---|
+| Revenue | GH₵8,768.63 (GH₵109 of it from rentals) |
+| Profit after provider cost | GH₵2,340.73 — **26.7% margin** |
+| Orders | 953: **538 delivered (56.5%)**, 413 refunded, 1 failed, 1 in progress |
+| Average delivered order | **GH₵16.10** |
+| Profit per delivered order | **GH₵4.35** |
+| Deposits | GH₵10,558.25 from 601 successful top-ups (average GH₵17.57) |
+| Failed payment attempts | **274 (31% of attempts)** |
+| Network split | ~73% GH₵7,672.50 · ~27% GH₵2,846.75 · AT GH₵39 |
+| Users | 1,005 new, 79% verified their email, 477 active in 30 days |
+| Money left in wallets | ~GH₵1,790 (deposits − revenue), owed to customers |
+
+These are all-time numbers too: VerifyGH launched around 30 Sept, so the 30 days and
+all-time match. **1,005 sign-ups in about 3 weeks, with no ad budget**, is strong
+demand. The new attribution will show where it comes from.
+
+### Delivery by service (estimate)
+
+Estimated as revenue ÷ today's price, so treat as approximate; the Orders page has the
+exact figures.
+
+| Service | Orders | Est. delivered | Est. delivery rate | Marketing use |
+|---|---|---|---|---|
+| WhatsApp | 221 | ~182 | **~82%** | Lead service: most revenue (GH₵4,637), reliable |
+| Snapchat | 29 | ~27 | **~93%** | Cheap entry point (GH₵4.50) for first purchases |
+| Signal | 83 | ~49 | ~59% | OK |
+| Telegram | 220 | ~96 | ~44% | High demand, poor delivery — fix before promoting |
+| Instagram | 69 | ~29 | ~42% | Don't promote yet |
+| Facebook | 135 | ~46 | **~34%** | Don't promote yet |
+| TikTok | 48 | ~14 | **~29%** | Don't promote — and don't use it in demo videos |
+
+### What this changes
+
+1. **Fix delivery first** (product work, not marketing): build a per-service delivery-rate
+   view; for services under ~40%, try another provider route, show an honest note, or
+   pause them. A visitor whose first order refunds rarely comes back.
+2. **Payment failures (31%)**: check Admin > Payments for the reasons, separating
+   people who abandon the SENDI page from real errors. Each fixed failure is a
+   customer who was ready to pay.
+3. **Email verification (21% never verify)**: about 210 accounts can't buy. A reminder
+   email at 24 h is cheap to test.
+4. **Marketing leads with what works**: WhatsApp, Snapchat, Signal. Demo videos use
+   WhatsApp or Snapchat, never TikTok or Facebook until their delivery improves.
+5. **Wallet float**: ~GH₵1,790 of customer money sits in wallets. Keep at least that much
+   in the provider balance or reachable at all times.
 
 ---
 
@@ -140,7 +194,7 @@ Not touched, on purpose: prices, payment logic, wallet, provider integrations.
 |---|---|---|---|
 | 1 (18–24 Oct) | Measurement + trust | Deploy this change; set up UTM links (below); WhatsApp support link; merge duplicate X; record 3 real screen recordings of a purchase (your own GH₵9 Instagram/Discord number); post 1 TikTok/day | Baseline: visits/day, sign-ups/day, first-purchase rate |
 | 2 (25–31 Oct) | Content engine + first paid test | 7 TikToks (scripts 1–5 + 2 replies to comments); GH₵75–150 TikTok Promote on the best week-1 video, with UTM link; WhatsApp Channel launch; ask the first 20 buyers for a review (no reward for positive reviews) | ≥1 video >5,000 views; sign-ups from `utm_source=tiktok` measurable |
-| 3 (1–7 Nov) | Conversion + SEO | Build landing pages for WhatsApp, TikTok, Google, Telegram, Instagram; referral push to buyers; ORC name in footer if certificate arrives | Sign-up → first purchase ≥ 30% (`ASSUMPTION` target; set after week 1 baseline) |
+| 3 (1–7 Nov) | Conversion + SEO | Build landing pages for the services that deliver (WhatsApp, Snapchat, Signal; add Telegram once its delivery improves); referral push to buyers; ORC name in footer if certificate arrives | Sign-up → first purchase ≥ 30% (`ASSUMPTION` target; set after week 1 baseline) |
 | 4 (8–16 Nov) | Scale what works | If the week-2/3 TikTok test met the CAC ceiling, move to the Moderate budget on that video and channel; otherwise try new creative at Lean spend; review scorecard | CAC below the ceiling in Deliverable 5 |
 
 ### Daily routine (45–60 minutes)
@@ -213,7 +267,7 @@ real; prices quoted with "today" because they change.
 | Time | Shot | On-screen text | Voiceover |
 |---|---|---|---|
 | 0–2s | Phone on desk, timer starts | "Getting a US number with MoMo. Timer on." | "Watch me get a US verification number in under a minute." |
-| 2–8s | Screen recording: getverifygh.com → Buy → search "TikTok" | "Price in cedis before you buy" | "Pick the app. The price is in cedis — this one's GH₵13.50 today." |
+| 2–8s | Screen recording: getverifygh.com → Buy → search "WhatsApp" | "Price in cedis before you buy" | "Pick the app. The price is in cedis — this one's GH₵25.50 today." |
 | 8–14s | Tap Buy, number appears | "Number ready" | "Pay from my wallet, and there's my number." |
 | 14–24s | Second phone: paste number into the app, request code | — | "Paste it into the app, ask for the code…" |
 | 24–32s | Code lands on the order screen | "Code received ✓ 0:31" | "…and it lands right here. 31 seconds." |
@@ -221,6 +275,7 @@ real; prices quoted with "today" because they change.
 | end | Logo + URL | "getverifygh.com — pay with MoMo" | "VerifyGH. Link in bio." |
 
 Caption: *US number for verification codes, paid with MoMo. Price in cedis, refund if no code. #Ghana #MoMo #TechGhana*
+Service choice: WhatsApp (~82% delivery). Don't film TikTok or Facebook purchases until their delivery rate improves.
 CTA: link in bio with `utm_source=tiktok&utm_medium=organic&utm_campaign=demo60`.
 
 **Script 2 — "What if the code never comes?" (trust, 20–25 s)**
@@ -317,14 +372,12 @@ successful referral, and only after the friend has topped up **GH₵10 of their 
 money** and bought a number with cash. Promo credit can only buy numbers, so its real
 cost to you is the **provider cost** of the numbers it buys, not GH₵5:
 
-| Gross margin (`ASSUMPTION`) | Real cost of GH₵5 credit | Contribution from friend's first GH₵10 spent | Net on first cycle |
-|---|---|---|---|
-| 25% | ~GH₵3.75 | ~GH₵2.50 | −GH₵1.25 |
-| 35% | ~GH₵3.25 | ~GH₵3.50 | +GH₵0.25 |
-| 45% | ~GH₵2.75 | ~GH₵4.50 | +GH₵1.75 |
-
-So the programme is roughly break-even on the first top-up and profitable on every repeat
-purchase. **Do not raise the rewards** until real margin and repeat rate are known.
+At the real **26.7% margin**: GH₵5 of credit really costs about **GH₵3.67** (the provider
+cost of the numbers it buys), and the friend's first GH₵10 of cash spending earns about
+**GH₵2.67**. So each referral is about **−GH₵1.00 on the first cycle** and turns
+profitable on the friend's next ~GH₵4 order (one delivered order earns GH₵4.35).
+Promote it to customers whose orders deliver, so referred friends get a good first
+experience. **Do not raise the rewards** until real margin and repeat rate are known.
 Abuse protections already exist (first-deposit gate, monthly cap of 40, risk flags);
 watch for many referrals sharing a MoMo number or device.
 
@@ -404,13 +457,18 @@ print("buyers ", Counter(src for uid, src in by_user.items() if uid in paid))
 
 `Max CAC = contribution per order × orders per customer in 60 days`
 
-| Scenario (`ASSUMPTION`) | AOV | Margin | Contribution/order | Orders in 60 d | Max CAC |
-|---|---|---|---|---|---|
-| Cautious | GH₵13 | 25% | GH₵3.25 | 2 | **GH₵6.50** |
-| Middle | GH₵13 | 35% | GH₵4.55 | 3 | **GH₵13.65** |
-| Strong | GH₵15 | 45% | GH₵6.75 | 4 | **GH₵27.00** |
+Profit per delivered order is **GH₵4.35** (real, 30 days). Orders per customer is not on
+the dashboard yet, so the right-hand column is still a scenario:
 
-Known fact for context: 308 top-ups averaged **GH₵17.46** each (GH₵5,378.25 ÷ 308).
+| Delivered orders per new customer in 60 days | Max CAC (break-even) |
+|---|---|
+| 2 | **GH₵8.70** |
+| 3 | **GH₵13.05** |
+| 4 | **GH₵17.40** |
+
+Use **GH₵8.70** as the working ceiling until repeat-purchase data exists. Your earlier
+GH₵75.94 TikTok promotion breaks even only if it brings about **18 delivered orders**
+(roughly 6–9 new paying customers).
 
 ### Which campaigns get more budget
 
@@ -450,11 +508,9 @@ Known fact for context: 308 top-ups averaged **GH₵17.46** each (GH₵5,378.25 
 7. Provide: WhatsApp Business support number, social handles, company name after ORC.
 8. Privacy Policy: one line that we record the campaign link a visitor arrived from.
 9. Withdraw the SENDI balance to MoMo daily while ads run; pause ads if a withdrawal fails.
-10. Share real numbers (below) so the CAC ceilings become targets.
+10. Product: per-service delivery-rate view, and fix or pause services under ~40% delivery (TikTok, Facebook, Instagram, Telegram).
 
-### Access I could not get
+### Data still missing
 
-Reading production aggregates (Railway shell, and the admin console in Chrome) was
-refused by Claude Code's production-data safety check in this session. To unblock, either
-paste the admin dashboard figures (orders, revenue, provider cost, refunds, repeat buyers
-for the last 30 days), or allow the read-only aggregate script for this session.
+Repeat-purchase rate (how many delivered orders each customer makes) is not on the
+dashboard. It decides whether the CAC ceiling is GH₵8.70 or GH₵17.40.
