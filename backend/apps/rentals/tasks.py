@@ -15,6 +15,7 @@ from django.conf import settings
 from django.db.models import F, Q
 from django.utils import timezone
 
+from apps.common.phone import display_phone
 from apps.rentals import services
 from apps.rentals.models import ExtensionStatus, Rental, RentalExtension, RentalStatus
 
@@ -125,8 +126,8 @@ def _send_reminders(now) -> int:
             continue
         hours = max(1, int(remaining.total_seconds() // 3600))
         notify(rental.user, event="RENTAL_ENDING", title="Your rented number ends soon",
-               body=(f"{rental.service_label} number {rental.phone_number} stops receiving "
-                     f"messages in about {hours} hour{'s' if hours != 1 else ''}. "
+               body=(f"{rental.service_label} number {display_phone(rental.phone_number)} "
+                     f"stops receiving messages in about {hours} hour{'s' if hours != 1 else ''}. "
                      "Extend it from the rental's page if you still need it."),
                channels=("IN_APP", "EMAIL"), metadata={"rental_reference": rental.reference})
         sent += 1

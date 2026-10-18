@@ -44,6 +44,7 @@ from apps.common.errors import (
 )
 from apps.common.ids import rental_reference
 from apps.common.money import ZERO, format_ghs, quantize, round_to
+from apps.common.phone import display_phone
 from apps.rentals.models import (
     ALL_SERVICES,
     OPEN_RENTAL_STATUSES,
@@ -597,7 +598,7 @@ def _apply(rental: Rental, dto, *, give_up: bool = False) -> Rental:
     from apps.notifications.services import notify
 
     notify(rental.user, event="RENTAL_ACTIVE", title="Your rented number is ready",
-           body=f"{rental.service_label}: {rental.phone_number}, for "
+           body=f"{rental.service_label}: {display_phone(rental.phone_number)}, for "
                 f"{duration_label(rental.days)}.",
            channels=("IN_APP",), metadata={"rental_reference": rental.reference})
     logger.info("rental_active", extra={"rental": rental.reference})
@@ -721,7 +722,7 @@ def sync_messages(rental: Rental, *, notify_customer: bool = True) -> int:
 
         # The text and the code stay out of the notification: it is only a nudge.
         notify(rental.user, event="RENTAL_MESSAGE", title="New message on your rented number",
-               body=(f"{rental.service_label} number {rental.phone_number}: "
+               body=(f"{rental.service_label} number {display_phone(rental.phone_number)}: "
                      + ("1 new message." if new == 1 else f"{new} new messages.")),
                channels=("IN_APP",), metadata={"rental_reference": rental.reference})
     if new:
@@ -752,8 +753,8 @@ def refresh_rental(rental: Rental) -> Rental:
 
             notify(rental.user, event="RENTAL_REFUNDED", title="Your rental was refunded",
                    body=(f"Our provider ended your {rental.service_label} number "
-                         f"{rental.phone_number}. {format_ghs(rental.refunded_amount)} is "
-                         "back in your wallet."),
+                         f"{display_phone(rental.phone_number)}. "
+                         f"{format_ghs(rental.refunded_amount)} is back in your wallet."),
                    channels=("IN_APP", "EMAIL"),
                    metadata={"rental_reference": rental.reference})
         return rental
@@ -778,8 +779,8 @@ def expire_rental(rental: Rental) -> Rental:
         from apps.notifications.services import notify
 
         notify(rental.user, event="RENTAL_ENDED", title="Your rented number has ended",
-               body=(f"{rental.service_label} number {rental.phone_number} no longer "
-                     "receives messages."),
+               body=(f"{rental.service_label} number {display_phone(rental.phone_number)} "
+                     "no longer receives messages."),
                channels=("IN_APP",), metadata={"rental_reference": rental.reference})
         logger.info("rental_expired", extra={"rental": rental.reference})
     return rental
@@ -836,8 +837,8 @@ def cancel_rental(rental: Rental, *, actor, request=None) -> Rental:
     from apps.notifications.services import notify
 
     notify(rental.user, event="RENTAL_REFUNDED", title="Rental cancelled",
-           body=(f"Your {rental.service_label} number {rental.phone_number} was cancelled. "
-                 f"{format_ghs(rental.refunded_amount)} is back in your wallet."),
+           body=(f"Your {rental.service_label} number {display_phone(rental.phone_number)} "
+                 f"was cancelled. {format_ghs(rental.refunded_amount)} is back in your wallet."),
            channels=("IN_APP", "EMAIL"), metadata={"rental_reference": rental.reference})
     record_audit(actor=actor, action="RENTAL_CANCELLED", target=rental, request=request,
                  metadata={"reference": rental.reference,
@@ -982,8 +983,8 @@ def _complete_extension(extension: RentalExtension, *, new_ends_at, cost=None,
     from apps.notifications.services import notify
 
     notify(rental.user, event="RENTAL_EXTENDED", title="Rental extended",
-           body=(f"Your {rental.service_label} number {rental.phone_number} now runs "
-                 f"{duration_label(extension.days)} longer."),
+           body=(f"Your {rental.service_label} number {display_phone(rental.phone_number)} "
+                 f"now runs {duration_label(extension.days)} longer."),
            channels=("IN_APP",), metadata={"rental_reference": rental.reference})
     record_audit(actor=rental.user, action="RENTAL_EXTENDED", target=rental, request=request,
                  metadata={"reference": rental.reference, "days": extension.days,

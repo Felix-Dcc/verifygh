@@ -39,6 +39,7 @@ from apps.common.errors import (
 )
 from apps.common.ids import order_reference, refund_reference
 from apps.common.money import TWO_PLACES, ZERO, format_ghs, quantize, round_to
+from apps.common.phone import display_phone
 from apps.orders.models import (
     ACTIVE_ORDER_STATUSES,
     ALLOWED_TRANSITIONS,
@@ -925,7 +926,7 @@ def fulfil_order(order: Order) -> Order:
         order.user,
         event="NUMBER_ASSIGNED",
         title="Your number is ready",
-        body=f"{order.service.name}: {result.phone_number}",
+        body=f"{order.service.name}: {display_phone(result.phone_number)}",
         channels=("IN_APP",),
         metadata={"order_reference": order.reference},
     )

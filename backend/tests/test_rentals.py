@@ -364,7 +364,7 @@ def test_messages_arrive_in_the_inbox_and_the_nudge_carries_no_code(
     assert detail["messages"][0]["code"] == "123456"
     assert "123-456" in detail["messages"][0]["body"]
     nudge = Notification.objects.get(user=user, event="RENTAL_MESSAGE")
-    assert "+15550007890" in nudge.body
+    assert "+1 (555) 000-7890" in nudge.body
     assert "123" not in nudge.body
 
     # Read again: nothing is stored twice.
@@ -907,3 +907,25 @@ def test_top_services_count_rentals_for_their_app(
     assert Decimal(by_name["WhatsApp"]["revenue"]) == WHATSAPP_30
     assert by_name["Any app"]["orders"] == 1
     assert Decimal(by_name["Any app"]["revenue"]) == ALL_30
+
+
+def test_the_ending_reminder_shows_the_number_as_the_website_does(
+    user, auth, catalog, funded_wallet
+):
+    from apps.rentals.tasks import _send_reminders
+
+    funded_wallet(user, "400.00")
+    verification_mock.force_numbers(["+12233631317"])
+    rental = Rental.objects.get(reference=rent(auth(user)).data["reference"])
+    Rental.objects.filter(pk=rental.pk).update(ends_at=timezone.now() + timedelta(hours=5))
+
+    assert _send_reminders(timezone.now()) == 1
+
+    # One row per channel (in-app and email); every copy reads the same.
+    reminders = list(Notification.objects.filter(user=user, event="RENTAL_ENDING"))
+    assert reminders
+    for reminder in reminders:
+        assert "+1 (223) 363-1317" in reminder.body
+        assert "+12233631317" not in reminder.body
+    ready = Notification.objects.get(user=user, event="RENTAL_ACTIVE")
+    assert "+1 (223) 363-1317" in ready.body

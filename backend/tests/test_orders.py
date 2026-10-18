@@ -698,3 +698,19 @@ def test_a_later_provider_end_never_extends_a_delivered_order(
 
     assert order.status == OrderStatus.CODE_RECEIVED
     assert order.expires_at == original
+
+
+def test_the_number_ready_message_shows_the_number_as_the_website_does(
+    user, auth, catalog, funded_wallet
+):
+    from apps.notifications.models import Notification
+
+    verification_mock.force_scenario("HAPPY")
+    verification_mock.force_numbers(["+12233631317"])
+    funded_wallet(user, "200.00")
+    order = Order.objects.get(reference=buy(auth(user)).data["reference"])
+    if not Notification.objects.filter(user=user, event="NUMBER_ASSIGNED").exists():
+        drive(order, 5)
+
+    note = Notification.objects.get(user=user, event="NUMBER_ASSIGNED")
+    assert note.body.endswith(": +1 (223) 363-1317")
