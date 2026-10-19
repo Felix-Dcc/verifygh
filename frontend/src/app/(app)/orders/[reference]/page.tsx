@@ -48,9 +48,39 @@ const ACTIVE_STATUSES = new Set([
   "WAITING_FOR_CODE",
 ]);
 
-/** Telegram codes usually land within this long; cancelling sooner throws away
- *  numbers that were about to work. */
-const TELEGRAM_PATIENCE_SECONDS = 120;
+/** Codes usually land within this long; cancelling sooner throws away numbers
+ *  that were about to work. */
+const PATIENCE_SECONDS = 120;
+
+const SIGN_IN_INSTEAD =
+  "If it asks you to log in instead of creating an account, the number is already in use. Cancel for a full refund and try a new number.";
+
+/** What goes wrong on each popular service, and what to do. The general tips
+ *  in ServiceTips apply to every service on top of these. */
+const SERVICE_TIPS: Record<string, string[]> = {
+  whatsapp: [
+    "When WhatsApp asks how to verify, choose SMS. This number cannot take calls.",
+    "If WhatsApp says the number can't be used, cancel for a full refund and try a new number.",
+  ],
+  telegram: [
+    "If Telegram says the code was sent to the Telegram app, or offers to call you, this number already has a Telegram account and no SMS will come. Cancel for a full refund and try a new number.",
+  ],
+  signal: [
+    "Signal may ask you to solve a captcha first. The SMS is only sent after that.",
+    "Choose SMS, not a voice call.",
+  ],
+  discord: ["Discord may ask you to solve a captcha first. The SMS is only sent after that."],
+  google: [
+    "If Google says this number cannot be used for verification, cancel for a full refund and try a new number.",
+  ],
+  tiktok: [
+    "If TikTok says there were too many attempts, wait a while before trying again. A new number straight away usually hits the same limit.",
+  ],
+  facebook: [SIGN_IN_INSTEAD],
+  instagram: [SIGN_IN_INSTEAD],
+  twitter: [SIGN_IN_INSTEAD],
+  x: [SIGN_IN_INSTEAD],
+};
 
 export default function OrderDetailPage() {
   const params = useParams<{ reference: string }>();
@@ -88,8 +118,8 @@ export default function OrderDetailPage() {
 
   const [cancelling, setCancelling] = React.useState(false);
   const [confirmCancel, setConfirmCancel] = React.useState(false);
-  // Set when the cancel dialog opens on a Telegram order younger than
-  // TELEGRAM_PATIENCE_SECONDS, so the dialog can suggest waiting a little.
+  // Set when the cancel dialog opens on an order younger than
+  // PATIENCE_SECONDS, so the dialog can suggest waiting a little.
   const [cancellingEarly, setCancellingEarly] = React.useState(false);
   const [completing, setCompleting] = React.useState(false);
   // "Buy again": the same service and country, straight from this page.
@@ -170,14 +200,13 @@ export default function OrderDetailPage() {
   const status = live?.status ?? order.status;
   const retryable = RETRYABLE_STATUSES.has(status) && !order.code_received_at;
   const delivered = status === "COMPLETED" || status === "CODE_RECEIVED";
-  const isTelegram = order.service_slug === "telegram";
   const awaitingCode = !code && ["NUMBER_ASSIGNED", "WAITING_FOR_CODE"].includes(status);
 
   const placedAt = new Date(order.created_at).getTime();
 
   function askToCancel() {
     const ageSeconds = (Date.now() - placedAt) / 1000;
-    setCancellingEarly(isTelegram && ageSeconds < TELEGRAM_PATIENCE_SECONDS);
+    setCancellingEarly(ageSeconds < PATIENCE_SECONDS);
     setConfirmCancel(true);
   }
 
@@ -293,7 +322,9 @@ export default function OrderDetailPage() {
               message={order.verification_message}
             />
 
-            {isTelegram && awaitingCode ? <TelegramTips /> : null}
+            {awaitingCode ? (
+              <ServiceTips slug={order.service_slug} name={order.service_name} />
+            ) : null}
 
             {order.can_reuse && order.reusable_until && order.reuse_price ? (
               <ReuseSection
@@ -413,8 +444,8 @@ export default function OrderDetailPage() {
             be undone - you would need to buy a new number.
             {cancellingEarly ? (
               <span className="mt-2 block">
-                Telegram codes often take up to 2 minutes. Unless Telegram sent the code to its app
-                or offered to call you, it is worth waiting a little longer.
+                Codes often take up to 2 minutes. Unless {order.service_name} told you the number
+                can&apos;t be used, it is worth waiting a little longer.
               </span>
             ) : null}
           </>
@@ -617,24 +648,23 @@ function CodeSection({
 }
 
 /**
- * What goes wrong with Telegram, and what to do. Most Telegram orders that end
- * without a code were cancelled within a minute or two, or were numbers that
- * already had a Telegram account - Telegram then sends the code to that
- * account's app or offers a call, and no SMS ever comes.
+ * Tips while a code is awaited, like TextVerified's: two that hold for every
+ * service, then any for this service in SERVICE_TIPS. Many orders that end
+ * without a code were cancelled within a minute or two.
  */
-function TelegramTips() {
+function ServiceTips({ slug, name }: { slug: string; name: string }) {
   return (
     <div className="border-t border-line bg-sunken px-5 py-4 sm:px-6">
-      <p className="text-sm font-medium text-ink">Tips for Telegram</p>
+      <p className="text-sm font-medium text-ink">Tips for {name}</p>
       <ul className="mt-2 list-disc space-y-1.5 pl-5 text-sm text-ink-soft">
+        <li>Codes usually arrive within 2 minutes. Wait at least that long before cancelling.</li>
         <li>
-          Codes usually arrive within 2 minutes. Wait at least that long before cancelling.
+          Some services take more than one attempt. If no code comes, you get a full refund
+          automatically and can try a new number.
         </li>
-        <li>
-          If Telegram says the code was sent to the Telegram app, or offers to call you, this number
-          already has a Telegram account and no SMS will come. Cancel for a full refund and try a
-          new number.
-        </li>
+        {(SERVICE_TIPS[slug] ?? []).map((tip) => (
+          <li key={tip}>{tip}</li>
+        ))}
       </ul>
     </div>
   );
