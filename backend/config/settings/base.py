@@ -85,6 +85,7 @@ INSTALLED_APPS = [
     "apps.adminapi",
     "apps.referrals",
     "apps.rentals",
+    "apps.support",
 ]
 
 MIDDLEWARE = [
@@ -318,6 +319,9 @@ REST_FRAMEWORK = {
         "order_create": "20/hour",
         "rental_create": "10/hour",
         "issue_report": "10/hour",
+        # Customer chat messages; polling the thread is a GET and not counted.
+        "support_chat": "20/min",
+        "support_chat_day": "200/day",
         "webhook": "600/min",
     },
     "TEST_REQUEST_DEFAULT_FORMAT": "json",

@@ -39,6 +39,7 @@ class AdminPermission(models.TextChoices):
     ISSUE_MANAGE = "ISSUE_MANAGE", "Review, reject and resolve number-issue reports"
     USER_EMAIL_CHANGE = "USER_EMAIL_CHANGE", "Correct a user's unverified email address"
     MAINTENANCE_MANAGE = "MAINTENANCE_MANAGE", "Pause and reopen the site"
+    SUPPORT_CHAT = "SUPPORT_CHAT", "Read and answer customer support chats"
 
 
 _SUPPORT = {
@@ -71,6 +72,8 @@ _ADMIN = _SUPPORT | {
     # Pausing the site in an emergency: stops new orders and top-ups, never
     # money already moving.
     AdminPermission.MAINTENANCE_MANAGE,
+    # Chats can hold anything a customer types, so admins answer them, not support.
+    AdminPermission.SUPPORT_CHAT,
 }
 
 _SUPER_ADMIN = _ADMIN | {

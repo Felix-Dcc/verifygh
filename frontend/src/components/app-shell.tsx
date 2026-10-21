@@ -9,6 +9,7 @@ import { useAuth } from "@/components/auth-provider";
 import { Logo, Logomark } from "@/components/brand";
 import { MaintenanceStrip, PauseSiteButton } from "@/components/maintenance";
 import { useReferralsEnabled } from "@/components/referral-invite";
+import { SupportChat } from "@/components/support-chat";
 import {
   BellIcon,
   BoltIcon,
@@ -20,6 +21,7 @@ import {
   GridIcon,
   HelpIcon,
   HomeIcon,
+  InboxIcon,
   LogoutIcon,
   MenuIcon,
   PhoneIcon,
@@ -99,6 +101,7 @@ const ADMIN_NAV: NavGroup[] = [
       { href: "/admin/issues", label: "Number issues", icon: FlagIcon },
       { href: "/admin/payments", label: "Payments", icon: WalletIcon },
       { href: "/admin/manual-deposits", label: "Manual top-ups", icon: WalletIcon },
+      { href: "/admin/chats", label: "Chats", icon: InboxIcon, permission: "SUPPORT_CHAT" },
       { href: "/admin/users", label: "Users", icon: UsersIcon },
     ],
   },
@@ -189,6 +192,11 @@ export function AppShell({
         </main>
       </div>
       {variant === "admin" ? <AdminBottomNav groups={groups} /> : <BottomNav items={USER_BOTTOM_NAV} />}
+      {variant === "user" ? (
+        <React.Suspense fallback={null}>
+          <SupportChat />
+        </React.Suspense>
+      ) : null}
     </div>
   );
 }

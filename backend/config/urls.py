@@ -21,6 +21,7 @@ from apps.pricing import admin_api as pricing_admin
 from apps.referrals import admin_api as referral_admin
 from apps.rentals import admin_api as rental_admin
 from apps.rentals import views as rental_views
+from apps.support import views as support_views
 from apps.verification import admin_api as provider_admin
 from apps.verification import views as verification_views
 from apps.wallet import views as wallet_views
@@ -74,6 +75,7 @@ admin_router.register("flags", admin_views.AdminFlagViewSet, basename="admin-fla
 admin_router.register(
     "referrals", referral_admin.AdminReferralViewSet, basename="admin-referral"
 )
+admin_router.register("chats", support_views.AdminChatViewSet, basename="admin-chat")
 admin_router.register(
     "number-issues", numbers_admin.AdminIssueViewSet, basename="admin-number-issue"
 )
@@ -157,6 +159,7 @@ api_v1 = [
          manual_admin.ManualDepositEvidenceView.as_view(), name="admin-manual-deposit-evidence"),
     path("admin/maintenance/", admin_views.AdminMaintenanceView.as_view(),
          name="admin-maintenance"),
+    path("support/chat/", support_views.ChatView.as_view(), name="support-chat"),
     path("status/", common_views.SiteStatusView.as_view(), name="site-status"),
     path("admin/", include(admin_router.urls)),
     path("", include(router.urls)),

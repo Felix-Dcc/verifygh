@@ -144,6 +144,14 @@ class IssueReportThrottle(NamedScopeThrottle):
     scope = "issue_report"
 
 
+class SupportChatThrottle(NamedScopeThrottle):
+    scope = "support_chat"
+
+
+class SupportChatDailyThrottle(NamedScopeThrottle):
+    scope = "support_chat_day"
+
+
 class WebhookThrottle(NamedScopeThrottle):
     scope = "webhook"
 

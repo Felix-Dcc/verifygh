@@ -65,6 +65,8 @@ const KINDS: Record<string, Kind> = {
   STAFF_ISSUE_REPORTED: { icon: FlagIcon, tone: "warn" },
   STAFF_MAINTENANCE: { icon: ShieldIcon, tone: "warn" },
   STAFF_MANUAL_DEPOSIT: { icon: WalletIcon, tone: "warn" },
+  STAFF_CHAT_WAITING: { icon: MessageIcon, tone: "warn" },
+  SUPPORT_REPLY: { icon: MessageIcon, tone: "neutral" },
 };
 
 const TONE_CLASSES: Record<Kind["tone"], string> = {
@@ -83,6 +85,7 @@ function destination(notification: Notification): string | null {
   if (typeof meta.order_reference === "string") return `/orders/${meta.order_reference}`;
   if (typeof meta.rental_reference === "string") return `/rentals/${meta.rental_reference}`;
   if (typeof meta.payment_reference === "string") return "/transactions";
+  if (meta.support_chat === true) return "/dashboard?chat=open";
   if (notification.event === "REFERRAL_BONUS") return "/refer";
   if (notification.event === "SECURITY_ALERT") return "/account";
   return null;
