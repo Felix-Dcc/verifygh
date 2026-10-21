@@ -1037,6 +1037,9 @@ class AdminServiceViewSet(AdminBase, mixins.ListModelMixin, mixins.UpdateModelMi
     serializer_class = AdminServiceSerializer
     required_permission = AdminPermission.CATALOG_MANAGE
     lookup_field = "slug"
+    # As in the public catalogue: some slugs carry a dot ("xe.com"), which
+    # DRF's default lookup pattern refuses.
+    lookup_value_regex = "[a-z0-9_.-]+"
     pagination_class = None
 
     def get_queryset(self):

@@ -205,6 +205,21 @@ def test_removing_an_upload_returns_to_the_bundled_logo(staff, catalog):
     assert APIClient().get("/api/v1/service-logos/tiktok/").status_code == 404
 
 
+def test_a_service_whose_slug_has_a_dot_can_be_managed(staff, catalog):
+    Service.objects.create(slug="xe.com", name="Xe.com")
+
+    renamed = staff.patch("/api/v1/admin/services/xe.com/", {"name": "Xe", "reason": "tidy"},
+                          format="json")
+    assert renamed.status_code == 200, renamed.data
+    uploaded = upload(staff, "xe.com", GOOD_SVG)
+    assert uploaded.status_code == 200, uploaded.data
+    assert "/api/v1/service-logos/xe.com/?v=" in uploaded.data["icon_url"]
+    assert APIClient().get("/api/v1/service-logos/xe.com/").content == GOOD_SVG
+
+    removed = staff.delete("/api/v1/admin/services/xe.com/logo/")
+    assert removed.status_code == 200 and removed.data["has_uploaded_logo"] is False
+
+
 def test_only_bundled_or_uploaded_logos_can_be_set(staff, catalog):
     external = staff.patch("/api/v1/admin/services/tiktok/",
                            {"icon_url": "https://example.com/tiktok.png", "reason": "try"},
