@@ -9,7 +9,6 @@ import { useAuth } from "@/components/auth-provider";
 import { Logo, Logomark } from "@/components/brand";
 import { MaintenanceStrip, PauseSiteButton } from "@/components/maintenance";
 import { useReferralsEnabled } from "@/components/referral-invite";
-import { SupportChat } from "@/components/support-chat";
 import {
   BellIcon,
   BoltIcon,
@@ -192,11 +191,7 @@ export function AppShell({
         </main>
       </div>
       {variant === "admin" ? <AdminBottomNav groups={groups} /> : <BottomNav items={USER_BOTTOM_NAV} />}
-      {variant === "user" ? (
-        <React.Suspense fallback={null}>
-          <SupportChat />
-        </React.Suspense>
-      ) : null}
+      {/* Customer support chat (<SupportChat /> from support-chat.tsx) is off for now; Admin > Chats still works. */}
     </div>
   );
 }
