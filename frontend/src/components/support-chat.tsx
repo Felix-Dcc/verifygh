@@ -4,31 +4,33 @@ import { usePathname, useRouter, useSearchParams } from "next/navigation";
 import * as React from "react";
 import useSWR from "swr";
 
-import { CloseIcon, MessageIcon } from "@/components/icons";
+import { CloseIcon, HeadsetIcon, MessageIcon, PaperclipIcon } from "@/components/icons";
 import { useToast } from "@/components/ui/toast";
 import { Button, Spinner, Textarea, cn } from "@/components/ui/primitives";
-import { ApiError, api } from "@/lib/api";
+import { API_URL, ApiError, api } from "@/lib/api";
+import { formatDateTime } from "@/lib/format";
 
 /**
- * The support chat: a bubble on every signed-in page. A rule-based bot on the
- * server answers first; "Talk to a person" hands the thread to the admins,
- * who reply from Admin > Chats. Polls only while the panel is open.
+ * The support chat: a bubble on every signed-in page. Every message goes to
+ * the admins, who reply from Admin > Chats. Polls only while the panel is open.
  */
 
 export type ChatMessage = {
   id: string;
   sender: "CUSTOMER" | "BOT" | "STAFF";
   body: string;
+  has_image: boolean;
   created_at: string;
 };
 
 type Chat = {
   status: "BOT" | "WAITING" | "ANSWERED" | "CLOSED";
   messages: ChatMessage[];
-  topics: { key: string; label: string }[];
 };
 
 const MAX_LENGTH = 1000;
+const MAX_PHOTO_BYTES = 5 * 1024 * 1024;
+const PHOTO_TYPES = "image/png,image/jpeg,image/webp";
 
 export function SupportChat() {
   const [open, setOpen] = React.useState(false);
@@ -68,21 +70,42 @@ function ChatPanel({ onClose }: { onClose: () => void }) {
   const toast = useToast();
   const { data, mutate } = useSWR<Chat>("/support/chat/", { refreshInterval: 5000 });
   const [draft, setDraft] = React.useState("");
+  const [photo, setPhoto] = React.useState<File | null>(null);
   const [sending, setSending] = React.useState(false);
+  const fileInput = React.useRef<HTMLInputElement>(null);
+  const preview = React.useMemo(() => (photo ? URL.createObjectURL(photo) : ""), [photo]);
+  React.useEffect(() => () => URL.revokeObjectURL(preview), [preview]);
 
-  async function send(payload: { body: string } | { topic: string }) {
+  function pick(file: File | undefined) {
+    if (fileInput.current) fileInput.current.value = "";
+    if (!file) return;
+    if (file.size > MAX_PHOTO_BYTES) {
+      toast.error("Photo too large", "Photos must be 5 MB or smaller.");
+      return;
+    }
+    setPhoto(file);
+  }
+
+  async function send() {
+    const body = draft.trim();
+    if (!body && !photo) return;
     setSending(true);
     try {
+      let payload: FormData | { body: string } = { body };
+      if (photo) {
+        payload = new FormData();
+        payload.append("body", body);
+        payload.append("image", photo);
+      }
       await mutate(await api.post<Chat>("/support/chat/", payload), { revalidate: false });
-      if ("body" in payload) setDraft("");
+      setDraft("");
+      setPhoto(null);
     } catch (error) {
       toast.error("Message not sent", error instanceof ApiError ? error.message : "Try again.");
     } finally {
       setSending(false);
     }
   }
-
-  const withStaff = data?.status === "WAITING" || data?.status === "ANSWERED";
 
   return (
     <div
@@ -94,12 +117,22 @@ function ChatPanel({ onClose }: { onClose: () => void }) {
         "sm:inset-auto sm:bottom-24 sm:right-6 sm:h-[34rem] sm:max-h-[calc(100dvh-8rem)] sm:w-96 sm:rounded-2xl",
       )}
     >
-      <div className="flex items-center justify-between border-b border-line px-4 py-3">
-        <div>
-          <p className="text-sm font-semibold text-ink">VerifyGH support</p>
-          <p className="text-caption text-ink-muted">
-            {withStaff ? "An admin will reply here" : "Instant answers, or ask for a person"}
+      <div className="flex items-center gap-3 border-b border-line px-4 py-3">
+        <span
+          aria-hidden
+          className="flex h-10 w-10 shrink-0 items-center justify-center rounded-full bg-brand-50 text-brand-700"
+        >
+          <HeadsetIcon className="h-5 w-5" />
+        </span>
+        <div className="min-w-0 flex-1">
+          <p className="flex items-center gap-2 text-sm font-semibold text-ink">
+            VerifyGH support
+            <span className="flex items-center gap-1 text-caption font-medium text-success-700">
+              <span aria-hidden className="h-2 w-2 rounded-full bg-success-500" />
+              Online
+            </span>
           </p>
+          <p className="text-caption text-ink-muted">Support team</p>
         </div>
         <Button variant="ghost" size="sm" onClick={onClose} aria-label="Close support chat">
           <CloseIcon className="h-5 w-5" />
@@ -110,7 +143,8 @@ function ChatPanel({ onClose }: { onClose: () => void }) {
         <ChatMessages
           messages={data.messages}
           mine="CUSTOMER"
-          empty="Hi! Choose a topic below or type your question. Never send your password or MoMo PIN."
+          imageUrl={(id) => `${API_URL}/support/chat/images/${id}/`}
+          empty="Send us a message and our support team will reply here. Include your order reference if it's about an order. Never send your password or MoMo PIN."
         />
       ) : (
         <div className="flex flex-1 items-center justify-center">
@@ -118,21 +152,14 @@ function ChatPanel({ onClose }: { onClose: () => void }) {
         </div>
       )}
 
-      {data ? (
-        <div className="no-scrollbar flex gap-2 overflow-x-auto border-t border-line px-3 py-2">
-          {data.topics
-            .filter((topic) => !(withStaff && topic.key === "human"))
-            .map((topic) => (
-              <button
-                key={topic.key}
-                type="button"
-                disabled={sending}
-                onClick={() => send({ topic: topic.key })}
-                className="shrink-0 rounded-full bg-brand-50 px-3 py-1.5 text-caption font-medium text-brand-700 hover:bg-brand-100 disabled:opacity-50"
-              >
-                {topic.label}
-              </button>
-            ))}
+      {photo ? (
+        <div className="flex items-center gap-3 border-t border-line px-3 py-2">
+          {/* eslint-disable-next-line @next/next/no-img-element */}
+          <img src={preview} alt="Photo to send" className="h-12 w-12 rounded-lg border border-line object-cover" />
+          <span className="min-w-0 flex-1 truncate text-caption text-ink-muted">{photo.name}</span>
+          <Button variant="ghost" size="sm" onClick={() => setPhoto(null)} aria-label="Remove photo">
+            <CloseIcon className="h-4 w-4" />
+          </Button>
         </div>
       ) : null}
 
@@ -140,9 +167,25 @@ function ChatPanel({ onClose }: { onClose: () => void }) {
         className="flex items-end gap-2 border-t border-line p-3 pb-safe sm:pb-3"
         onSubmit={(event) => {
           event.preventDefault();
-          if (draft.trim()) send({ body: draft.trim() });
+          send();
         }}
       >
+        <input
+          ref={fileInput}
+          type="file"
+          accept={PHOTO_TYPES}
+          className="hidden"
+          onChange={(event) => pick(event.target.files?.[0])}
+        />
+        <Button
+          variant="ghost"
+          size="sm"
+          disabled={sending}
+          onClick={() => fileInput.current?.click()}
+          aria-label="Attach photo"
+        >
+          <PaperclipIcon className="h-5 w-5" />
+        </Button>
         <Textarea
           rows={1}
           value={draft}
@@ -154,11 +197,11 @@ function ChatPanel({ onClose }: { onClose: () => void }) {
               event.currentTarget.form?.requestSubmit();
             }
           }}
-          placeholder="Type a message"
+          placeholder="Message support..."
           aria-label="Message"
           className="max-h-32 min-h-11 resize-none py-2.5"
         />
-        <Button type="submit" loading={sending} disabled={!draft.trim()}>
+        <Button type="submit" loading={sending} disabled={!draft.trim() && !photo}>
           Send
         </Button>
       </form>
@@ -166,14 +209,22 @@ function ChatPanel({ onClose }: { onClose: () => void }) {
   );
 }
 
+const SENDER_LABEL: Record<ChatMessage["sender"], string> = {
+  CUSTOMER: "Customer",
+  STAFF: "VerifyGH support",
+  BOT: "VerifyGH",
+};
+
 /** A chat transcript, newest at the bottom. Shared with the admin inbox. */
 export function ChatMessages({
   messages,
   mine,
+  imageUrl,
   empty,
 }: {
   messages: ChatMessage[];
   mine: ChatMessage["sender"];
+  imageUrl: (id: string) => string;
   empty: string;
 }) {
   const end = React.useRef<HTMLDivElement>(null);
@@ -189,19 +240,28 @@ export function ChatMessages({
         const own = message.sender === mine;
         return (
           <div key={message.id} className={cn("flex flex-col", own ? "items-end" : "items-start")}>
-            <span className="mb-0.5 text-2xs text-ink-faint">
-              {message.sender === "BOT" ? "Assistant" : message.sender === "STAFF" ? "VerifyGH team" : "Customer"}
-              {" · "}
-              {new Date(message.created_at).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" })}
-            </span>
-            <p
+            <div
               className={cn(
-                "max-w-[85%] whitespace-pre-line rounded-2xl px-3.5 py-2 text-sm",
+                "max-w-[85%] space-y-2 rounded-2xl px-3.5 py-2 text-sm",
                 own ? "bg-primary text-white" : "border border-line bg-surface text-ink",
               )}
             >
-              {message.body}
-            </p>
+              {!own ? <p className="text-2xs font-semibold opacity-70">{SENDER_LABEL[message.sender]}</p> : null}
+              {message.has_image ? (
+                <a href={imageUrl(message.id)} target="_blank" rel="noreferrer" className="block">
+                  {/* eslint-disable-next-line @next/next/no-img-element */}
+                  <img
+                    src={imageUrl(message.id)}
+                    alt="Attached photo"
+                    className="max-h-56 rounded-lg object-cover"
+                  />
+                </a>
+              ) : null}
+              {message.body ? <p className="whitespace-pre-line">{message.body}</p> : null}
+              <p className={cn("text-2xs", own ? "text-right text-white/70" : "text-ink-faint")}>
+                {formatDateTime(message.created_at)}
+              </p>
+            </div>
           </div>
         );
       })}

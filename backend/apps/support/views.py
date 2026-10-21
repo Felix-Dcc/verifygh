@@ -8,14 +8,17 @@ super admins hold.
 from __future__ import annotations
 
 from django.db.models import Case, IntegerField, Q, Value, When
+from django.http import HttpResponse
 from rest_framework import mixins, serializers, viewsets
 from rest_framework.decorators import action
+from rest_framework.parsers import FormParser, JSONParser, MultiPartParser
 from rest_framework.permissions import IsAuthenticated
 from rest_framework.response import Response
 from rest_framework.views import APIView
 
 from apps.accounts.constants import AdminPermission
 from apps.adminapi.views import AdminBase
+from apps.common.errors import NotFound
 from apps.common.throttling import SupportChatDailyThrottle, SupportChatThrottle
 from apps.support import services
 from apps.support.models import ChatMessage, ChatThread, ThreadStatus
@@ -25,20 +28,19 @@ HISTORY = 100
 
 
 class MessageSerializer(serializers.ModelSerializer):
+    has_image = serializers.SerializerMethodField()
+
     class Meta:
         model = ChatMessage
-        fields = ["id", "sender", "body", "created_at"]
+        fields = ["id", "sender", "body", "has_image", "created_at"]
+
+    def get_has_image(self, message) -> bool:
+        return bool(message.image_type)
 
 
 class CustomerMessageSerializer(serializers.Serializer):
     body = serializers.CharField(max_length=1000, required=False, allow_blank=True,
-                                 trim_whitespace=True)
-    topic = serializers.ChoiceField(choices=list(services.TOPICS), required=False)
-
-    def validate(self, attrs):
-        if bool(attrs.get("body")) == bool(attrs.get("topic")):
-            raise serializers.ValidationError("Send either a message or a topic.")
-        return attrs
+                                 trim_whitespace=True, default="")
 
 
 class StaffReplySerializer(serializers.Serializer):
@@ -48,12 +50,25 @@ class StaffReplySerializer(serializers.Serializer):
 def _messages(thread: ChatThread | None) -> list:
     if thread is None:
         return []
-    newest = list(thread.messages.order_by("-created_at")[:HISTORY])
+    # The photo bytes stay in the database; the list only says one is there.
+    newest = list(thread.messages.defer("image").order_by("-created_at")[:HISTORY])
     return MessageSerializer(reversed(newest), many=True).data
+
+
+def _image(message: ChatMessage | None) -> HttpResponse:
+    """A customer's photo, served so it stays an image."""
+    if message is None or not message.image_type:
+        raise NotFound("We could not find that photo.")
+    response = HttpResponse(bytes(message.image), content_type=message.image_type)
+    response["X-Content-Type-Options"] = "nosniff"
+    response["Content-Security-Policy"] = "default-src 'none'; sandbox"
+    response["Cache-Control"] = "private, no-store"
+    return response
 
 
 class ChatView(APIView):
     permission_classes = [IsAuthenticated]
+    parser_classes = [JSONParser, MultiPartParser, FormParser]
 
     def get_throttles(self):
         # Polling (GET) rides on the default per-user bucket; sends get their own.
@@ -63,9 +78,8 @@ class ChatView(APIView):
 
     def _payload(self, thread):
         return {
-            "status": thread.status if thread else ThreadStatus.BOT,
+            "status": thread.status if thread else ThreadStatus.WAITING,
             "messages": _messages(thread),
-            "topics": [{"key": key, "label": label} for key, (label, _) in services.TOPICS.items()],
         }
 
     def get(self, request):
@@ -75,10 +89,20 @@ class ChatView(APIView):
         serializer = CustomerMessageSerializer(data=request.data)
         serializer.is_valid(raise_exception=True)
         thread = services.customer_message(
-            request.user, body=serializer.validated_data.get("body", ""),
-            topic=serializer.validated_data.get("topic", ""),
+            request.user, body=serializer.validated_data["body"],
+            image=request.FILES.get("image"),
         )
         return Response(self._payload(thread), status=201)
+
+
+class ChatImageView(APIView):
+    """One of the signed-in customer's own photos."""
+
+    permission_classes = [IsAuthenticated]
+
+    def get(self, request, message_id):
+        return _image(ChatMessage.objects.filter(pk=message_id,
+                                                 thread__user=request.user).first())
 
 
 class AdminChatSerializer(serializers.ModelSerializer):
@@ -91,8 +115,10 @@ class AdminChatSerializer(serializers.ModelSerializer):
         fields = ["id", "status", "last_message_at", "email", "full_name", "preview"]
 
     def get_preview(self, thread) -> str:
-        last = thread.messages.order_by("-created_at").first()
-        return last.body[:120] if last else ""
+        last = thread.messages.defer("image").order_by("-created_at").first()
+        if last is None:
+            return ""
+        return last.body[:120] or ("Photo" if last.image_type else "")
 
 
 class AdminChatViewSet(AdminBase, mixins.ListModelMixin, mixins.RetrieveModelMixin,
@@ -109,7 +135,7 @@ class AdminChatViewSet(AdminBase, mixins.ListModelMixin, mixins.RetrieveModelMix
         if search:
             queryset = queryset.filter(Q(user__email__icontains=search)
                                        | Q(user__full_name__icontains=search))
-        # Customers waiting for a person first, then the most recent.
+        # Customers waiting for a reply first, then the most recent.
         return queryset.annotate(waiting=Case(
             When(status=ThreadStatus.WAITING, then=Value(0)), default=Value(1),
             output_field=IntegerField(),
@@ -130,3 +156,7 @@ class AdminChatViewSet(AdminBase, mixins.ListModelMixin, mixins.RetrieveModelMix
     def close(self, request, pk=None):
         services.close(self.get_object())
         return self.retrieve(request, pk)
+
+    @action(detail=True, methods=["get"], url_path=r"images/(?P<message_id>[0-9a-f-]{36})")
+    def image(self, request, pk=None, message_id=None):
+        return _image(self.get_object().messages.filter(pk=message_id).first())

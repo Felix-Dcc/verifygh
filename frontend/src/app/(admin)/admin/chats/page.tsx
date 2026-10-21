@@ -19,7 +19,7 @@ import {
   cn,
 } from "@/components/ui/primitives";
 import { useToast } from "@/components/ui/toast";
-import { ApiError, api } from "@/lib/api";
+import { API_URL, ApiError, api } from "@/lib/api";
 import { relativeTime } from "@/lib/format";
 import type { Paginated } from "@/lib/types";
 
@@ -36,14 +36,13 @@ const STATUS_FILTERS = [
   { value: "", label: "All" },
   { value: "WAITING", label: "Waiting" },
   { value: "ANSWERED", label: "Answered" },
-  { value: "BOT", label: "With bot" },
   { value: "CLOSED", label: "Closed" },
 ];
 
 const STATUS_BADGE: Record<Thread["status"], { label: string; tone: "warn" | "success" | "neutral" }> = {
   WAITING: { label: "Waiting", tone: "warn" },
   ANSWERED: { label: "Answered", tone: "success" },
-  BOT: { label: "With bot", tone: "neutral" },
+  BOT: { label: "Old bot chat", tone: "neutral" },
   CLOSED: { label: "Closed", tone: "neutral" },
 };
 
@@ -78,7 +77,7 @@ export default function AdminChatsPage() {
     <div className="space-y-4">
       <PageHeader
         title="Chats"
-        description="Customer support chats. The bot answers first; chats waiting for a person are listed first."
+        description="Customer support chats. Chats waiting for a reply are listed first."
       />
 
       <div className={cn(selected && "max-lg:hidden")}>
@@ -207,7 +206,12 @@ function ThreadView({ id, onBack, onChange }: { id: string; onBack: () => void; 
       {error && !data ? (
         <LoadError what="this chat" onRetry={() => mutate()} />
       ) : data ? (
-        <ChatMessages messages={data.messages} mine="STAFF" empty="No messages yet." />
+        <ChatMessages
+          messages={data.messages}
+          mine="STAFF"
+          imageUrl={(messageId) => `${API_URL}/admin/chats/${id}/images/${messageId}/`}
+          empty="No messages yet."
+        />
       ) : (
         <TableSkeleton rows={4} />
       )}

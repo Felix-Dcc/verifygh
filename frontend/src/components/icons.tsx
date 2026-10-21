@@ -350,3 +350,17 @@ export const GlobeIcon = (p: IconProps) => (
     <path d="M3.5 12h17M12 3.5c2.3 2.4 3.5 5.2 3.5 8.5s-1.2 6.1-3.5 8.5c-2.3-2.4-3.5-5.2-3.5-8.5s1.2-6.1 3.5-8.5z" />
   </Svg>
 );
+
+export const PaperclipIcon = (p: IconProps) => (
+  <Svg {...p}>
+    <path d="m21 11.5-8.6 8.6a5 5 0 0 1-7.1-7.1l8.6-8.6a3.4 3.4 0 0 1 4.8 4.8l-8.6 8.6a1.7 1.7 0 0 1-2.4-2.4l7.9-7.9" />
+  </Svg>
+);
+
+export const HeadsetIcon = (p: IconProps) => (
+  <Svg {...p}>
+    <path d="M4 14v-2a8 8 0 0 1 16 0v2" />
+    <path d="M4 14a2 2 0 0 1 2-2h1v6H6a2 2 0 0 1-2-2v-2ZM20 14a2 2 0 0 0-2-2h-1v6h1a2 2 0 0 0 2-2v-2Z" />
+    <path d="M17 18v.5a2.5 2.5 0 0 1-2.5 2.5H12" />
+  </Svg>
+);

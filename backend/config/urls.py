@@ -160,6 +160,8 @@ api_v1 = [
     path("admin/maintenance/", admin_views.AdminMaintenanceView.as_view(),
          name="admin-maintenance"),
     path("support/chat/", support_views.ChatView.as_view(), name="support-chat"),
+    path("support/chat/images/<uuid:message_id>/", support_views.ChatImageView.as_view(),
+         name="support-chat-image"),
     path("status/", common_views.SiteStatusView.as_view(), name="site-status"),
     path("admin/", include(admin_router.urls)),
     path("", include(router.urls)),
