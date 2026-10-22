@@ -7,6 +7,7 @@ export const metadata: Metadata = {
   title: "Acceptable Use Policy",
   description:
     "What VerifyGH may and may not be used for. Accepting this policy is a condition of purchasing.",
+  alternates: { canonical: "/acceptable-use" },
 };
 
 export default function AcceptableUsePage() {

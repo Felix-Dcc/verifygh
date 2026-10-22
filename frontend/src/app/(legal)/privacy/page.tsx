@@ -6,6 +6,7 @@ import { LegalHeader } from "../_components";
 export const metadata: Metadata = {
   title: "Privacy Policy",
   description: "What VerifyGH collects, why, and what we do not collect.",
+  alternates: { canonical: "/privacy" },
 };
 
 export default function PrivacyPage() {

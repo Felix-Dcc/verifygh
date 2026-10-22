@@ -6,6 +6,7 @@ import { LegalHeader } from "../_components";
 export const metadata: Metadata = {
   title: "Terms of Service",
   description: "The agreement between you and VerifyGH.",
+  alternates: { canonical: "/terms" },
 };
 
 export default function TermsPage() {
