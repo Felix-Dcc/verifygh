@@ -63,6 +63,9 @@ VERIFYGH = {
     # configuration, not logic; test_referral_deposit_gate.py checks the
     # shipped GH₵2 / GH₵3 and runs the full flow at those amounts.
     "REFERRAL_SIGNUP_BONUS": "5.00",
+    # The payment tests are written around GH₵10 deposits. The amount is
+    # configuration; test_payments.py checks the shipped GH₵15 minimum.
+    "MIN_DEPOSIT": "10.00",
     # Off so admin tests can sign staff in with a password alone.
     # tests/test_two_factor.py turns it on and covers it.
     "STAFF_TWO_FACTOR_REQUIRED": False,

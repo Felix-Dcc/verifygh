@@ -179,7 +179,7 @@ class PaymentOptionsView(APIView):
                 "min_deposit": str(settings.VERIFYGH["MIN_DEPOSIT"]),
                 "max_deposit": str(settings.VERIFYGH["MAX_DEPOSIT"]),
                 "max_balance": str(settings.VERIFYGH["MAX_WALLET_BALANCE"]),
-                "quick_amounts": ["10.00", "20.00", "50.00", "100.00", "200.00"],
+                "quick_amounts": ["15.00", "20.00", "50.00", "100.00", "200.00"],
                 "deposits_enabled": not blocked,
                 "deposits_disabled_reason": blocked,
                 "fee_note": provider.customer_fee_note,

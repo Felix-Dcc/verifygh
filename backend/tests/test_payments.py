@@ -68,13 +68,25 @@ def test_deposit_below_the_minimum_is_rejected(user, auth):
     assert response.data["error"]["code"] == "VALIDATION_ERROR"
 
 
-def test_the_minimum_deposit_is_ten_cedis(user, auth, api, settings):
-    # The shipped default, unless MIN_DEPOSIT says otherwise.
-    assert Decimal(str(settings.VERIFYGH["MIN_DEPOSIT"])) == Decimal("10.00")
+def test_the_minimum_deposit_is_fifteen_cedis(user, auth, api, settings, monkeypatch):
+    # The shipped default, read with no MIN_DEPOSIT in the environment (the
+    # test settings pin GH₵10 for the other payment tests).
+    import importlib
+
+    from config.settings import base
+
+    monkeypatch.delenv("MIN_DEPOSIT", raising=False)
+    shipped = importlib.reload(base).VERIFYGH["MIN_DEPOSIT"]
+    assert Decimal(str(shipped)) == Decimal("15.00")
+
+    settings.VERIFYGH = {**settings.VERIFYGH, "MIN_DEPOSIT": shipped}
     client = auth(user)
-    assert start_deposit(client, amount="9.99").status_code == 400
-    assert start_deposit(client, amount="10.00").status_code == 201
-    assert api.get("/api/v1/payments/options/").data["min_deposit"] == "10.00"
+    assert start_deposit(client, amount="14.99").status_code == 400
+    assert start_deposit(client, amount="15.00").status_code == 201
+    options = api.get("/api/v1/payments/options/").data
+    assert options["min_deposit"] == "15.00"
+    # No quick-pick button offers less than the minimum.
+    assert min(Decimal(amount) for amount in options["quick_amounts"]) >= Decimal("15.00")
 
 
 def test_invalid_ghanaian_number_is_rejected(user, auth):
