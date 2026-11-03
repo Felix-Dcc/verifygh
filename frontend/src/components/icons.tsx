@@ -119,6 +119,13 @@ export const MessageIcon = (p: IconProps) => (
   </Svg>
 );
 
+export const TelegramIcon = (p: IconProps) => (
+  <Svg {...p}>
+    <path d="M21 4 3 11l6 2.5L19 7l-8 8 6.5 5L21 4z" />
+    <path d="m11 15-1.5 4.5L9 13.5" />
+  </Svg>
+);
+
 export const LockIcon = (p: IconProps) => (
   <Svg {...p}>
     <rect x="4.5" y="10.5" width="15" height="10" rx="2.5" />

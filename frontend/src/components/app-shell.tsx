@@ -9,6 +9,7 @@ import { useAuth } from "@/components/auth-provider";
 import { Logo, Logomark } from "@/components/brand";
 import { MaintenanceStrip, PauseSiteButton } from "@/components/maintenance";
 import { useReferralsEnabled } from "@/components/referral-invite";
+import { TelegramBubble } from "@/components/telegram-bubble";
 import {
   BellIcon,
   BoltIcon,
@@ -191,7 +192,8 @@ export function AppShell({
         </main>
       </div>
       {variant === "admin" ? <AdminBottomNav groups={groups} /> : <BottomNav items={USER_BOTTOM_NAV} />}
-      {/* Customer support chat (<SupportChat /> from support-chat.tsx) is off for now; Admin > Chats still works. */}
+      {/* Support is on Telegram. The in-site chat (support-chat.tsx) stays unmounted; Admin > Chats still works. */}
+      {variant === "user" ? <TelegramBubble /> : null}
     </div>
   );
 }
