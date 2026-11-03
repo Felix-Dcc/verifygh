@@ -222,6 +222,22 @@ def test_admin_sees_the_case_with_a_masked_number(customer, staff, delivered):
     assert NUMBER not in str(detail)
 
 
+def test_the_open_filter_counts_every_case_still_waiting(customer, staff, delivered):
+    report(customer, delivered)
+    issue = VerificationIssue.objects.get()
+
+    def open_count():
+        return staff.get("/api/v1/admin/number-issues/?status=open&page_size=1").data[
+            "pagination"]["count"]
+
+    for status in ("OPEN", "IN_REVIEW", "AWAITING_PROVIDER"):
+        VerificationIssue.objects.filter(pk=issue.pk).update(status=status)
+        assert open_count() == 1, status
+    for status in ("REFUNDED", "REPLACED", "REJECTED", "RESOLVED"):
+        VerificationIssue.objects.filter(pk=issue.pk).update(status=status)
+        assert open_count() == 0, status
+
+
 def test_customers_cannot_reach_the_admin_endpoints(customer, delivered):
     report(customer, delivered)
     issue = VerificationIssue.objects.get()

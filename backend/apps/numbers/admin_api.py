@@ -19,7 +19,7 @@ from apps.accounts.constants import AdminPermission
 from apps.adminapi.views import AdminBase
 from apps.common.errors import NotFound
 from apps.numbers import services
-from apps.numbers.models import IssueEvidence, VerificationIssue
+from apps.numbers.models import OPEN_ISSUE_STATUSES, IssueEvidence, VerificationIssue
 from apps.numbers.serializers import (
     AdminIssueActionSerializer,
     AdminIssueDetailSerializer,
@@ -39,7 +39,10 @@ class AdminIssueViewSet(AdminBase, mixins.ListModelMixin, mixins.RetrieveModelMi
             "resolved_by", "replacement_order",
         )
         params = self.request.query_params
-        if params.get("status"):
+        # "open" is every status still waiting on someone: the sidebar badge counts these.
+        if params.get("status") == "open":
+            queryset = queryset.filter(status__in=OPEN_ISSUE_STATUSES)
+        elif params.get("status"):
             queryset = queryset.filter(status=params["status"])
         if params.get("reason"):
             queryset = queryset.filter(reason=params["reason"])

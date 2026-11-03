@@ -38,7 +38,7 @@ import {
 import { ThemeSwitcher } from "@/components/theme";
 import { ButtonLink, Skeleton, cn } from "@/components/ui/primitives";
 import { cedis } from "@/lib/format";
-import type { Wallet } from "@/lib/types";
+import type { Paginated, Wallet } from "@/lib/types";
 
 /**
  * The application frame: sidebar, top bar and mobile navigation.
@@ -210,6 +210,7 @@ function Sidebar({ groups, variant }: { groups: NavGroup[]; variant: "user" | "a
     variant === "user" ? "/notifications/unread/" : null,
     { refreshInterval: 60_000 },
   );
+  const openIssues = useOpenIssues(admin);
 
   return (
     <aside
@@ -248,7 +249,14 @@ function Sidebar({ groups, variant }: { groups: NavGroup[]; variant: "user" | "a
                   <SidebarLink
                     item={item}
                     dark={admin}
-                    badge={item.href === "/account/notifications" ? unread?.count : undefined}
+                    badge={
+                      item.href === "/account/notifications"
+                        ? unread?.count
+                        : item.href === "/admin/issues"
+                          ? openIssues
+                          : undefined
+                    }
+                    badgeLabel={item.href === "/admin/issues" ? "open" : "unread"}
                   />
                 </li>
               ))}
@@ -299,7 +307,27 @@ function Sidebar({ groups, variant }: { groups: NavGroup[]; variant: "user" | "a
   );
 }
 
-function SidebarLink({ item, badge, dark = false }: { item: NavItem; badge?: number; dark?: boolean }) {
+/** Number-issue reports still waiting on someone, for the admin nav badge. */
+function useOpenIssues(enabled: boolean) {
+  const { can } = useAuth();
+  const { data } = useSWR<Paginated<unknown>>(
+    enabled && can("ORDER_VIEW") ? ["/admin/number-issues/", { status: "open", page_size: 1 }] : null,
+    { refreshInterval: 30_000 },
+  );
+  return data?.pagination.count;
+}
+
+function SidebarLink({
+  item,
+  badge,
+  badgeLabel = "unread",
+  dark = false,
+}: {
+  item: NavItem;
+  badge?: number;
+  badgeLabel?: string;
+  dark?: boolean;
+}) {
   const isActive = useIsActive();
   const active = isActive(item);
   const Icon = item.icon;
@@ -337,7 +365,7 @@ function SidebarLink({ item, badge, dark = false }: { item: NavItem; badge?: num
       {badge ? (
         <span className="tabular ml-auto rounded-md bg-primary px-1.5 text-2xs font-semibold leading-5 text-white">
           {badge > 99 ? "99+" : badge}
-          <span className="sr-only"> unread</span>
+          <span className="sr-only"> {badgeLabel}</span>
         </span>
       ) : null}
     </Link>
@@ -603,7 +631,7 @@ function BottomNav({ items }: { items: NavItem[] }) {
   );
 }
 
-function BottomLink({ item, active }: { item: NavItem; active: boolean }) {
+function BottomLink({ item, active, badge }: { item: NavItem; active: boolean; badge?: number }) {
   const Icon = item.icon;
   return (
     <Link
@@ -614,7 +642,15 @@ function BottomLink({ item, active }: { item: NavItem; active: boolean }) {
         active ? "text-brand-700" : "text-ink-muted",
       )}
     >
-      <Icon className={cn("h-6 w-6", active ? "text-brand-600" : "text-ink-faint")} />
+      <span className="relative">
+        <Icon className={cn("h-6 w-6", active ? "text-brand-600" : "text-ink-faint")} />
+        {badge ? (
+          <span className="tabular absolute -right-2.5 -top-1.5 rounded-full bg-primary px-1.5 text-2xs font-semibold leading-4 text-white">
+            {badge > 99 ? "99+" : badge}
+            <span className="sr-only"> open</span>
+          </span>
+        ) : null}
+      </span>
       {item.label}
     </Link>
   );
@@ -632,6 +668,7 @@ function AdminBottomNav({ groups }: { groups: NavGroup[] }) {
     .map((href) => all.find((item) => item.href === href))
     .filter((item): item is NavItem => Boolean(item));
   const moreActive = !primary.some((item) => isActive(item));
+  const openIssues = useOpenIssues(true);
 
   return (
     <>
@@ -643,7 +680,11 @@ function AdminBottomNav({ groups }: { groups: NavGroup[] }) {
         <ul className="mx-auto flex max-w-lg">
           {primary.map((item) => (
             <li key={item.href} className="flex-1">
-              <BottomLink item={item} active={isActive(item)} />
+              <BottomLink
+                item={item}
+                active={isActive(item)}
+                badge={item.href === "/admin/issues" ? openIssues : undefined}
+              />
             </li>
           ))}
           <li className="flex-1">
