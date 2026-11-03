@@ -5,6 +5,7 @@ djangorestframework-simplejwt==5.5.1
 django-cors-headers==4.4.0
 django-filter==24.3
 celery==5.4.0
+kombu==5.6.2
 redis==5.0.8
 psycopg[binary]==3.2.1
 python-dotenv==1.2.2
