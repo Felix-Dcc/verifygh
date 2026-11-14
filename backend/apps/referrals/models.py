@@ -347,3 +347,125 @@ class ReferralRiskFlag(BaseModel):
 
     def __str__(self) -> str:
         return f"{self.kind} ({self.level})"
+
+
+# ---------------------------------------------------------------------------
+# Agents: people who earn a cash commission on what their referred customers buy
+# ---------------------------------------------------------------------------
+
+
+class Agent(BaseModel):
+    """A user registered by staff to earn commission.
+
+    Their channel is their ordinary referral link: every customer attributed to
+    them by `Referral` earns them `commission_percent` of the cash that customer
+    pays for delivered numbers. Commission is owed in cash and paid by staff
+    outside the platform (mobile money), recorded as an `AgentPayout`.
+    """
+
+    user = models.OneToOneField(
+        settings.AUTH_USER_MODEL, on_delete=models.PROTECT, related_name="agent"
+    )
+    commission_percent = models.DecimalField(max_digits=5, decimal_places=2,
+                                             default=Decimal("5.00"))
+    is_active = models.BooleanField(default=True)
+    #: Purchases made from here on earn. Reset when a paused agent is resumed,
+    #: so nothing bought while they were paused is paid for afterwards.
+    active_since = models.DateTimeField()
+    #: Where staff send the money, e.g. "MTN 024 000 0000, Ama Mensah".
+    payout_details = models.CharField(max_length=120, blank=True, default="")
+    created_by = models.ForeignKey(
+        settings.AUTH_USER_MODEL, null=True, blank=True, on_delete=models.SET_NULL,
+        related_name="agents_registered",
+    )
+
+    class Meta:
+        db_table = "referrals_agent"
+        ordering = ["-created_at"]
+        constraints = [
+            models.CheckConstraint(
+                check=Q(commission_percent__gte=Decimal("0.00"))
+                & Q(commission_percent__lte=Decimal("50.00")),
+                name="agent_commission_percent_range",
+            ),
+        ]
+
+    def __str__(self) -> str:
+        return f"Agent<{self.user_id} {self.commission_percent}%>"
+
+
+class CommissionKind(models.TextChoices):
+    ORDER = "ORDER", "Verification"
+    RENTAL = "RENTAL", "Rental"
+    EXTENSION = "EXTENSION", "Rental extension"
+
+
+class CommissionStatus(models.TextChoices):
+    EARNED = "EARNED", "Earned"
+    #: The sale was refunded afterwards, so nothing is owed for it.
+    REVERSED = "REVERSED", "Reversed"
+
+
+class AgentCommission(BaseModel):
+    """What one sale earned an agent. One per sale, ever.
+
+    The rate is frozen here, so changing an agent's rate never rewrites what
+    they already earned.
+    """
+
+    agent = models.ForeignKey(Agent, on_delete=models.PROTECT, related_name="commissions")
+    customer = models.ForeignKey(
+        settings.AUTH_USER_MODEL, on_delete=models.PROTECT, related_name="agent_commissions"
+    )
+    kind = models.CharField(max_length=10, choices=CommissionKind.choices)
+    #: The order, rental or extension that earned it.
+    source_id = models.UUIDField()
+    source_reference = models.CharField(max_length=40, blank=True, default="")
+    #: The cash the customer paid; promotional credit earns nothing.
+    base_amount = models.DecimalField(max_digits=12, decimal_places=2)
+    percent = models.DecimalField(max_digits=5, decimal_places=2)
+    amount = models.DecimalField(max_digits=12, decimal_places=2)
+    currency = models.CharField(max_length=3, default="GHS")
+    status = models.CharField(max_length=10, choices=CommissionStatus.choices,
+                              default=CommissionStatus.EARNED, db_index=True)
+    reversed_at = models.DateTimeField(null=True, blank=True)
+
+    class Meta:
+        db_table = "referrals_agent_commission"
+        ordering = ["-created_at"]
+        constraints = [
+            models.UniqueConstraint(fields=["kind", "source_id"],
+                                    name="agent_commission_one_per_sale"),
+            models.CheckConstraint(check=Q(amount__gte=Decimal("0.00")),
+                                   name="agent_commission_amount_non_negative"),
+        ]
+        indexes = [models.Index(fields=["agent", "status"])]
+
+    def __str__(self) -> str:
+        return f"{self.kind} {self.source_reference} {self.amount} [{self.status}]"
+
+
+class AgentPayout(BaseModel):
+    """Commission staff sent to an agent outside the platform."""
+
+    agent = models.ForeignKey(Agent, on_delete=models.PROTECT, related_name="payouts")
+    amount = models.DecimalField(max_digits=12, decimal_places=2)
+    currency = models.CharField(max_length=3, default="GHS")
+    #: The mobile-money transaction ID, so a payout can be traced.
+    reference = models.CharField(max_length=80)
+    note = models.CharField(max_length=255, blank=True, default="")
+    paid_by = models.ForeignKey(
+        settings.AUTH_USER_MODEL, null=True, blank=True, on_delete=models.SET_NULL,
+        related_name="agent_payouts_made",
+    )
+
+    class Meta:
+        db_table = "referrals_agent_payout"
+        ordering = ["-created_at"]
+        constraints = [
+            models.CheckConstraint(check=Q(amount__gt=Decimal("0.00")),
+                                   name="agent_payout_amount_positive"),
+        ]
+
+    def __str__(self) -> str:
+        return f"Payout {self.currency} {self.amount} ({self.reference})"

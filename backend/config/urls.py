@@ -19,6 +19,7 @@ from apps.payments import admin_api as manual_admin
 from apps.payments import views as payment_views
 from apps.pricing import admin_api as pricing_admin
 from apps.referrals import admin_api as referral_admin
+from apps.referrals import agent_api as referral_agents
 from apps.rentals import admin_api as rental_admin
 from apps.rentals import views as rental_views
 from apps.support import views as support_views
@@ -88,6 +89,11 @@ api_v1 = [
         referral_admin.AdminReferralAnalyticsView.as_view(),
         name="admin-referral-analytics",
     ),
+    path("admin/agents/", referral_agents.AdminAgentsView.as_view(), name="admin-agents"),
+    path("admin/agents/<uuid:pk>/", referral_agents.AdminAgentView.as_view(),
+         name="admin-agent"),
+    path("admin/agents/<uuid:pk>/payouts/", referral_agents.AdminAgentPayoutView.as_view(),
+         name="admin-agent-payouts"),
     path(
         "admin/referral-program/",
         referral_admin.AdminReferralProgramView.as_view(),

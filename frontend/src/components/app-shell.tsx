@@ -5,6 +5,7 @@ import { usePathname, useRouter } from "next/navigation";
 import * as React from "react";
 import useSWR from "swr";
 
+import { useIsAgent } from "@/components/agents";
 import { useAuth } from "@/components/auth-provider";
 import { Logo, Logomark } from "@/components/brand";
 import { MaintenanceStrip, PauseSiteButton } from "@/components/maintenance";
@@ -77,6 +78,7 @@ const USER_NAV: NavGroup[] = [
     label: "Account",
     items: [
       { href: "/refer", label: "Refer friends", icon: GiftIcon },
+      { href: "/agent", label: "Agent", icon: UsersIcon },
       { href: "/account/notifications", label: "Notifications", icon: BellIcon },
       { href: "/account", label: "Settings", icon: SettingsIcon, exact: true },
     ],
@@ -115,7 +117,13 @@ const ADMIN_NAV: NavGroup[] = [
       { href: "/admin/funding", label: "Provider funding", icon: BoltIcon },
     ],
   },
-  { label: "Growth", items: [{ href: "/admin/referrals", label: "Referrals", icon: GiftIcon }] },
+  {
+    label: "Growth",
+    items: [
+      { href: "/admin/referrals", label: "Referrals", icon: GiftIcon },
+      { href: "/admin/agents", label: "Agents", icon: UsersIcon, permission: "REFERRAL_VIEW" },
+    ],
+  },
   {
     label: "Platform",
     items: [
@@ -163,6 +171,7 @@ export function AppShell({
   variant?: "user" | "admin";
 }) {
   const referrals = useReferralsEnabled();
+  const agent = useIsAgent();
   const { can } = useAuth();
   const groups = React.useMemo(
     () =>
@@ -171,12 +180,14 @@ export function AppShell({
             ...group,
             items: group.items.filter((item) => !item.permission || can(item.permission)),
           }))
-        : // Referrals appear only while the programme is running.
+        : // Referrals appear only while the programme is running, Agent only to agents.
           USER_NAV.map((group) => ({
             ...group,
-            items: group.items.filter((item) => referrals || item.href !== "/refer"),
+            items: group.items.filter(
+              (item) => (referrals || item.href !== "/refer") && (agent || item.href !== "/agent"),
+            ),
           })),
-    [variant, referrals, can],
+    [variant, referrals, agent, can],
   );
 
   return (
@@ -540,6 +551,7 @@ function UserMenu({ variant }: { variant: "user" | "admin" }) {
   }, [open]);
 
   const referrals = useReferralsEnabled();
+  const agent = useIsAgent();
   const items =
     variant === "admin"
       ? [{ href: "/dashboard", label: "Customer view" }]
@@ -547,6 +559,7 @@ function UserMenu({ variant }: { variant: "user" | "admin" }) {
           { href: "/account", label: "Settings" },
           { href: "/account/notifications", label: "Notifications" },
           ...(referrals ? [{ href: "/refer", label: "Refer friends" }] : []),
+          ...(agent ? [{ href: "/agent", label: "Agent" }] : []),
           ...(isStaff ? [{ href: "/admin", label: "Admin console" }] : []),
         ];
 

@@ -39,6 +39,7 @@ from apps.common.errors import Conflict, ValidationFailed
 from apps.common.ids import ALPHABET
 from apps.common.money import ZERO, quantize
 from apps.referrals.models import (
+    Agent,
     Referral,
     ReferralCode,
     ReferralProgram,
@@ -167,15 +168,18 @@ def attach_referral(*, new_user, raw_code: str | None, request=None) -> Referral
     decided later, after verification.
     """
     program = ReferralProgram.load()
-    if not program.is_enabled:
-        return None
-
     entry = resolve_code(raw_code)
     if entry is None:
         # An unknown or inactive code is simply ignored - registration
         # continues normally, and we tell the caller nothing about why.
         return None
     if entry.user_id == new_user.id:
+        return None
+    # An agent's link is their channel: it keeps attributing customers while
+    # the friend-referral programme is switched off. No bonus is promised or
+    # paid then (`evaluate` holds every referral while the programme is off).
+    if not program.is_enabled and not Agent.objects.filter(
+            user=entry.user, is_active=True).exists():
         return None
 
     from apps.accounts.models import UserDevice
@@ -211,7 +215,8 @@ def attach_referral(*, new_user, raw_code: str | None, request=None) -> Referral
         "referral_attributed",
         extra={"referral_id": str(referral.pk), "referrer_id": str(entry.user_id)},
     )
-    _notify_joined(referral, program)
+    if program.is_enabled:
+        _notify_joined(referral, program)
     return referral
 
 

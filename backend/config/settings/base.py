@@ -643,6 +643,9 @@ VERIFYGH = {
     "REFERRAL_REQUIRE_FIRST_DEPOSIT": env_bool("REFERRAL_REQUIRE_FIRST_DEPOSIT", True),
     "REFERRAL_MIN_FIRST_DEPOSIT": env("REFERRAL_MIN_FIRST_DEPOSIT_GHS", "10.00"),
     "REFERRAL_REFERRER_BONUS": env("REFERRAL_REFERRER_BONUS_GHS", "3.00"),
+    # What a newly registered agent earns on their customers' cash purchases.
+    # Each agent's own rate can be changed in the admin portal.
+    "AGENT_COMMISSION_PERCENT": env("AGENT_COMMISSION_PERCENT", "5.00"),
     # Codes and SMS text are erased from finished orders after this many days.
     "VERIFICATION_DATA_RETENTION_DAYS": env_int("VERIFICATION_DATA_RETENTION_DAYS", 30),
     # -- number rentals (apps/rentals): a number kept for days, bought from
