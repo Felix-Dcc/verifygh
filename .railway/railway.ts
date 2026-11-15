@@ -119,16 +119,17 @@ function backendEnv(databaseUrl: VariableValue, redisUrl: VariableValue) {
     LOG_LEVEL: "INFO",
 
     // Referral programme. Once read, the database row is the source of truth
-    // and a super admin changes the bonus in the console.
-    REFERRAL_PROGRAM_ENABLED: "true",
+    // and a super admin changes the bonus in the console. Off on the live
+    // site: only agents' links attribute customers.
+    REFERRAL_PROGRAM_ENABLED: "false",
     REFERRAL_SIGNUP_BONUS_GHS: "5.00",
     REFERRAL_MAX_MONTHLY_SUCCESSFUL_REFERRALS: "20",
 
-    // Paystack in LIVE mode. ALLOW_PAYSTACK_TEST_KEYS is deliberately absent:
-    // with it set, a key accidentally reverted to sk_test_ would boot happily
-    // and credit every wallet for free. Its absence makes that combination
-    // refuse to start.
-    PAYMENT_PROVIDER: "paystack",
+    // SENDI in LIVE mode, since 8 October 2026 (Paystack is disabled on their
+    // side). ALLOW_SENDI_TEST_KEYS is deliberately absent: with it set, a key
+    // accidentally reverted to a test key would boot happily and credit every
+    // wallet for free. Its absence makes that combination refuse to start.
+    PAYMENT_PROVIDER: "sendi",
 
     // TextVerified is the primary provider (docs/PROVIDERS.md). The API refuses
     // to boot without TEXTVERIFIED_API_USERNAME and TEXTVERIFIED_API_KEY, and
@@ -177,6 +178,11 @@ function backendEnv(databaseUrl: VariableValue, redisUrl: VariableValue) {
     // Shared across www and api so one sign-in covers both. Safe here in a way
     // it never was on .up.railway.app, which every Railway app shares.
     AUTH_COOKIE_DOMAIN: `.${ROOT_DOMAIN}`,
+    // SENDI's live secret key and webhook secret. Required - the API refuses
+    // to boot without them while PAYMENT_PROVIDER is sendi.
+    SENDI_SECRET_KEY: preserve(),
+    SENDI_WEBHOOK_SECRET: preserve(),
+    // Not in use; kept so the key survives if Paystack reinstates the account.
     PAYSTACK_SECRET_KEY: preserve(),
     // TextVerified credentials: the account email and the API key from its
     // dashboard. Required - the API refuses to boot without them.
