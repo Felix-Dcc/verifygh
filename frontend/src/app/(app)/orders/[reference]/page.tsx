@@ -7,6 +7,7 @@ import useSWR, { mutate as globalMutate } from "swr";
 
 import { PageHeader } from "@/components/app-shell";
 import { CheckCircleIcon, ClockIcon, CopyIcon, RefreshIcon } from "@/components/icons";
+import { AccountSecurityTips } from "@/components/account-security-tips";
 import { BuyDialog } from "@/components/marketplace/buy-dialog";
 import { CountryFlag } from "@/components/country-flag";
 import { OrderTimeline } from "@/components/orders/order-timeline";
@@ -324,6 +325,13 @@ export default function OrderDetailPage() {
 
             {awaitingCode ? (
               <ServiceTips slug={order.service_slug} name={order.service_name} />
+            ) : null}
+
+            {delivered ? (
+              <AccountSecurityTips
+                slug={order.service_slug}
+                intro="This number is temporary. Once your account is set up, do these now so you can always get back in without an SMS to this number."
+              />
             ) : null}
 
             {order.can_reuse && order.reusable_until && order.reuse_price ? (

@@ -5,6 +5,7 @@ import { useParams } from "next/navigation";
 import * as React from "react";
 import useSWR, { mutate as globalMutate } from "swr";
 
+import { AccountSecurityTips } from "@/components/account-security-tips";
 import { PageHeader } from "@/components/app-shell";
 import { CheckCircleIcon, ClockIcon, CopyIcon, InboxIcon, PlusIcon, RefreshIcon } from "@/components/icons";
 import { RentalLogo, RentalStatusBadge, timeLeft, useSecondsLeft } from "@/components/rentals/rental-ui";
@@ -230,6 +231,15 @@ export default function RentalDetailPage() {
           </Card>
 
           <Inbox rental={rental} />
+
+          {rental.messages.length > 0 && rental.status !== "FAILED" ? (
+            <Card className="overflow-hidden">
+              <AccountSecurityTips
+                slug={rental.service_slug}
+                intro="This number is only yours until the rental ends. Once your account is set up, do these now so you can still get back in after that."
+              />
+            </Card>
+          ) : null}
         </div>
 
         <div className="space-y-4 lg:col-span-2">
