@@ -169,7 +169,12 @@ export default async function AppNumberPage({ params }: { params: Promise<{ slug
           </section>
 
           <section className="flex flex-col items-start gap-3 rounded-2xl border border-line p-6 sm:flex-row sm:items-center sm:justify-between">
-            <p className="font-medium text-ink">Ready to verify {page.name}?</p>
+            <div>
+              <p className="font-medium text-ink">Ready to verify {page.name}?</p>
+              <p className="mt-1 text-sm text-ink-muted">
+                Need the same number for days? <Link href="/rent-us-number" className="link">Rent a number</Link>.
+              </p>
+            </div>
             <ButtonLink href={buy}>Buy {page.name} number</ButtonLink>
           </section>
 
