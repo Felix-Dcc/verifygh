@@ -9,6 +9,7 @@ import { Logo } from "@/components/brand";
 import { ChevronRightIcon, CloseIcon, LogoutIcon, MenuIcon } from "@/components/icons";
 import { ThemeSwitcher } from "@/components/theme";
 import { ButtonLink, cn } from "@/components/ui/primitives";
+import { APP_PAGES } from "@/lib/app-pages";
 
 const LINKS = [
   { href: "/#products", label: "Products" },
@@ -155,6 +156,10 @@ export function SiteHeader() {
 
 const FOOTER_SECTIONS = [
   {
+    title: "US numbers for",
+    links: APP_PAGES.map((page) => ({ href: `/us-number/${page.slug}`, label: page.name })),
+  },
+  {
     title: "Product",
     links: [
       { href: "/services", label: "SMS verification" },
@@ -195,7 +200,7 @@ export function SiteFooter({ seamless = false, night = false }: { seamless?: boo
       )}
     >
       <div className="container-page py-12">
-        <div className="grid grid-cols-1 gap-10 sm:grid-cols-2 lg:grid-cols-4">
+        <div className="grid grid-cols-1 gap-10 sm:grid-cols-2 lg:grid-cols-5">
           <div className="lg:col-span-1">
             <Logo />
             <p className="mt-3 text-base font-semibold tracking-tight text-ink">

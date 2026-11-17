@@ -1,5 +1,7 @@
 import type { MetadataRoute } from "next";
 
+import { APP_PAGES } from "@/lib/app-pages";
+
 const SITE_URL = process.env.NEXT_PUBLIC_SITE_ORIGIN || "https://www.getverifygh.com";
 
 /**
@@ -12,6 +14,7 @@ export default function sitemap(): MetadataRoute.Sitemap {
     ["/", 1, "weekly"],
     ["/services", 0.9, "daily"],
     ["/help", 0.7, "monthly"],
+    ...APP_PAGES.map((page): [string, number, "weekly"] => [`/us-number/${page.slug}`, 0.8, "weekly"]),
     ["/register", 0.6, "monthly"],
     ["/terms", 0.3, "monthly"],
     ["/acceptable-use", 0.3, "monthly"],
