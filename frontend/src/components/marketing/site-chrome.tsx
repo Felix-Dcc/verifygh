@@ -163,6 +163,7 @@ const FOOTER_SECTIONS = [
     title: "Product",
     links: [
       { href: "/services", label: "SMS verification" },
+      { href: "/virtual-us-number", label: "Virtual US number" },
       { href: "/rent-us-number", label: "Rent a number" },
       { href: "/#how-it-works", label: "How it works" },
       { href: "/#pricing", label: "Pricing" },

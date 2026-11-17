@@ -15,6 +15,7 @@ export default function sitemap(): MetadataRoute.Sitemap {
     ["/services", 0.9, "daily"],
     ["/help", 0.7, "monthly"],
     ["/rent-us-number", 0.8, "weekly"],
+    ["/virtual-us-number", 0.9, "weekly"],
     ...APP_PAGES.map((page): [string, number, "weekly"] => [`/us-number/${page.slug}`, 0.8, "weekly"]),
     ["/register", 0.6, "monthly"],
     ["/terms", 0.3, "monthly"],

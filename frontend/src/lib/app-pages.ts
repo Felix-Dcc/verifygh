@@ -110,6 +110,45 @@ export const APP_PAGES: AppPage[] = [
     },
   },
   {
+    slug: "snapchat",
+    name: "Snapchat",
+    purpose: "create or verify a Snapchat account",
+    tips: [
+      "If Snapchat says the number is already in use, cancel for a full refund and try a new number.",
+      "Once you are in, add your email and turn on two-factor authentication: Settings → Two-Factor Authentication.",
+    ],
+    faq: {
+      q: "Can I use it for Snapchat+?",
+      a: "Yes. Snapchat+ runs on your Snapchat account, so verifying the account is all it needs.",
+    },
+  },
+  {
+    slug: "discord",
+    name: "Discord",
+    purpose: "verify a Discord account",
+    tips: [
+      "Discord may ask you to solve a captcha first. The SMS is only sent after that.",
+      "Once your phone is verified, turn on two-factor authentication with an authenticator app: User Settings → My Account.",
+    ],
+    faq: {
+      q: "Why does Discord ask for a phone number?",
+      a: "Some servers only let in members whose phone is verified, and Discord sometimes asks after unusual activity. A US number verifies it the same way.",
+    },
+  },
+  {
+    slug: "linkedin",
+    name: "LinkedIn",
+    purpose: "create or verify a LinkedIn account",
+    tips: [
+      "If you already have a LinkedIn account, sign in to it rather than creating a new one. New accounts are checked more closely.",
+      "Add your email as the main sign-in on your account, so you are not relying on this number later.",
+    ],
+    faq: {
+      q: "Can I use it for LinkedIn Premium or a company page?",
+      a: "Yes. Both run on your LinkedIn account, so verifying the account is what they need.",
+    },
+  },
+  {
     slug: "twitter",
     name: "X (Twitter)",
     purpose: "create or verify an X (Twitter) account",

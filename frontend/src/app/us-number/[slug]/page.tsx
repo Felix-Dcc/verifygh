@@ -6,9 +6,9 @@ import { ChevronDownIcon } from "@/components/icons";
 import { SiteFooter, SiteHeader } from "@/components/marketing/site-chrome";
 import { ServiceLogo } from "@/components/service-logo";
 import { ButtonLink, Card } from "@/components/ui/primitives";
-import { API_URL } from "@/lib/api";
 import { APP_PAGES, appPage } from "@/lib/app-pages";
 import { cedis } from "@/lib/format";
+import { live } from "@/lib/live-price";
 
 /** Rebuilt at most hourly, so the price shown follows the marketplace. */
 export const revalidate = 3600;
@@ -16,23 +16,6 @@ export const dynamicParams = false;
 
 export function generateStaticParams() {
   return APP_PAGES.map((page) => ({ slug: page.slug }));
-}
-
-type Live = { price: string | null; icon: string | null };
-
-/** Today's US price from the public marketplace; nothing is shown if it can't be read. */
-async function live(slug: string): Promise<Live> {
-  try {
-    const response = await fetch(`${API_URL}/marketplace/${slug}/`, { next: { revalidate } });
-    if (!response.ok) return { price: null, icon: null };
-    const data = await response.json();
-    const us = (data.countries ?? []).find(
-      (country: { code: string; offered?: boolean }) => country.code === "US" && country.offered,
-    );
-    return { price: us?.price ?? null, icon: data.icon_url ?? null };
-  } catch {
-    return { price: null, icon: null };
-  }
 }
 
 export async function generateMetadata({ params }: { params: Promise<{ slug: string }> }): Promise<Metadata> {
