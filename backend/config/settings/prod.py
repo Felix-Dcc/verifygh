@@ -216,6 +216,14 @@ if _payment_provider == "sendi":
     if _sendi_url != "https://mesendi.com/backend" and not env_bool("ALLOW_SENDI_TEST_KEYS", False):
         _problems.append("SENDI_BASE_URL is not the live API (https://mesendi.com/backend).")
 
+if _payment_provider == "mojopay":
+    for _name in ("MOJOPAY_CLIENT_ID", "MOJOPAY_CLIENT_SECRET", "MOJOPAY_WEBHOOK_SECRET"):
+        if not env(_name, ""):
+            _problems.append(f"{_name} is required when PAYMENT_PROVIDER=mojopay.")
+    if env("MOJOPAY_BASE_URL", "https://omni.mojo-pay.com").rstrip("/") \
+            != "https://omni.mojo-pay.com":
+        _problems.append("MOJOPAY_BASE_URL is not MojoPay's API (https://omni.mojo-pay.com).")
+
 # An adapter whose endpoints are still blank cannot take a single cedi. Booting
 # with one selected would leave every deposit failing in production while the
 # app looked healthy, so refuse it here instead. This reads a plain data module:

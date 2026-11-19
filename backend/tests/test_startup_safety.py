@@ -122,6 +122,8 @@ UNSAFE = [
                         "MOOLRE_ACCOUNT_NUMBER": "10000000001", "MOOLRE_CALLBACK_SECRET": "s" * 36,
                         "MOOLRE_BASE_URL": "https://sandbox.moolre.com"},
      "not the live API"),
+    ("mojopay without credentials", {"PAYMENT_PROVIDER": "mojopay", "PAYSTACK_SECRET_KEY": None},
+     "MOJOPAY_CLIENT_ID is required"),
     ("mock webhook route", {"WEBHOOK_PROVIDERS": "mock"}, "must not include 'mock'"),
     ("mock verification", {"VERIFICATION_PROVIDER": "mock"}, "simulated numbers"),
     # The primary provider without its credentials fails at boot - never at the
@@ -336,4 +338,11 @@ def test_moolre_boots_with_its_live_credentials():
 def test_sendi_boots_with_its_live_credentials():
     result = boot(PAYMENT_PROVIDER="sendi", PAYSTACK_SECRET_KEY=None,
                   SENDI_SECRET_KEY="sk_live_" + "x" * 24, SENDI_WEBHOOK_SECRET="w" * 32)
+    assert result.returncode == 0, result.stderr[-2000:]
+
+
+def test_mojopay_boots_with_its_credentials():
+    result = boot(PAYMENT_PROVIDER="mojopay", PAYSTACK_SECRET_KEY=None,
+                  MOJOPAY_CLIENT_ID="client-ci", MOJOPAY_CLIENT_SECRET="s" * 32,
+                  MOJOPAY_WEBHOOK_SECRET="w" * 32)
     assert result.returncode == 0, result.stderr[-2000:]

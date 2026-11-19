@@ -712,6 +712,7 @@ function humanKey(key: string): string {
     paystack: "Paystack",
     sendi: "Sendi",
     moolre: "Moolre",
+    mojopay: "MojoPay",
     mock: "Mock",
   };
   return names[key] ?? key;

@@ -16,6 +16,7 @@ from apps.payments.base import PaymentProvider
 from apps.payments.hubtel import HubtelProvider
 from apps.payments.manual import ManualDepositProvider
 from apps.payments.mock import MockPaymentProvider
+from apps.payments.mojopay import MojoPayProvider
 from apps.payments.moolre import MoolreProvider
 from apps.payments.paystack import PaystackProvider
 from apps.payments.sendi import SendiProvider
@@ -27,6 +28,7 @@ _REGISTRY: dict[str, type[PaymentProvider]] = {
     PaystackProvider.key: PaystackProvider,
     MoolreProvider.key: MoolreProvider,
     SendiProvider.key: SendiProvider,
+    MojoPayProvider.key: MojoPayProvider,
     # Never selected as PAYMENT_PROVIDER: it answers the sweeps for manual
     # top-ups, which staff settle by hand.
     ManualDepositProvider.key: ManualDepositProvider,

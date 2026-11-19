@@ -729,6 +729,14 @@ PAYMENT_CREDENTIALS = {
         "webhook_secret": env("SENDI_WEBHOOK_SECRET", ""),
         "base_url": env("SENDI_BASE_URL", "https://mesendi.com/backend"),
     },
+    "mojopay": {
+        # An API client from the MojoPay portal (Developers > Create client),
+        # and the webhook secret shown for that client.
+        "client_id": env("MOJOPAY_CLIENT_ID", ""),
+        "client_secret": env("MOJOPAY_CLIENT_SECRET", ""),
+        "webhook_secret": env("MOJOPAY_WEBHOOK_SECRET", ""),
+        "base_url": env("MOJOPAY_BASE_URL", "https://omni.mojo-pay.com"),
+    },
     "mock": {"secret_key": env("MOCK_PAYMENT_SECRET", "mock-webhook-secret")},
 }
 

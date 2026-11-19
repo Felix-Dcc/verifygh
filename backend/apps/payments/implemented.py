@@ -15,4 +15,4 @@ from __future__ import annotations
 
 #: Adapters whose endpoints, auth and status mapping are filled in from the
 #: provider's official documentation. Add a key here only when that is true.
-IMPLEMENTED_PAYMENT_PROVIDERS = frozenset({"mock", "paystack", "moolre", "sendi"})
+IMPLEMENTED_PAYMENT_PROVIDERS = frozenset({"mock", "paystack", "moolre", "sendi", "mojopay"})
