@@ -94,9 +94,9 @@ class MojoPayProvider(PaymentProvider):
     key = "mojopay"
     display_name = "MojoPay Mobile Money"
     supported_networks = (MomoNetwork.MTN, MomoNetwork.TELECEL, MomoNetwork.AT)
-    # 1% "on_top", as charged on the live GH₵1 tests of 19 Nov 2026.
+    # 1.98% "on_top", as quoted by MojoPay after Go Live (20 Nov 2026).
     customer_fee_note = (
-        "MojoPay adds a 1% fee to the prompt on your phone - GH₵10.00 shows as GH₵10.10. "
+        "MojoPay adds a 1.98% fee to the prompt on your phone - GH₵15.00 shows as GH₵15.29. "
         "Your wallet is credited the full amount you enter."
     )
 
