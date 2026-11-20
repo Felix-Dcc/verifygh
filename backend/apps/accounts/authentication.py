@@ -242,7 +242,9 @@ def blacklist_refresh_token(raw_token: str | None) -> bool:
     if not raw_token:
         return False
     try:
-        RefreshToken(raw_token).blacklist()
+        token = RefreshToken(raw_token)
+        token.blacklist()
+        _note_signed_out(token)
         return True
     except (TokenError, AttributeError):
         # Expired, already blacklisted, or the blacklist app is not installed.
@@ -250,6 +252,31 @@ def blacklist_refresh_token(raw_token: str | None) -> bool:
     except Exception:
         logger.exception("blacklist_failed")
         return False
+
+
+def _signed_out_key(jti: str) -> str:
+    return f"refresh-signed-out:{jti}"
+
+
+def _note_signed_out(token: RefreshToken) -> None:
+    """Remember that the customer ended this token themselves.
+
+    Production, 17-19 Nov: new customers tapped Sign out, and TikTok's in-app
+    browser on iPhone sent the old cookie back half a minute later. That read
+    as a stolen token, ended every session and raised a HIGH alert. A token
+    its owner signed out is not evidence of theft when it returns - it is
+    simply refused. Only a token that sign-out actually retired is noted, so
+    one already rotated past (the real theft case) is unaffected.
+    """
+    from django.core.cache import cache
+    from rest_framework_simplejwt.settings import api_settings
+
+    try:
+        cache.set(_signed_out_key(token[api_settings.JTI_CLAIM]), True,
+                  int(settings.SIMPLE_JWT["REFRESH_TOKEN_LIFETIME"].total_seconds()))
+    except Exception:
+        # Losing the note only means the old alarm can fire.
+        logger.warning("signed_out_note_failed")
 
 
 #: Two tabs refreshing at the same moment present the same token; the loser
@@ -573,6 +600,10 @@ def detect_refresh_token_reuse(raw_token: str | None):
     age = (timezone.now() - entry.blacklisted_at).total_seconds()
     if age < REUSE_GRACE_SECONDS:
         return None
+    from django.core.cache import cache
+
+    if cache.get(_signed_out_key(payload.get(api_settings.JTI_CLAIM))):
+        return None  # its owner signed it out: refused, but not theft
     return user
 
 

@@ -701,3 +701,45 @@ def test_the_exact_browser_is_still_caught_past_its_own_limit(api, user):
     _lose_a_renewal(phone)
     cache.set(f"refresh-recoveries:{user.pk}", ROTATION_RECOVERY_EXACT_DAILY_LIMIT, 24 * 3600)
     assert phone.post("/api/v1/auth/refresh/", {}, format="json").status_code == 401
+
+
+def test_a_signed_out_token_coming_back_is_refused_without_an_alarm(api, user):
+    """Production, 17-19 Nov: a customer tapped Sign out, and TikTok's in-app
+    browser sent the old cookie back half a minute later. That is not theft:
+    the token is refused, nothing is flagged, other devices stay signed in."""
+    from apps.audit.models import SuspiciousActivity
+
+    phone = type(api)()
+    login(phone, user)                                 # another device
+    login(api, user)
+    signed_out = api.cookies[settings.AUTH_COOKIE_REFRESH].value
+    assert api.post("/api/v1/auth/logout/", {}, format="json").status_code == 200
+    _age_blacklist_entry(signed_out)
+
+    stale = type(api)()
+    assert stale.post("/api/v1/auth/refresh/", {"refresh": signed_out},
+                      format="json").status_code == 401
+
+    user.refresh_from_db()
+    assert user.token_version == 0
+    assert phone.get(ME).status_code == 200
+    assert not SuspiciousActivity.objects.filter(
+        user=user, kind=SuspiciousActivity.Kind.TOKEN_REUSE).exists()
+
+
+def test_signing_out_does_not_hide_a_token_stolen_before_a_rotation(api, user):
+    """The note is only for a token sign-out itself retired: a copy rotated
+    past earlier is still theft, whatever the customer does afterwards."""
+    from apps.audit.models import SuspiciousActivity
+
+    login(api, user)
+    stolen = api.cookies[settings.AUTH_COOKIE_REFRESH].value
+    api.post("/api/v1/auth/refresh/", {}, format="json")   # victim rotates
+    api.post("/api/v1/auth/logout/", {}, format="json")    # then signs out
+    _age_blacklist_entry(stolen)
+
+    attacker = type(api)(HTTP_USER_AGENT="Attacker/1.0")
+    assert attacker.post("/api/v1/auth/refresh/", {"refresh": stolen},
+                         format="json").status_code == 401
+    assert SuspiciousActivity.objects.filter(
+        user=user, kind=SuspiciousActivity.Kind.TOKEN_REUSE, level="HIGH").count() == 1
