@@ -310,6 +310,15 @@ class MojoPayProvider(PaymentProvider):
         if not isinstance(obj, dict):
             raise ProviderError("Unreadable webhook payload.")
 
+        claimed = str(payload.get("type") or "")[:60]
+        if obj.get("object") != "collection":
+            # Payouts (the owner's own withdrawals), checkout sessions and the
+            # like move no customer money: recorded, nothing to apply.
+            return WebhookEventDTO(
+                event_id=derive("mojopay", str(payload.get("id") or ""), claimed),
+                event_type=claimed or "unknown", reference="", status=ChargeStatus.PROCESSING,
+                raw={"type": claimed, "object": str(obj.get("object") or "")[:40]})
+
         reference = str(obj.get("merchant_reference") or "")
         payment = Payment.objects.filter(provider=self.key, reference=reference).first() \
             if reference else None
@@ -317,7 +326,6 @@ class MojoPayProvider(PaymentProvider):
             # Kept as unparsed, where the admin health check shows it.
             raise ProviderError("The webhook names no payment of ours.")
 
-        claimed = str(payload.get("type") or "")[:60]
         try:
             confirmed = self.fetch_charge(payment.reference)
             status, amount, reason = confirmed.status, confirmed.amount, confirmed.failure_reason

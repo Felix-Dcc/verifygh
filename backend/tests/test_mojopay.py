@@ -211,3 +211,26 @@ def test_a_forged_or_stale_webhook_is_rejected(mojopay, user, api, kwargs):
     response = webhook(api, event(payment), **kwargs)
     assert response.status_code in (400, 401, 403)
     assert get_or_create_wallet(user).balance == Decimal("0.00")
+
+
+def test_a_payout_notice_is_recorded_and_moves_nothing(mojopay, user, api):
+    """21 Nov: the owner's own withdrawal from the portal sent payout.* notices,
+    which were parked as unmatched payments on the health check."""
+    from apps.payments.models import PaymentWebhookEvent
+
+    body = {"id": "EVT_" + "P" * 24, "type": "payout.succeeded", "data": {"object": {
+        "id": "PO_1", "object": "payout", "status": "succeeded", "currency": "GHS",
+        "amount": "364.00", "merchant_reference": "portal_x"}}}
+    assert webhook(api, body).status_code == 200
+    assert not PaymentWebhookEvent.objects.filter(processed=False, signature_valid=True).exists()
+    assert get_or_create_wallet(user).balance == Decimal("0.00")
+
+
+def test_a_collection_that_is_not_ours_is_still_flagged(mojopay, api):
+    from apps.payments.models import PaymentWebhookEvent
+
+    body = {"id": "EVT_" + "C" * 24, "type": "collection.succeeded", "data": {"object": {
+        "id": "CL_X", "object": "collection", "status": "succeeded",
+        "merchant_reference": "NOT-OURS"}}}
+    webhook(api, body)
+    assert PaymentWebhookEvent.objects.filter(processed=False, signature_valid=True).exists()
