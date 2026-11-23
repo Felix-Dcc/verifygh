@@ -22,6 +22,7 @@ from apps.common.errors import ServiceUnavailable
 from apps.verification.base import VerificationProvider
 from apps.verification.mock import MockVerificationProvider
 from apps.verification.onlinesim import OnlineSimProvider
+from apps.verification.smspool import SMSPoolProvider
 from apps.verification.textverified import TextVerifiedProvider
 
 logger = logging.getLogger("verifygh.provider")
@@ -40,6 +41,9 @@ _REGISTRY: dict[str, type[VerificationProvider]] = {
     MockVerificationProvider.key: MockVerificationProvider,
     TextVerifiedProvider.key: TextVerifiedProvider,
     OnlineSimProvider.key: OnlineSimProvider,
+    # Second supplier (23 Nov 2026). Its terms allow resale from 30 Nov 2026;
+    # its row stays unauthorised until staff record that (smspool.py).
+    SMSPoolProvider.key: SMSPoolProvider,
 }
 
 

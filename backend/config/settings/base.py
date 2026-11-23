@@ -695,6 +695,11 @@ PROVIDER_CREDENTIALS = {
         # immediate read of the order; without it we poll only.
         "webhook_secret": env("TEXTVERIFIED_WEBHOOK_SECRET", ""),
     },
+    # Second supplier. The API key from smspool.net > Settings; never logged.
+    "smspool": {
+        "api_key": env("SMSPOOL_API_KEY", ""),
+        "base_url": env("SMSPOOL_BASE_URL", ""),
+    },
 }
 
 PAYMENT_CREDENTIALS = {
