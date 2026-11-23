@@ -700,6 +700,11 @@ PROVIDER_CREDENTIALS = {
         "api_key": env("SMSPOOL_API_KEY", ""),
         "base_url": env("SMSPOOL_BASE_URL", ""),
     },
+    # Third supplier. A `notp_` key from numberotp.com > Developer > API Keys.
+    "numberotp": {
+        "api_key": env("NUMBEROTP_API_KEY", ""),
+        "base_url": env("NUMBEROTP_BASE_URL", ""),
+    },
 }
 
 PAYMENT_CREDENTIALS = {

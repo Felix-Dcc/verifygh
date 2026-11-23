@@ -194,7 +194,8 @@ def test_sync_refreshes_cost_and_availability(catalog):
 def test_the_registered_adapters():
     # Registered is not permission to sell: see test_textverified_primary.py for
     # the resale-authorisation gate every provider must also pass.
-    assert set(available_adapters()) == {"mock", "textverified", "onlinesim", "smspool"}
+    assert set(available_adapters()) == {
+        "mock", "textverified", "onlinesim", "smspool", "numberotp"}
 
 
 def test_the_mock_provider_satisfies_the_full_interface():

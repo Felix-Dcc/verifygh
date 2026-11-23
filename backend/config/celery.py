@@ -51,6 +51,11 @@ app.conf.beat_schedule = {
         "schedule": crontab(minute=45, hour="*/3"),
         "args": ("smspool",),
     },
+    "sync-numberotp-catalog": {
+        "task": "apps.catalog.tasks.sync_provider_catalog",
+        "schedule": crontab(minute=55, hour="*/3"),
+        "args": ("numberotp",),
+    },
     # Our prepaid balance at each provider: read it, grade it, alert staff.
     # One getBalance call per provider every two minutes.
     "sync-provider-balances": {
