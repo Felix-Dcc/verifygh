@@ -1,12 +1,22 @@
 "use client";
 
+import Link from "next/link";
 import { useRouter } from "next/navigation";
 import * as React from "react";
 import useSWR, { mutate as globalMutate } from "swr";
 
-import { PageHeader } from "@/components/app-shell";
+import { AppHero, HeroStat } from "@/components/app-hero";
 import { useAuth } from "@/components/auth-provider";
-import { AlertIcon, CheckCircleIcon, ClockIcon, PhoneIcon } from "@/components/icons";
+import {
+  AlertIcon,
+  ArrowLeftIcon,
+  BoltIcon,
+  CheckCircleIcon,
+  ClockIcon,
+  LockIcon,
+  PhoneIcon,
+  ShieldIcon,
+} from "@/components/icons";
 import { NetworkLogo } from "@/components/network-logo";
 import {
   Alert,
@@ -17,7 +27,6 @@ import {
   Field,
   Input,
   LoadError,
-  Select,
   Skeleton,
   Spinner,
   cn,
@@ -38,6 +47,7 @@ export default function DepositPage() {
     error: optionsError,
     mutate: retryOptions,
   } = useSWR<PaymentOptions>("/payments/options/");
+  const { data: wallet } = useSWR<Wallet>("/wallet/");
   const [payment, setPayment] = React.useState<PaymentType | null>(null);
 
   // Back from a hosted checkout (SENDI's callback_url carries our reference):
@@ -61,18 +71,39 @@ export default function DepositPage() {
   }
 
   return (
-    <div className="mx-auto max-w-2xl">
-      <PageHeader
+    <div className="mx-auto max-w-5xl space-y-6">
+      <AppHero
+        eyebrow={
+          <Link href="/wallet" className="inline-flex items-center gap-1.5 hover:text-white">
+            <ArrowLeftIcon className="h-3.5 w-3.5" />
+            Wallet
+          </Link>
+        }
         title="Add funds"
-        description="Top up with Mobile Money. Your balance updates as soon as the network confirms the payment."
-        back={{ href: "/wallet", label: "Wallet" }}
+        description="Top up with Mobile Money - MTN, Telecel or AT. Your balance updates as soon as the network confirms the payment."
+        aside={
+          <div className="grid grid-cols-2 gap-2.5">
+            <HeroStat
+              label="Wallet balance"
+              value={wallet ? cedis(wallet.balance) : <Skeleton className="h-6 w-20" />}
+            />
+            <HeroStat
+              label="Top up from"
+              value={options ? cedis(options.min_deposit) : <Skeleton className="h-6 w-16" />}
+              hint={options ? `Up to ${cedis(options.max_deposit)} per payment` : undefined}
+            />
+          </div>
+        }
       />
 
       {payment ? (
-        <AwaitingApproval payment={payment} onStartOver={() => setPayment(null)} />
+        <div className="mx-auto max-w-2xl">
+          <AwaitingApproval payment={payment} onStartOver={() => setPayment(null)} />
+        </div>
       ) : (
         <DepositForm
           options={options}
+          wallet={wallet}
           failed={Boolean(optionsError) && !options}
           onRetry={() => retryOptions()}
           onStarted={started}
@@ -86,17 +117,18 @@ export default function DepositPage() {
 
 function DepositForm({
   options,
+  wallet,
   failed,
   onRetry,
   onStarted,
 }: {
   options: PaymentOptions | undefined;
+  wallet: Wallet | undefined;
   failed: boolean;
   onRetry: () => unknown;
   onStarted: (payment: PaymentType) => void;
 }) {
   const { user } = useAuth();
-  const { data: wallet } = useSWR<Wallet>("/wallet/");
 
   const [amount, setAmount] = React.useState("");
   const [phone, setPhone] = React.useState(user?.phone ? localPhone(user.phone) : "");
@@ -150,7 +182,7 @@ function DepositForm({
 
   if (failed) {
     return (
-      <Card>
+      <Card className="mx-auto max-w-2xl">
         <LoadError what="the payment options" onRetry={onRetry} />
       </Card>
     );
@@ -158,18 +190,29 @@ function DepositForm({
 
   if (!options) {
     return (
-      <Card className="space-y-4 p-5 sm:p-6" aria-busy>
-        <Skeleton className="h-4 w-24" />
-        <Skeleton className="h-11 w-full" />
-        <Skeleton className="h-11 w-full" />
-        <Skeleton className="h-11 w-full" />
-      </Card>
+      <div className="grid gap-6 lg:grid-cols-[minmax(0,1fr)_340px]" aria-busy>
+        <Card className="space-y-4 p-5 sm:p-6">
+          <Skeleton className="h-4 w-24" />
+          <Skeleton className="h-16 w-full" />
+          <Skeleton className="h-11 w-full" />
+          <Skeleton className="h-24 w-full" />
+        </Card>
+        <Card className="space-y-3 p-5 sm:p-6">
+          <Skeleton className="h-4 w-28" />
+          <Skeleton className="h-28 w-full" />
+          <Skeleton className="h-12 w-full" />
+        </Card>
+      </div>
     );
   }
 
   if (!options.deposits_enabled && options.manual?.enabled) {
     // The gateway is paused but staff are taking transfers by hand.
-    return <ManualTopUp manual={options.manual} quickAmounts={options.quick_amounts} />;
+    return (
+      <div className="mx-auto max-w-2xl">
+        <ManualTopUp manual={options.manual} quickAmounts={options.quick_amounts} />
+      </div>
+    );
   }
 
   if (!options.deposits_enabled) {
@@ -177,7 +220,7 @@ function DepositForm({
     // submitted invites people to keep trying and then contact support; the
     // backend would refuse this anyway, so showing it would be a lie.
     return (
-      <Card className="flex flex-col items-center p-8 text-center">
+      <Card className="mx-auto flex max-w-2xl flex-col items-center p-8 text-center">
         <div className="flex h-10 w-10 items-center justify-center rounded-lg bg-warn-50 text-warn-700">
           <AlertIcon className="h-5 w-5" />
         </div>
@@ -196,12 +239,16 @@ function DepositForm({
   const pesewas = (value: string | undefined) => Math.round((Number.parseFloat(value ?? "0") || 0) * 100);
   const entered = pesewas(amount);
   const inRange = entered >= pesewas(options.min_deposit) && entered <= pesewas(options.max_deposit);
-  const networkLabel = options.networks.find((item) => item.value === network)?.label;
+  const chosen = options.networks.find((item) => item.value === network);
   const hosted = Boolean(options.hosted_checkout);
 
   return (
-    <Card className="overflow-hidden">
-      <form onSubmit={onSubmit} noValidate>
+    <form
+      onSubmit={onSubmit}
+      noValidate
+      className="grid items-start gap-6 lg:grid-cols-[minmax(0,1fr)_340px]"
+    >
+      <Card className="overflow-hidden">
         {formError ? (
           <div className="px-5 pt-5 sm:px-6 sm:pt-6">
             <Alert tone="danger" title="We couldn't start the payment">
@@ -210,32 +257,36 @@ function DepositForm({
           </div>
         ) : null}
 
-        <Step number={1} title="Amount">
-          <Field
-            label="Amount to add"
-            htmlFor="amount"
-            error={fieldErrors.amount}
-            hint={`Between ${cedis(options.min_deposit)} and ${cedis(options.max_deposit)} per payment.${
-              options.fee_note ? ` ${options.fee_note}` : ""
-            }`}
-            required
+        <Section number={1} title="How much?">
+          <label htmlFor="amount" className="sr-only">
+            Amount to add, in Ghana cedis
+          </label>
+          <div
+            className={cn(
+              "flex items-baseline gap-2 rounded-2xl border bg-sunken/60 px-4 py-3 transition-colors focus-within:border-brand-600 focus-within:ring-1 focus-within:ring-brand-600 sm:px-5 sm:py-4",
+              fieldErrors.amount ? "border-danger-500" : "border-line",
+            )}
           >
-            <Input
+            <span className="text-xl font-semibold text-ink-faint sm:text-2xl">GH₵</span>
+            <input
               id="amount"
               type="text"
               inputMode="decimal"
               autoComplete="off"
               required
-              prefix="GH₵"
               value={amount}
               onChange={(event) => setAmount(event.target.value.replace(/[^\d.]/g, ""))}
-              invalid={Boolean(fieldErrors.amount)}
+              aria-invalid={Boolean(fieldErrors.amount) || undefined}
+              aria-describedby="amount-help"
               placeholder="0.00"
-              className="tabular text-lg font-semibold"
+              className="tabular w-full min-w-0 bg-transparent text-3xl font-extrabold tracking-tight text-ink outline-none placeholder:text-ink-faint sm:text-4xl"
             />
-          </Field>
+          </div>
+          {fieldErrors.amount ? (
+            <p className="mt-2 text-sm text-danger-700">{fieldErrors.amount}</p>
+          ) : null}
 
-          <div className="mt-3 grid grid-cols-3 gap-2 sm:grid-cols-5" role="group" aria-label="Quick amounts">
+          <div className="mt-3 flex flex-wrap gap-2" role="group" aria-label="Quick amounts">
             {options.quick_amounts.map((quick) => {
               const active = entered === pesewas(quick);
               return (
@@ -245,10 +296,10 @@ function DepositForm({
                   aria-pressed={active}
                   onClick={() => setAmount(quick)}
                   className={cn(
-                    "tabular min-h-11 rounded-lg border text-sm font-medium transition-colors",
+                    "tabular min-h-11 rounded-full border px-4 text-sm font-semibold transition-colors",
                     active
-                      ? "border-brand-600 bg-brand-50 text-brand-700 ring-1 ring-brand-600"
-                      : "border-line text-ink-soft hover:border-line-strong hover:bg-sunken",
+                      ? "border-brand-600 bg-brand-600 text-white"
+                      : "border-line bg-surface text-ink-soft hover:border-brand-600 hover:text-brand-700",
                   )}
                 >
                   {cedis(quick).replace(".00", "")}
@@ -256,153 +307,176 @@ function DepositForm({
               );
             })}
           </div>
-        </Step>
 
-        <Step number={2} title="Mobile Money">
-          <div className="space-y-5">
-            <Field
-              label="Mobile Money number"
-              htmlFor="phone"
-              error={fieldErrors.phone}
-              hint="Any format works - 024 123 4567 or +233 24 123 4567."
-              required
-            >
-              <Input
-                id="phone"
-                type="tel"
-                inputMode="tel"
-                autoComplete="tel-national"
-                required
-                value={phone}
-                onChange={(event) => setPhone(event.target.value)}
-                invalid={Boolean(fieldErrors.phone)}
-                placeholder="024 123 4567"
-                className="tabular"
-              />
-            </Field>
-
-            {/* Always shown, and only ever prefilled from the number.
-
-                This used to appear only when the prefix was unrecognised - so an
-                026 number showed "Detected: AirtelTigo" and offered no way to say
-                otherwise. Ghana has number portability: that number may well be on
-                Telecel now. Its owner had no way to tell us, the charge went to
-                AirtelTigo Money, and the code they waited for never arrived. */}
-            <Field
-              label="Network"
-              htmlFor="network"
-              error={fieldErrors.network}
-              hint={
-                detected && network && network !== detected.value ? (
-                  <span className="text-warn-700">
-                    This number started on {detected.label}. That is fine if you have since
-                    moved it - we will charge the network you chose.
-                  </span>
-                ) : detected ? (
-                  "Filled in from your number. Change it if you have moved networks."
-                ) : (
-                  "Choose the network your Mobile Money wallet is on."
-                )
-              }
-              required
-            >
-              <div className="flex items-center gap-3">
-                {/* The chosen network's logo, so a wrong pick is easy to spot. */}
-                {network ? (
-                  <NetworkLogo network={network} className="h-11 w-11" />
-                ) : (
-                  <span aria-hidden className="h-11 w-11 shrink-0 rounded-xl border border-dashed border-line-strong" />
-                )}
-                <Select
-                  id="network"
-                  value={network}
-                  onChange={(event) => {
-                    setNetwork(event.target.value);
-                    // Once they have chosen, stop the number field overriding it.
-                    userPickedNetwork.current = true;
-                  }}
-                  invalid={Boolean(fieldErrors.network)}
-                  required
-                >
-                  <option value="">Select your network</option>
-                  {options.networks.map((item) => (
-                    <option key={item.value} value={item.value}>
-                      {item.label}
-                    </option>
-                  ))}
-                </Select>
-              </div>
-            </Field>
-          </div>
-        </Step>
-
-        <Step number={3} title="Review and pay">
-          <DescriptionList
-            items={[
-              {
-                label: "You pay",
-                emphasis: true,
-                value: <span className="tabular">{entered > 0 ? cedis(entered / 100) : "-"}</span>,
-              },
-              {
-                label: "From",
-                value:
-                  phone.trim() && networkLabel ? (
-                    <span>
-                      {networkLabel} <span className="tabular">{localPhone(phone) || phone}</span>
-                    </span>
-                  ) : (
-                    "-"
-                  ),
-              },
-              {
-                label: "Current balance",
-                value: <span className="tabular">{cedis(wallet?.balance)}</span>,
-              },
-              {
-                label: "Balance after",
-                emphasis: true,
-                value: (
-                  <span className="tabular">
-                    {entered > 0 ? cedis((pesewas(wallet?.balance) + entered) / 100) : "-"}
-                  </span>
-                ),
-              },
-            ]}
-          />
-
-          <Button
-            type="submit"
-            size="lg"
-            fullWidth
-            loading={submitting}
-            icon={<PhoneIcon className="h-5 w-5" />}
-            className="mt-5"
-          >
-            {submitting
-              ? hosted
-                ? "Opening checkout"
-                : "Sending the prompt"
-              : inRange
-                ? `Pay ${cedis(entered / 100)}`
-                : hosted
-                  ? "Continue to payment"
-                  : "Send payment prompt"}
-          </Button>
-
-          <p className="mt-3 text-center text-caption text-ink-muted">
-            {hosted
-              ? "You'll finish paying on SENDI's secure checkout page, then come back here. VerifyGH never sees or stores your Mobile Money PIN."
-              : "A prompt appears on your phone - approve it there with your PIN. VerifyGH never sees or stores your Mobile Money PIN."}
+          <p id="amount-help" className="mt-3 text-caption text-ink-muted">
+            Between {cedis(options.min_deposit)} and {cedis(options.max_deposit)} per payment.
+            {options.fee_note ? ` ${options.fee_note}` : ""}
           </p>
-        </Step>
-      </form>
-    </Card>
+        </Section>
+
+        <Section number={2} title="Pay from">
+          <Field
+            label="Mobile Money number"
+            htmlFor="phone"
+            error={fieldErrors.phone}
+            hint="Any format works - 024 123 4567 or +233 24 123 4567."
+            required
+          >
+            <Input
+              id="phone"
+              type="tel"
+              inputMode="tel"
+              autoComplete="tel-national"
+              required
+              value={phone}
+              onChange={(event) => setPhone(event.target.value)}
+              invalid={Boolean(fieldErrors.phone)}
+              placeholder="024 123 4567"
+              className="tabular text-base"
+            />
+          </Field>
+
+          {/* Always shown, and only ever prefilled from the number.
+
+              This used to appear only when the prefix was unrecognised - so an
+              026 number showed "Detected: AirtelTigo" and offered no way to say
+              otherwise. Ghana has number portability: that number may well be on
+              Telecel now. Its owner had no way to tell us, the charge went to
+              AirtelTigo Money, and the code they waited for never arrived. */}
+          <fieldset className="mt-5">
+            <legend className="text-sm font-medium text-ink">
+              Network <span className="text-danger-700">*</span>
+            </legend>
+            <div role="radiogroup" aria-label="Network" className="mt-2 grid grid-cols-3 gap-2 sm:gap-3">
+              {options.networks.map((item) => {
+                const selected = network === item.value;
+                return (
+                  <button
+                    key={item.value}
+                    type="button"
+                    role="radio"
+                    aria-checked={selected}
+                    onClick={() => {
+                      setNetwork(item.value);
+                      // Once they have chosen, stop the number field overriding it.
+                      userPickedNetwork.current = true;
+                    }}
+                    className={cn(
+                      "relative flex min-h-24 flex-col items-center justify-center gap-2 rounded-2xl border p-3 text-center transition-all",
+                      selected
+                        ? "border-brand-600 bg-brand-50 ring-1 ring-brand-600"
+                        : "border-line bg-surface hover:border-line-strong hover:bg-sunken",
+                    )}
+                  >
+                    {selected ? (
+                      <CheckCircleIcon className="absolute right-2 top-2 h-4 w-4 text-brand-600" />
+                    ) : null}
+                    <NetworkLogo network={item.value} label={item.label} />
+                    <span className="text-caption font-semibold leading-tight text-ink">{item.label}</span>
+                  </button>
+                );
+              })}
+            </div>
+            <p className={cn("mt-2 text-caption", fieldErrors.network ? "text-danger-700" : "text-ink-muted")}>
+              {fieldErrors.network ? (
+                fieldErrors.network
+              ) : detected && network && network !== detected.value ? (
+                <span className="text-warn-700">
+                  This number started on {detected.label}. That is fine if you have since moved it - we
+                  will charge the network you chose.
+                </span>
+              ) : detected ? (
+                "Picked from your number. Tap another if you have moved networks."
+              ) : (
+                "Choose the network your Mobile Money wallet is on."
+              )}
+            </p>
+          </fieldset>
+        </Section>
+      </Card>
+
+      <div className="lg:sticky lg:top-6">
+        <Card className="overflow-hidden">
+          <div className="border-b border-line bg-sunken/60 px-5 py-4 sm:px-6">
+            <p className="text-caption font-medium text-ink-muted">You pay</p>
+            <p className="tabular mt-0.5 text-3xl font-extrabold tracking-tight text-ink">
+              {cedis(entered / 100)}
+            </p>
+          </div>
+          <div className="space-y-5 p-5 sm:p-6">
+            <DescriptionList
+              items={[
+                {
+                  label: "From",
+                  value:
+                    phone.trim() && chosen ? (
+                      <span className="inline-flex items-center gap-1.5">
+                        <NetworkLogo network={chosen.value} label={chosen.label} size="sm" />
+                        <span className="tabular">{localPhone(phone) || phone}</span>
+                      </span>
+                    ) : (
+                      "-"
+                    ),
+                },
+                {
+                  label: "Balance now",
+                  value: <span className="tabular">{cedis(wallet?.balance)}</span>,
+                },
+                {
+                  label: "Balance after",
+                  emphasis: true,
+                  value: (
+                    <span className="tabular">
+                      {entered > 0 ? cedis((pesewas(wallet?.balance) + entered) / 100) : "-"}
+                    </span>
+                  ),
+                },
+              ]}
+            />
+
+            <Button
+              type="submit"
+              size="lg"
+              fullWidth
+              loading={submitting}
+              icon={<PhoneIcon className="h-5 w-5" />}
+            >
+              {submitting
+                ? hosted
+                  ? "Opening checkout"
+                  : "Sending the prompt"
+                : inRange
+                  ? `Pay ${cedis(entered / 100)}`
+                  : hosted
+                    ? "Continue to payment"
+                    : "Send payment prompt"}
+            </Button>
+
+            <ul className="space-y-2.5 text-caption text-ink-muted">
+              <li className="flex gap-2">
+                <LockIcon className="mt-0.5 h-4 w-4 shrink-0 text-brand-600" />
+                {hosted
+                  ? "You finish paying on SENDI's secure checkout page, then come back here."
+                  : "A prompt appears on your phone - approve it there with your PIN."}
+              </li>
+              <li className="flex gap-2">
+                <ShieldIcon className="mt-0.5 h-4 w-4 shrink-0 text-brand-600" />
+                VerifyGH never sees or stores your Mobile Money PIN.
+              </li>
+              <li className="flex gap-2">
+                <BoltIcon className="mt-0.5 h-4 w-4 shrink-0 text-brand-600" />
+                Your balance updates as soon as the network confirms the payment.
+              </li>
+            </ul>
+          </div>
+        </Card>
+      </div>
+    </form>
   );
 }
 
 /** One numbered part of the deposit form. */
-function Step({
+function Section({
   number,
   title,
   children,
@@ -413,10 +487,10 @@ function Step({
 }) {
   return (
     <section className="border-t border-line p-5 first:border-t-0 sm:p-6" aria-label={title}>
-      <h2 className="mb-4 flex items-center gap-2.5 text-sm font-semibold text-ink">
+      <h2 className="mb-4 flex items-center gap-2.5 text-heading text-ink">
         <span
           aria-hidden
-          className="tabular flex h-6 w-6 items-center justify-center rounded-full bg-sunken text-caption font-semibold text-ink-soft"
+          className="tabular flex h-7 w-7 items-center justify-center rounded-full bg-brand-600 text-caption font-bold text-white"
         >
           {number}
         </span>
