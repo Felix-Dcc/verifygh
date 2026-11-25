@@ -444,14 +444,17 @@ class TextVerifiedProvider(VerificationProvider):
         services: list[ProviderServiceDTO] = []
         skipped = attempted = rate_limited = 0
         stopped = ""
+        last_start: float | None = None
         while attempted < budget:
             # Paced, and aside while anyone is being throttled: a 429 below
             # doubles the interval and starts a pause, so it is waited out
-            # here rather than retried into.
+            # here rather than retried into. Spaced start to start, so the
+            # ~0.2 s each price takes is not added on top of the interval.
             if not pacing.wait_turn(self.key, deadline, clock=time.monotonic,
-                                    sleep=time.sleep):
+                                    sleep=time.sleep, since=last_start):
                 stopped = "time_budget"
                 break
+            last_start = time.monotonic()
             name, description = queue[attempted]
             try:
                 cost = self.get_pricing(name, "US")

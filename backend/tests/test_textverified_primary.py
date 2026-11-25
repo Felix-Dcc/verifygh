@@ -480,6 +480,47 @@ def test_the_time_budget_stops_the_sync_and_the_next_one_resumes(tv, settings, c
     assert [s.code for s in second] == ["svc3", "svc4", "svc0"]
 
 
+def test_sync_calls_are_spaced_start_to_start(tv, settings, clock):
+    """The time a price takes counts towards the gap: the interval is not
+    slept again on top of each 0.2 s answer."""
+    from apps.verification import pacing
+
+    settings.VERIFYGH = {**settings.VERIFYGH, "PROVIDER_CATALOG_LIMIT": 0}
+    _catalogue(tv, [f"svc{i}" for i in range(4)])
+
+    def priced_in_200ms(body, params):
+        clock.now += 0.2
+        return Reply(200, {"serviceName": body["serviceName"], "price": 0.3})
+
+    tv["routes"][("POST", "/api/pub/v2/pricing/verifications")] = priced_in_200ms
+    priced = tv_module.TextVerifiedProvider().get_services()
+
+    assert [s.code for s in priced] == ["svc0", "svc1", "svc2", "svc3"]
+    # The first call waits the whole interval; each later one only what is
+    # left of it after the 0.2 s answer - never less than the interval apart.
+    assert clock.slept[0] == pacing.START_INTERVAL
+    assert all(s <= pacing.START_INTERVAL - 0.2 + 1e-9 for s in clock.slept[1:])
+
+
+def test_wait_turn_never_shortens_the_gap_below_the_interval(clock):
+    from apps.verification import pacing
+
+    start = clock.now
+    assert pacing.wait_turn("textverified", start + 10, clock=clock.monotonic,
+                            sleep=clock.sleep, since=start)
+    assert clock.now - start >= pacing.interval("textverified") - 1e-9
+
+
+def test_after_a_throttle_the_whole_interval_is_slept(clock):
+    from apps.verification import pacing
+
+    pacing.note_throttled("textverified")
+    start = clock.now
+    assert pacing.wait_turn("textverified", start + 60, clock=clock.monotonic,
+                            sleep=clock.sleep, since=start - 100)
+    assert clock.slept[-1] == pacing.interval("textverified")
+
+
 def test_prices_fetched_recently_are_not_fetched_again(tv, settings, clock):
     settings.VERIFYGH = {**settings.VERIFYGH, "PROVIDER_CATALOG_LIMIT": 0}
     _catalogue(tv, ["svc0", "svc1", "svc2"])

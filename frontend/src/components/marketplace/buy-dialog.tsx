@@ -58,9 +58,10 @@ export function BuyDialog({
   );
 
   const [country, setCountry] = React.useState(initialCountry);
-  const [quote, setQuote] = React.useState<Quote | null>(null);
-  const [quoteError, setQuoteError] = React.useState("");
-  const [loadingQuote, setLoadingQuote] = React.useState(false);
+  const [rawQuote, setQuote] = React.useState<Quote | null>(null);
+  const [rawQuoteError, setQuoteError] = React.useState("");
+  const [fetchingQuote, setLoadingQuote] = React.useState(false);
+  const [quoteAttempt, setQuoteAttempt] = React.useState(0);
   const [submitting, setSubmitting] = React.useState(false);
   const [blocker, setBlocker] = React.useState<{ code: string; message: string } | null>(null);
 
@@ -88,9 +89,24 @@ export function BuyDialog({
     option?.offered && option.availability !== "UNAVAILABLE" && !option.temporarily_unavailable && !stockError,
   );
 
+  // The quote is fetched alongside the service details rather than after
+  // them - one round trip instead of two before Buy is ready - and is shown
+  // only once the details say this can be bought.
+  const quote = purchasable ? rawQuote : null;
+  const quoteError = purchasable ? rawQuoteError : "";
+  const loadingQuote = purchasable && fetchingQuote;
+
+  // Became buyable after a quote that failed (e.g. a retried stock check):
+  // ask again rather than show the earlier failure.
   React.useEffect(() => {
-    if (!open || !serviceSlug || !user || !purchasable) {
+    if (purchasable && rawQuoteError) setQuoteAttempt((attempt) => attempt + 1);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [purchasable]);
+
+  React.useEffect(() => {
+    if (!open || !serviceSlug || !user) {
       setQuote(null);
+      setQuoteError("");
       return;
     }
     setQuote(null);
@@ -114,7 +130,7 @@ export function BuyDialog({
     return () => {
       cancelled = true;
     };
-  }, [open, serviceSlug, country, user, purchasable]);
+  }, [open, serviceSlug, country, user, quoteAttempt]);
 
   async function confirm() {
     if (!serviceSlug) return;

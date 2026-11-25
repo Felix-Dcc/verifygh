@@ -77,17 +77,26 @@ def note_ok(provider: str) -> None:
 
 
 def wait_turn(provider: str, deadline: float, *, clock=time.monotonic,
-              sleep=time.sleep) -> bool:
+              sleep=time.sleep, since: float | None = None) -> bool:
     """Sleep until a background call may go out. False if the deadline passes first.
 
     `clock` and `sleep` come from the caller, so a test's fake clock applies.
+    `since` is when the caller's previous call started (on `clock`): calls are
+    spaced by the interval from start to start, so time already spent waiting
+    for the last answer counts towards it. Without `since`, or just after a
+    throttle, the whole interval is slept.
     """
+    waited_out_throttle = False
     while throttled(provider):
         if clock() + 1 > deadline:
             return False
         sleep(1)
+        waited_out_throttle = True
     pause = interval(provider)
+    if since is not None and not waited_out_throttle:
+        pause = max(0.0, since + pause - clock())
     if clock() + pause > deadline:
         return False
-    sleep(pause)
+    if pause:
+        sleep(pause)
     return True
