@@ -86,6 +86,10 @@ for _name in ("CORS_ALLOWED_ORIGINS", "FRONTEND_URL"):
             _problems.append(f"{_name} must use https:// ({_origin!r}).")
 
 ALLOWED_HOSTS = env_list("ALLOWED_HOSTS")
+# Render's own hostname (xxx.onrender.com), which its health check uses until a
+# custom domain is verified. Render sets this variable; elsewhere it is absent.
+if env("RENDER_EXTERNAL_HOSTNAME", ""):
+    ALLOWED_HOSTS.append(env("RENDER_EXTERNAL_HOSTNAME"))
 
 # Terminated at the load balancer; trust its forwarded scheme header.
 SECURE_PROXY_SSL_HEADER = ("HTTP_X_FORWARDED_PROTO", "https")

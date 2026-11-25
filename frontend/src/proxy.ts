@@ -103,7 +103,7 @@ const SITE_ORIGIN = process.env.NEXT_PUBLIC_SITE_ORIGIN ?? "";
 function legacyHostRedirect(request: NextRequest): NextResponse | null {
   if (!SITE_ORIGIN) return null;
   const host = (request.headers.get("host") ?? "").split(":")[0].toLowerCase();
-  if (!host.endsWith(".up.railway.app")) return null;
+  if (!host.endsWith(".up.railway.app") && !host.endsWith(".onrender.com")) return null;
 
   const target = new URL(request.nextUrl.pathname + request.nextUrl.search, SITE_ORIGIN);
   // 308 keeps the method, and browsers remember it.

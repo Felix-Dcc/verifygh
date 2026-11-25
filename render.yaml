@@ -1,0 +1,199 @@
+# VerifyGH on Render: the Next.js site, the Django API, a Celery worker, a
+# Celery beat scheduler, PostgreSQL and a Key Value (Redis) instance.
+#
+# Render reads this file when you create a Blueprint from the repository
+# (Dashboard > New > Blueprint), and again on every Blueprint sync.
+#
+# Secrets are NOT in this file. They live in the environment group
+# `verifygh-secrets`, which this file creates empty: open it in the dashboard
+# and use "Add from .env" to paste them. The API refuses to boot until the
+# required ones are there, and its log says which are missing.
+#
+# Any value written here wins over a dashboard edit on the next Blueprint sync,
+# so only settings that are the same everywhere are written here.
+
+envVarGroups:
+  # Everything secret, plus anything that differs from the defaults below and
+  # was set by hand on Railway (PAYMENT_PROVIDER and friends). Filled in the
+  # dashboard, never here.
+  - name: verifygh-secrets
+    envVars: []
+
+  - name: verifygh-backend
+    envVars:
+      - key: DJANGO_SETTINGS_MODULE
+        value: config.settings.prod
+      - key: PYTHON_VERSION
+        value: "3.11.9"
+      # Render Postgres takes TLS; production refuses anything weaker.
+      - key: DB_SSLMODE
+        value: require
+      - key: DB_POOL_MODE
+        value: session
+      # api.getverifygh.com. Render's own *.onrender.com hostname is added by
+      # the settings from RENDER_EXTERNAL_HOSTNAME, for the health check.
+      - key: ALLOWED_HOSTS
+        value: api.getverifygh.com
+      # Render's load balancer is one hop. Wrong here means spoofable rate
+      # limits or everyone sharing one IP; check after the first deploy
+      # (docs/DEPLOYMENT.md).
+      - key: TRUSTED_PROXY_COUNT
+        value: "1"
+      - key: AUTH_COOKIE_SECURE
+        value: "true"
+      # The site and the API share getverifygh.com, so the cookie is first-party.
+      - key: AUTH_COOKIE_SAMESITE
+        value: Lax
+      - key: AUTH_COOKIE_DOMAIN
+        value: .getverifygh.com
+      - key: CELERY_TASK_ALWAYS_EAGER
+        value: "false"
+      - key: LOG_FORMAT
+        value: json
+      - key: LOG_LEVEL
+        value: INFO
+      # Both hostnames serve the site, so both must be allowed origins - only
+      # allowing www once blocked every API call from the bare domain.
+      - key: FRONTEND_URL
+        value: https://www.getverifygh.com
+      - key: CORS_ALLOWED_ORIGINS
+        value: https://www.getverifygh.com,https://getverifygh.com
+      - key: CSRF_TRUSTED_ORIGINS
+        value: https://www.getverifygh.com,https://getverifygh.com
+      - key: TURNSTILE_ALLOWED_HOSTNAMES
+        value: www.getverifygh.com,getverifygh.com
+      - key: GOOGLE_OAUTH_REDIRECT_URI
+        value: https://api.getverifygh.com/api/v1/auth/google/callback/
+      - key: BREVO_SENDER_EMAIL
+        value: support@getverifygh.com
+      - key: BREVO_SENDER_NAME
+        value: VerifyGH
+      - key: EMAIL_VERIFICATION_TTL_HOURS
+        value: "24"
+      - key: VERIFICATION_PROVIDER
+        value: textverified
+      - key: PROVIDER_CATALOG_LIMIT
+        value: "0"
+      - key: MARKETPLACE_COUNTRIES
+        value: US
+      - key: PROVIDER_PRIORITY_COUNTRIES
+        value: US
+      - key: PROVIDER_RATE_LIMIT_PER_MINUTE
+        value: "300"
+      # Off on the live site: only agents' links attribute customers.
+      - key: REFERRAL_PROGRAM_ENABLED
+        value: "false"
+      - key: REFERRAL_SIGNUP_BONUS_GHS
+        value: "5.00"
+      - key: REFERRAL_MAX_MONTHLY_SUCCESSFUL_REFERRALS
+        value: "20"
+
+databases:
+  - name: verifygh-db
+    plan: basic-256mb
+    region: frankfurt
+    postgresMajorVersion: "18"
+    databaseName: verifygh
+    user: verifygh
+
+services:
+  - type: keyvalue
+    name: verifygh-redis
+    plan: starter
+    region: frankfurt
+    # The Celery queue must never be evicted to make room.
+    maxmemoryPolicy: noeviction
+    # Empty: reachable only from our own services inside Render.
+    ipAllowList: []
+
+  - type: web
+    name: verifygh-api
+    runtime: python
+    plan: starter
+    region: frankfurt
+    rootDir: backend
+    # collectstatic needs no database or secrets, so it runs on the base settings.
+    buildCommand: >-
+      pip install -r requirements.txt &&
+      DJANGO_SETTINGS_MODULE=config.settings.base python manage.py collectstatic --noinput
+    # A failed migration stops the deploy before it reaches live traffic.
+    preDeployCommand: python manage.py migrate --noinput
+    startCommand: >-
+      gunicorn config.wsgi:application --bind 0.0.0.0:$PORT
+      --workers 2 --threads 2 --timeout 60 --graceful-timeout 30
+      --max-requests 1000 --max-requests-jitter 100
+      --access-logfile - --error-logfile -
+    healthCheckPath: /health/
+    domains:
+      - api.getverifygh.com
+    envVars: &backend_env
+      - fromGroup: verifygh-backend
+      - fromGroup: verifygh-secrets
+      - key: DATABASE_URL
+        fromDatabase:
+          name: verifygh-db
+          property: connectionString
+      - key: REDIS_URL
+        fromService:
+          name: verifygh-redis
+          type: keyvalue
+          property: connectionString
+
+  - type: worker
+    name: verifygh-worker
+    runtime: python
+    plan: starter
+    region: frankfurt
+    rootDir: backend
+    buildCommand: pip install -r requirements.txt
+    startCommand: celery -A config worker -l info --concurrency=2 --max-tasks-per-child=200
+    envVars: *backend_env
+
+  # Exactly one, always. Two beats run every scheduled task twice, including
+  # order expiry and automatic refunds.
+  - type: worker
+    name: verifygh-beat
+    runtime: python
+    plan: starter
+    region: frankfurt
+    rootDir: backend
+    numInstances: 1
+    buildCommand: pip install -r requirements.txt
+    startCommand: celery -A config beat -l info
+    envVars: *backend_env
+
+  - type: web
+    name: verifygh-web
+    runtime: node
+    plan: starter
+    region: frankfurt
+    rootDir: frontend
+    # npm install, not npm ci: the lockfile is made on Windows and lacks other
+    # platforms' optional binaries, so npm ci refuses on Linux. --include=dev
+    # because Tailwind, PostCSS and TypeScript are needed by next build.
+    buildCommand: npm install --include=dev --no-audit --no-fund && npm run build
+    startCommand: npx next start -H 0.0.0.0 -p $PORT
+    # No healthCheckPath: "/" is behind the Cloudflare origin lock, which a
+    # health check never passes. Render then checks that the port is open.
+    domains:
+      - www.getverifygh.com
+      - getverifygh.com
+    envVars:
+      - key: NODE_VERSION
+        value: "20.18.0"
+      # Compiled into the browser bundle at build time: the API's public URL.
+      - key: NEXT_PUBLIC_API_URL
+        value: https://api.getverifygh.com/api/v1
+      - key: NEXT_PUBLIC_BRAND_NAME
+        value: VerifyGH
+      # Where *.onrender.com redirects to; signing in cannot work there.
+      - key: NEXT_PUBLIC_SITE_ORIGIN
+        value: https://www.getverifygh.com
+      # Public by design. Copy it from Railway's verifygh-web service.
+      - key: NEXT_PUBLIC_TURNSTILE_SITE_KEY
+        sync: false
+      # Server-side only: the same Cloudflare origin lock as the API.
+      - key: CLOUDFLARE_MODE
+        sync: false
+      - key: CLOUDFLARE_ORIGIN_SECRET
+        sync: false

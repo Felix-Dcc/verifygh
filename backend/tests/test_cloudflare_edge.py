@@ -132,6 +132,14 @@ def test_railway_health_checks_always_get_through(cloudflare, settings):
     assert response.status_code == 200
 
 
+def test_render_health_checks_on_the_custom_domain_get_through(cloudflare, catalog):
+    # Render's health check uses the custom domain and never passes Cloudflare.
+    cloudflare("enforce")
+    client = APIClient()
+    assert client.get("/health/", REMOTE_ADDR="198.51.100.66").status_code == 200
+    assert client.get("/api/v1/marketplace/", REMOTE_ADDR="198.51.100.66").status_code == 403
+
+
 def test_report_logs_but_refuses_nothing(cloudflare, catalog, monkeypatch):
     from apps.common import middleware
 

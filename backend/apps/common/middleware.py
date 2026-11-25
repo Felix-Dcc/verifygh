@@ -25,8 +25,9 @@ def get_request_context() -> dict:
 #: right one. Names starting cf- are reserved by Cloudflare, hence this name.
 CLOUDFLARE_ORIGIN_META = "HTTP_X_VERIFYGH_ORIGIN"
 
-#: Railway's own health checks reach the container directly, never through
-#: Cloudflare, and must never be refused.
+#: The platform's health checks reach the container directly, never through
+#: Cloudflare, and must never be refused. Railway sends its own Host; Render
+#: sends the service's custom domain, so the health path is let through too.
 RAILWAY_HEALTHCHECK_HOST = "healthcheck.railway.app"
 
 
@@ -123,7 +124,7 @@ class CloudflareOriginMiddleware:
                 (*.up.railway.app) no longer bypass Cloudflare's WAF and bot
                 protection, and CF-Connecting-IP cannot be forged.
 
-    Railway's health checks are always let through.
+    Platform health checks (/health/) are always let through.
     """
 
     def __init__(self, get_response):
@@ -151,7 +152,8 @@ class CloudflareOriginMiddleware:
 
 def _is_railway_healthcheck(request) -> bool:
     host = (request.META.get("HTTP_HOST", "") or "").split(":")[0].lower()
-    return host == RAILWAY_HEALTHCHECK_HOST
+    # /health/ says only whether the database answers, so it is safe to expose.
+    return host == RAILWAY_HEALTHCHECK_HOST or request.path in ("/health", "/health/")
 
 
 def bind_user(user) -> None:

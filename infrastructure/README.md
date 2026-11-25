@@ -4,7 +4,7 @@
 |---|---|
 | `Dockerfile.backend` | Production image for web, worker and beat. Non-root, health-checked. |
 | `docker-compose.yml` | Full local/staging stack: Postgres, Redis, web, worker, beat. |
-| `render.yaml` | Render blueprint. Secrets are `sync: false` and set in the dashboard. |
+| `../render.yaml` | Render blueprint (the live host). Secrets go in the `verifygh-secrets` group in the dashboard. |
 
 The frontend deploys to Vercel from `frontend/` and needs no container - see
 [../docs/DEPLOYMENT.md](../docs/DEPLOYMENT.md).
