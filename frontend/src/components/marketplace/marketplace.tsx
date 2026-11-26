@@ -13,7 +13,7 @@ import { ChevronRightIcon, ClockIcon, SearchIcon, StarIcon } from "@/components/
 import { PhoneMessageArt, SearchArt } from "@/components/illustrations";
 import { AvailabilityLabel, TemporarilyUnavailableBadge } from "@/components/marketplace/availability";
 import { BuyDialog } from "@/components/marketplace/buy-dialog";
-import { Alert, Button, Card, EmptyState, LoadError, Skeleton, cn } from "@/components/ui/primitives";
+import { Alert, Card, EmptyState, LoadError, Skeleton, Spinner, cn } from "@/components/ui/primitives";
 import { ServiceLogo } from "@/components/service-logo";
 import { useToast } from "@/components/ui/toast";
 import { ApiError, api } from "@/lib/api";
@@ -91,6 +91,24 @@ export function Marketplace() {
   );
   const total = list.data?.[0]?.count ?? 0;
   const hasMore = Boolean(list.data?.[list.data.length - 1]?.has_next);
+
+  // Endless list: the next page loads by itself as the end comes into view,
+  // so customers just keep scrolling instead of pressing "Show more".
+  const endOfList = React.useRef<HTMLDivElement>(null);
+  const { isValidating, setSize } = list;
+  React.useEffect(() => {
+    const node = endOfList.current;
+    if (!node || !hasMore || isValidating) return;
+    const observer = new IntersectionObserver(
+      (entries) => {
+        if (entries.some((entry) => entry.isIntersecting)) setSize((size) => size + 1);
+      },
+      // Start a screen early, so the next services are usually there in time.
+      { rootMargin: "800px 0px" },
+    );
+    observer.observe(node);
+    return () => observer.disconnect();
+  }, [hasMore, isValidating, setSize]);
 
   const isPinned = React.useCallback(
     (row: MarketRow) => pinOverrides[row.slug] ?? row.pinned,
@@ -318,14 +336,13 @@ export function Marketplace() {
       </ServiceList>
 
       {hasMore ? (
-        <div className="flex justify-center">
-          <Button
-            variant="secondary"
-            loading={list.isValidating}
-            onClick={() => list.setSize(list.size + 1)}
-          >
-            Show more services
-          </Button>
+        <div
+          ref={endOfList}
+          role="status"
+          className="flex items-center justify-center gap-2 py-3 text-sm text-ink-muted"
+        >
+          <Spinner className="h-4 w-4" />
+          Loading more services…
         </div>
       ) : null}
 
