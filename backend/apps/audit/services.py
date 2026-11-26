@@ -27,8 +27,17 @@ def _target_bits(target) -> tuple[str, str]:
     return target.__class__.__name__, str(getattr(target, "pk", ""))
 
 
+def _api_key_bits(request) -> dict:
+    """Which admin API key made this request, if one did - so the log says so."""
+    key = getattr(request, "auth", None) if request is not None else None
+    if not getattr(key, "is_admin_api_key", False):
+        return {}
+    return {"via_admin_key": {"id": str(key.pk), "name": key.name, "prefix": key.prefix}}
+
+
 def record_audit(*, actor=None, action: str, target=None, request=None, metadata=None) -> None:
     target_type, target_id = _target_bits(target)
+    metadata = {**(metadata or {}), **_api_key_bits(request)}
     try:
         AuditLog.objects.create(
             actor=actor if getattr(actor, "pk", None) else None,

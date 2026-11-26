@@ -10,7 +10,8 @@ A cross-origin page cannot read our cookie, so it cannot produce the header.
 
 Bearer tokens in the Authorization header are also accepted (for server-to-
 server and future API clients) and are exempt from the CSRF check, because they
-are not sent ambiently by the browser.
+are not sent ambiently by the browser. A Bearer value that starts ``vgh_ak_`` is
+an admin API key, not a JWT (apps/accounts/api_keys.py).
 
 **Revocation.** JWTs are self-contained, so "sign out" is not free. Two
 mechanisms cover the two different windows:
@@ -157,6 +158,16 @@ class CookieJWTAuthentication(RevocationCheckedJWTAuthentication):
     def authenticate(self, request):
         header = self.get_header(request)
         if header is not None:
+            raw_token = self.get_raw_token(header)
+            # Admin API keys share the Bearer header with JWTs and are told apart
+            # by their marker. Handled here, in the one authentication class,
+            # so there is no second class a request could fall through to.
+            from apps.accounts import api_keys
+
+            if api_keys.looks_like_key(raw_token):
+                user, key = api_keys.authenticate(request, raw_token.decode())
+                bind_user(user)
+                return user, key
             result = super().authenticate(request)
             if result:
                 bind_user(result[0])

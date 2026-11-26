@@ -23,6 +23,7 @@ import {
   HelpIcon,
   HomeIcon,
   InboxIcon,
+  LockIcon,
   LogoutIcon,
   MenuIcon,
   PhoneIcon,
@@ -129,6 +130,7 @@ const ADMIN_NAV: NavGroup[] = [
     items: [
       { href: "/admin/team", label: "Team", icon: UserIcon, permission: "USER_ROLE_CHANGE" },
       { href: "/admin/system", label: "System", icon: SettingsIcon },
+      { href: "/admin/api-keys", label: "API keys", icon: LockIcon },
     ],
   },
 ];

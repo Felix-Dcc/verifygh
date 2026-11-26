@@ -177,6 +177,13 @@ need a key outside the database.
   `apps/accounts/constants.py`. SUPPORT can read a wallet and not adjust one; only
   SUPER_ADMIN can change pricing or roles.
 * An admin cannot suspend themselves, and only a SUPER_ADMIN can suspend another admin.
+* **Admin API keys** (`apps/accounts/api_keys.py`) let a staff member hand a program access
+  without a browser session. They are narrower than a session on purpose: admin endpoints
+  only, never key management, the owner's live role (not a snapshot), a hard expiry of at most
+  90 days, optional read-only, and they die with "sign out everywhere", a password change,
+  suspension or removal from staff. Creating one needs a fresh two-factor code. Only a SHA-256
+  hash is stored (the secret is 256 random bits, so a slow hash buys nothing), keys are
+  redacted from logs, and every action taken with one is tagged in the audit log.
 
 ---
 

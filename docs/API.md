@@ -395,7 +395,26 @@ reason and write an immutable `AdminAction` **before** the effect is applied.
 | GET | `/admin/audit/` | `AUDIT_VIEW` |
 | GET | `/admin/admin-actions/` | `AUDIT_VIEW` |
 | GET | `/admin/flags/` | `USER_VIEW` |
-| POST | `/admin/flags/{id}/resolve/` | `USER_VIEW` |
+| POST | `/admin/flags/{id}/resolve/` | `USER_SUSPEND` |
+| GET\|POST | `/admin/api-keys/` | any staff, own keys only; POST needs a two-factor `code` |
+| POST | `/admin/api-keys/{id}/revoke/` | any staff, own keys only |
+
+### Admin API keys
+
+For a program or an assistant that has no browser session. Create one under
+**Admin → API keys** (two-factor code required; shown once), then send it as a Bearer token:
+
+```bash
+curl -H "Authorization: Bearer vgh_ak_<prefix>_<secret>" \
+  https://api.getverifygh.com/api/v1/admin/flags/
+```
+
+A key acts as its owner with the owner's **current** role, on `/admin/` endpoints only. It
+never reaches customer endpoints or `/admin/api-keys/`. `READ` keys may only `GET`. Keys
+expire after 1, 7, 30 or 90 days (at most five live at once), and stop working at once when
+revoked, when the owner signs out everywhere or changes password, or when the owner is
+suspended or removed from staff. A refused key returns `401`; a key used outside its scope
+returns `403`. Actions taken with a key carry `via_admin_key` in the audit log.
 
 ### Roles
 
