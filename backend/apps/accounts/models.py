@@ -361,3 +361,71 @@ class UserDevice(TimeStampedModel):
     def fingerprint(user_agent: str, ip: str) -> str:
         salt = settings.SECRET_KEY
         return hashlib.sha256(f"{salt}|{user_agent}|{ip}".encode()).hexdigest()
+
+
+class ApiKeyAccess(models.TextChoices):
+    READ = "READ", "Read only"
+    WRITE = "WRITE", "Read and act"
+
+
+class AdminApiKey(BaseModel):
+    """A long-lived key that lets a program use the admin API as one staff member.
+
+    Made for a staff member to hand to a tool (an assistant, a script) when a
+    browser session is not available. It is deliberately narrower than a
+    session (apps/accounts/api_keys.py enforces all of this on every request):
+
+    * it reaches the admin API only, never customer endpoints;
+    * it never manages keys, so a leaked key cannot mint a longer-lived one;
+    * it carries its owner's *current* role, so a demotion narrows it at once,
+      and removal from staff, suspension or "sign out everywhere" ends it;
+    * it expires, and READ keys can only look.
+
+    Only a SHA-256 hash of the key is kept; the key itself is shown once.
+    """
+
+    owner = models.ForeignKey(
+        settings.AUTH_USER_MODEL, on_delete=models.CASCADE, related_name="admin_api_keys"
+    )
+    name = models.CharField(max_length=80)
+    #: The public part of the key, for lookup and for telling keys apart.
+    prefix = models.CharField(max_length=16, unique=True)
+    key_hash = models.CharField(max_length=64)
+    access = models.CharField(max_length=8, choices=ApiKeyAccess.choices,
+                              default=ApiKeyAccess.READ)
+    expires_at = models.DateTimeField()
+    #: The owner's session epoch when the key was made. "Sign out everywhere"
+    #: and a password change bump it, which ends the key too.
+    token_version = models.PositiveIntegerField(default=0)
+    last_used_at = models.DateTimeField(null=True, blank=True)
+    last_used_ip = models.GenericIPAddressField(null=True, blank=True)
+    revoked_at = models.DateTimeField(null=True, blank=True)
+    revoked_by = models.ForeignKey(
+        settings.AUTH_USER_MODEL, on_delete=models.SET_NULL, null=True, blank=True,
+        related_name="+",
+    )
+
+    #: Lets the audit log recognise a request made with a key without importing this.
+    is_admin_api_key = True
+
+    class Meta:
+        db_table = "accounts_admin_api_key"
+        ordering = ["-created_at"]
+        indexes = [models.Index(fields=["owner", "-created_at"])]
+
+    def __str__(self) -> str:
+        return f"{self.name} ({self.prefix})"
+
+    @property
+    def is_expired(self) -> bool:
+        return self.expires_at <= timezone.now()
+
+    @property
+    def status(self) -> str:
+        if self.revoked_at:
+            return "REVOKED"
+        if self.is_expired:
+            return "EXPIRED"
+        if self.token_version != self.owner.token_version:
+            return "SIGNED_OUT"
+        return "ACTIVE"

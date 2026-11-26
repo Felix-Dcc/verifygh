@@ -8,6 +8,7 @@ from django.contrib import admin
 from django.urls import include, path
 from rest_framework.routers import DefaultRouter
 
+from apps.adminapi import api_keys as admin_api_keys
 from apps.adminapi import views as admin_views
 from apps.catalog import views as catalog_views
 from apps.common import views as common_views
@@ -73,6 +74,7 @@ admin_router.register(
     "admin-actions", admin_views.AdminActionViewSet, basename="admin-action"
 )
 admin_router.register("flags", admin_views.AdminFlagViewSet, basename="admin-flag")
+admin_router.register("api-keys", admin_api_keys.AdminApiKeyViewSet, basename="admin-api-key")
 admin_router.register(
     "referrals", referral_admin.AdminReferralViewSet, basename="admin-referral"
 )

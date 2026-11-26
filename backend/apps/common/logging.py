@@ -21,6 +21,8 @@ _PATTERNS = [
     # Bearer / api keys in free text
     (re.compile(r"(?i)(bearer\s+)[A-Za-z0-9._\-]{8,}"), r"\1[REDACTED]"),
     (re.compile(r"(?i)(sk_(?:live|test)_)[A-Za-z0-9]+"), r"\1[REDACTED]"),
+    # Our own admin API keys: keep the public prefix, never the secret.
+    (re.compile(r"(vgh_ak_[0-9a-f]{8}_)[A-Za-z0-9_\-]+"), r"\1[REDACTED]"),
     # A JWT anywhere in free text - an exception message, a repr, a URL.
     (re.compile(r"eyJ[A-Za-z0-9_-]{8,}\.[A-Za-z0-9_-]{8,}\.[A-Za-z0-9_-]{8,}"), "[REDACTED_JWT]"),
     # Full phone numbers: E.164 (+233..., and the foreign numbers we rent out)
