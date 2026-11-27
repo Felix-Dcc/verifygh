@@ -126,6 +126,9 @@ class ServiceLogo(models.Model):
     class Meta:
         db_table = "catalog_service_logo"
 
+    def __str__(self) -> str:
+        return f"Logo for service {self.service_id}"
+
 
 class Provider(BaseModel):
     """An upstream verification provider.

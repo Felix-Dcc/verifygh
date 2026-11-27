@@ -70,7 +70,8 @@ def test_restores_only_where_it_cannot_overwrite_a_decision(mapping, services, a
     call_command("restore_service_logos", admin=admin_user.email)
 
     lemon, bumble = Service.objects.get(slug="lemon8"), Service.objects.get(slug="bumble")
-    assert lemon.logo_content_type == "image/png" and bytes(lemon.uploaded_logo.data).startswith(b"\x89PNG")
+    assert lemon.logo_content_type == "image/png"
+    assert bytes(lemon.uploaded_logo.data).startswith(b"\x89PNG")
     assert lemon.icon_url.startswith("https://api.getverifygh.com/api/v1/service-logos/lemon8/?v=")
     assert bumble.logo_content_type == "image/png"            # Brandfetch replaced
     assert Service.objects.get(slug="renamed").icon_url == ""  # name changed: left alone
