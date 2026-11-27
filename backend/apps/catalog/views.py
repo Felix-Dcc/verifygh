@@ -429,12 +429,13 @@ class ServiceLogoView(APIView):
     def get(self, request, slug: str):
         from django.http import HttpResponse
 
-        service = Service.objects.filter(slug=slug).only(
-            "logo_data", "logo_content_type"
-        ).first()
-        if service is None or not service.logo_data:
+        from apps.catalog.models import ServiceLogo
+
+        logo = (ServiceLogo.objects.filter(service__slug=slug).select_related("service")
+                .only("data", "service__logo_content_type").first())
+        if logo is None or not logo.data or not logo.service.logo_content_type:
             raise NotFound("No logo.")
-        response = HttpResponse(bytes(service.logo_data), content_type=service.logo_content_type)
+        response = HttpResponse(bytes(logo.data), content_type=logo.service.logo_content_type)
         response["Cache-Control"] = "public, max-age=31536000, immutable"
         response["Content-Security-Policy"] = (
             "default-src 'none'; style-src 'unsafe-inline'; sandbox")

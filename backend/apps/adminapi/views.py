@@ -55,7 +55,7 @@ from apps.adminapi.serializers import (
 )
 from apps.audit.models import AdminAction, AuditLog, SuspiciousActivity
 from apps.audit.services import record_admin_action, resolve_flag
-from apps.catalog.models import Country, ProviderService, Service
+from apps.catalog.models import Country, ProviderService, Service, ServiceLogo
 from apps.common.errors import Conflict, NotFound, ValidationFailed
 from apps.common.idempotency import generate
 from apps.common.permissions import HasPermissionCode, IsSupport, can_see_costs
@@ -1045,7 +1045,7 @@ class AdminServiceViewSet(AdminBase, mixins.ListModelMixin, mixins.UpdateModelMi
     def get_queryset(self):
         from apps.catalog.marketplace import marketplace_country_codes
 
-        return Service.objects.defer("logo_data").annotate(
+        return Service.objects.annotate(
             # Offerings customers can actually be sold: the services whose
             # branding matters, and the ones a missing logo is worth flagging.
             marketplace_offerings=Count(
@@ -1084,15 +1084,14 @@ class AdminServiceViewSet(AdminBase, mixins.ListModelMixin, mixins.UpdateModelMi
             now = timezone.now()
             url = request.build_absolute_uri(f"/api/v1/service-logos/{service.slug}/")
             fields = {
-                "logo_data": data,
                 "logo_content_type": content_type,
                 "logo_updated_at": now,
                 "icon_url": f"{url}?v={int(now.timestamp())}",
             }
             action_name, default_reason = "SERVICE_LOGO_UPLOAD", "Service logo uploaded"
         else:
+            data = None
             fields = {
-                "logo_data": None,
                 "logo_content_type": "",
                 "logo_updated_at": timezone.now(),
                 "icon_url": bundled_icon_url(service.slug, service.name),
@@ -1101,6 +1100,10 @@ class AdminServiceViewSet(AdminBase, mixins.ListModelMixin, mixins.UpdateModelMi
 
         with transaction.atomic():
             Service.objects.filter(pk=service.pk).update(**fields)
+            if data:
+                ServiceLogo.objects.update_or_create(service_id=service.pk, defaults={"data": data})
+            else:
+                ServiceLogo.objects.filter(service_id=service.pk).delete()
             record_admin_action(
                 admin=request.user, action=action_name, target=service,
                 reason=str(request.data.get("reason", "") or default_reason)[:500],
@@ -1122,7 +1125,7 @@ class AdminServiceViewSet(AdminBase, mixins.ListModelMixin, mixins.UpdateModelMi
         from apps.catalog import brand_logos
 
         rows = self.get_queryset().filter(
-            icon_url="", logo_data__isnull=True, logo_reviewed_at__isnull=True,
+            icon_url="", uploaded_logo__isnull=True, logo_reviewed_at__isnull=True,
             marketplace_offerings__gt=0,
         )
         search = str(request.query_params.get("search") or "").strip()[:80]
@@ -1149,7 +1152,7 @@ class AdminServiceViewSet(AdminBase, mixins.ListModelMixin, mixins.UpdateModelMi
         """Brands Brandfetch knows by this service's name (or `q`), searched live."""
         from apps.catalog import brand_logos
 
-        service = Service.objects.defer("logo_data").filter(slug=slug).first()
+        service = Service.objects.filter(slug=slug).first()
         if service is None:
             raise NotFound("We could not find that service.")
         query = str(request.query_params.get("q") or service.name).strip()[:80]
@@ -1167,10 +1170,10 @@ class AdminServiceViewSet(AdminBase, mixins.ListModelMixin, mixins.UpdateModelMi
         from apps.catalog import brand_logos
         from apps.catalog.presentation import bundled_icon_url
 
-        service = Service.objects.defer("logo_data").filter(slug=slug).first()
+        service = Service.objects.filter(slug=slug).first()
         if service is None:
             raise NotFound("We could not find that service.")
-        if Service.objects.filter(pk=service.pk, logo_data__isnull=False).exists():
+        if ServiceLogo.objects.filter(service_id=service.pk).exists():
             raise Conflict("This service has an uploaded logo. Remove the upload first.")
         before = {"icon_url": service.icon_url, "logo_domain": service.logo_domain}
         now = timezone.now()

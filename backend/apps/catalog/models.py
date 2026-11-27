@@ -61,7 +61,7 @@ class Service(BaseModel):
     )
     #: The service's logo: a bundled asset ("/service-icons/tiktok.svg", served
     #: by the web app - see apps/catalog/service_icons.json), the URL of a logo
-    #: staff uploaded (served by the API from `logo_data`), or the brand's logo
+    #: staff uploaded (served by the API from ServiceLogo), or the brand's logo
     #: on Brandfetch's CDN once staff matched the brand (apps/catalog/
     #: brand_logos.py). Empty means the frontend shows its generic fallback.
     #: This field is the one place the frontend learns which logo a service uses.
@@ -72,9 +72,8 @@ class Service(BaseModel):
     #: When staff last decided this service's logo in the logo queue (matched a
     #: brand, or found none). Set: the service has left the queue.
     logo_reviewed_at = models.DateTimeField(null=True, blank=True)
-    #: An uploaded logo, when staff replaced the bundled one. Small (capped at
-    #: upload), raw bytes rather than base64, validated before it is stored.
-    logo_data = models.BinaryField(null=True, blank=True, editable=False)
+    #: Set when staff uploaded a logo; its bytes are in ServiceLogo, never here,
+    #: so loading services (2,000+ at once for the catalogue) never loads images.
     logo_content_type = models.CharField(max_length=40, blank=True, default="")
     logo_updated_at = models.DateTimeField(null=True, blank=True)
     # Short brand colour used by the frontend avatar when no logo is available.
@@ -109,6 +108,23 @@ class Service(BaseModel):
     @property
     def is_available(self) -> bool:
         return self.is_enabled and not self.is_maintenance
+
+
+class ServiceLogo(models.Model):
+    """An uploaded logo's bytes, apart from the service row.
+
+    Small (capped at upload), raw bytes, validated before they are stored. Kept
+    in its own table so no query for services - or for orders that join them -
+    ever pulls images into memory: on 27 Nov 2026 the catalogue rebuild loading
+    ~2,150 of them with every service pushed the API past its 512 MB.
+    """
+
+    service = models.OneToOneField(
+        Service, primary_key=True, on_delete=models.CASCADE, related_name="uploaded_logo")
+    data = models.BinaryField()
+
+    class Meta:
+        db_table = "catalog_service_logo"
 
 
 class Provider(BaseModel):

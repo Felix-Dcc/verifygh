@@ -54,7 +54,7 @@ class Command(BaseCommand):
         from apps.audit.services import record_admin_action
         from apps.catalog.brand_logos import is_brand_logo_url
         from apps.catalog.logos import validate_logo
-        from apps.catalog.models import Service
+        from apps.catalog.models import Service, ServiceLogo
         from apps.catalog.presentation import logo_key
         from apps.common.errors import ValidationFailed
 
@@ -71,7 +71,7 @@ class Command(BaseCommand):
         for slug, (name, icon_id) in logos.items():
             if options["limit"] and counts["restored"] >= options["limit"]:
                 break
-            service = Service.objects.defer("logo_data").filter(slug=slug).first()
+            service = Service.objects.filter(slug=slug).first()
             if service is None:
                 counts["missing"] += 1
                 continue
@@ -107,14 +107,15 @@ class Command(BaseCommand):
             url = f"{base}/api/v1/service-logos/{slug}/?v={int(now.timestamp())}"
             with transaction.atomic():
                 # Re-checked under the lock: nobody gave it a logo meanwhile.
-                locked = Service.objects.select_for_update().defer("logo_data").get(pk=service.pk)
+                locked = Service.objects.select_for_update().get(pk=service.pk)
                 if locked.logo_content_type or (locked.icon_url
                                                 and not is_brand_logo_url(locked.icon_url)):
                     counts["has_logo"] += 1
                     continue
                 Service.objects.filter(pk=service.pk).update(
-                    logo_data=data, logo_content_type=content_type, logo_updated_at=now,
-                    icon_url=url)
+                    logo_content_type=content_type, logo_updated_at=now, icon_url=url)
+                ServiceLogo.objects.update_or_create(service_id=service.pk,
+                                                     defaults={"data": data})
                 record_admin_action(
                     admin=admin, action="SERVICE_LOGO_UPLOAD", target=service,
                     reason=(f"TextVerified icon {icon_id}, matched by name "
