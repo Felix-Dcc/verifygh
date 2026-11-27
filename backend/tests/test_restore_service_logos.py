@@ -96,5 +96,5 @@ def test_a_customer_account_cannot_run_it(mapping, services, user):
 
 def test_the_shipped_mapping_is_well_formed():
     logos = json.loads(cmd.MAPPING.read_text(encoding="utf-8"))["logos"]
-    assert len(logos) == 2058
+    assert len(logos) == 2080
     assert all(name and icon.startswith("trgt") for name, icon in logos.values())
