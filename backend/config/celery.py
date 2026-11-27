@@ -40,9 +40,12 @@ app.conf.beat_schedule = {
         "task": "apps.catalog.tasks.recheck_stock",
         "schedule": 120.0,
     },
+    # TextVerified: every 10 minutes. Each run prices ~240 services in its
+    # 60-second window (paced, backs off on 429), so the whole catalogue -
+    # new services and price changes - is current within about 1.5 hours.
     "sync-provider-catalog": {
         "task": "apps.catalog.tasks.sync_provider_catalog",
-        "schedule": crontab(minute=15, hour="*/3"),
+        "schedule": crontab(minute="*/10"),
     },
     # The second supplier's prices (public, no key needed). Nothing is sold
     # through it until staff record its resale permission in Admin > Providers.

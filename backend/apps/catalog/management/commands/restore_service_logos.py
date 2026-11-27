@@ -4,7 +4,8 @@ On 21 Oct 2026, 1,868 services were given the icon TextVerified shows for
 them (a public PNG at textverified.com/ico/<id>/icon), each matched by name
 and checked by eye, then uploaded through Admin > Catalog. The uploads lived
 in the database; the mapping survived in that day's revert log and is kept in
-apps/catalog/textverified_logos.json.
+apps/catalog/textverified_logos.json. On 27 Nov 2026, 190 more services that
+list did not cover were matched the same way and added to it.
 
 This command puts them back the way the admin upload does - validated, stored
 in the database, served from /api/v1/service-logos/<slug>/, one audit record
@@ -116,8 +117,8 @@ class Command(BaseCommand):
                     icon_url=url)
                 record_admin_action(
                     admin=admin, action="SERVICE_LOGO_UPLOAD", target=service,
-                    reason=(f"Restored TextVerified icon {icon_id} (matched 21 Oct 2026; "
-                            "lost in the move to Render)"),
+                    reason=(f"TextVerified icon {icon_id}, matched by name "
+                            "(apps/catalog/textverified_logos.json)"),
                     before={"icon_url": locked.icon_url},
                     after={"icon_url": url, "content_type": content_type})
             counts["restored"] += 1
