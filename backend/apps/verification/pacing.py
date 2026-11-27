@@ -26,8 +26,11 @@ from django.core.cache import cache
 
 logger = logging.getLogger("verifygh.provider.pacing")
 
-START_INTERVAL = 0.25
-MIN_INTERVAL = 0.1
+# 0.25 s still drew 429s (4 in one sync on 27 Nov 2026), each costing a 10 s
+# pause and risking a customer's order hitting the limit; 0.6 s prices about as
+# many services per run without touching it.
+START_INTERVAL = 0.6
+MIN_INTERVAL = 0.6
 MAX_INTERVAL = 8.0
 #: After a 429, background calls wait this long before trying again.
 THROTTLE_SECONDS = 10

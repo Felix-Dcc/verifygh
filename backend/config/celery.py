@@ -40,9 +40,10 @@ app.conf.beat_schedule = {
         "task": "apps.catalog.tasks.recheck_stock",
         "schedule": 120.0,
     },
-    # TextVerified: every 10 minutes. Each run prices ~240 services in its
-    # 60-second window (paced, backs off on 429), so the whole catalogue -
-    # new services and price changes - is current within about 1.5 hours.
+    # TextVerified: every 10 minutes. Each run prices ~100 services in its
+    # 60-second window (paced under the rate limit, backs off on 429), so the
+    # whole catalogue - new services and price changes - is current within
+    # about 4 hours, against about a day at the old 3-hourly schedule.
     "sync-provider-catalog": {
         "task": "apps.catalog.tasks.sync_provider_catalog",
         "schedule": crontab(minute="*/10"),

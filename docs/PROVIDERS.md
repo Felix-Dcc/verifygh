@@ -166,7 +166,7 @@ sync prices up to `PROVIDER_CATALOG_LIMIT` services (0 = no count limit) within
 60 seconds, stops at the first 429, and the next sync resumes where it
 stopped. Services not priced in a run keep their last known price. With a
 large catalogue, full coverage takes several syncs (every 10 minutes, about
-1.5 hours for all of TextVerified, or run one from Admin > Catalog).
+4 hours for all of TextVerified, or run one from Admin > Catalog).
 
 `maxPrice` is sent on every purchase at the synced price x
 `PROVIDER_PRICE_TOLERANCE` (1.05), rounded up to the cent, so a price rise
