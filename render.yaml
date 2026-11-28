@@ -34,11 +34,12 @@ envVarGroups:
       # the settings from RENDER_EXTERNAL_HOSTNAME, for the health check.
       - key: ALLOWED_HOSTS
         value: api.getverifygh.com
-      # Render's load balancer is one hop. Wrong here means spoofable rate
-      # limits or everyone sharing one IP; check after the first deploy
-      # (docs/DEPLOYMENT.md).
+      # Two hops: Render's Cloudflare edge appends the client's address, then
+      # Render's load balancer appends the edge's. At 1 every visitor showed as
+      # a Cloudflare IP (27-28 Nov 2026): shared rate limits and false
+      # "shared device" signals. Too high and the address can be forged.
       - key: TRUSTED_PROXY_COUNT
-        value: "1"
+        value: "2"
       - key: AUTH_COOKIE_SECURE
         value: "true"
       # The site and the API share getverifygh.com, so the cookie is first-party.
