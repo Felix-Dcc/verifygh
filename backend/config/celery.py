@@ -120,9 +120,12 @@ app.conf.beat_schedule = {
         "task": "apps.rentals.tasks.reconcile_given_up_rentals",
         "schedule": crontab(minute="5-59/15"),
     },
-    # Catches deposits whose provider callback never arrived.
+    # Catches deposits whose provider callback never arrived. Every minute: on
+    # 28 Nov 2026 every MojoPay webhook was being refused (wrong secret), and a
+    # customer who left the deposit page waited 16 minutes for GH₵30. Only
+    # payments still awaiting an answer are asked about, so this is a few calls.
     "reconcile-recent-payments": {
         "task": "apps.payments.tasks.reconcile_recent_payments",
-        "schedule": crontab(minute="*/15"),
+        "schedule": 60.0,
     },
 }
